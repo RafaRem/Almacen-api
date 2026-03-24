@@ -1,0 +1,6 @@
+export enum DescuentoTipo {
+  CADUCIDAD = 'CADUCIDAD',
+  VOLUMEN = 'VOLUMEN',
+  CATEGORIA = 'CATEGORIA',
+  LABORATORIO = 'LABORATORIO',
+}

@@ -91,4 +91,10 @@ export class ProductosService {
     const producto = await this.findOne(id);
     await this.productosRepository.remove(producto);
   }
+
+  async updateStock(id: string, newStock: number): Promise<Producto> {
+    const producto = await this.findOne(id);
+    producto.stock = newStock;
+    return this.productosRepository.save(producto);
+  }
 }

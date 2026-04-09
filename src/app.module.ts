@@ -14,6 +14,14 @@ import { CategoriasClienteModule } from './categorias-cliente/categorias-cliente
 import { DescuentosModule } from './descuentos/descuentos.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { ClientesModule } from './clientes/clientes.module';
+import { VentasModule } from './ventas/ventas.module';
+import { FacturasModule } from './facturas/facturas.module';
+import { RegimenFiscalModule } from './regimen-fiscal/regimen-fiscal.module';
+import { TelefonosModule } from './telefonos/telefonos.module';
+import { DomiciliosModule } from './domicilios/domicilios.module';
+import { FacturacionClienteModule } from './facturacion-cliente/facturacion-cliente.module';
+import { CreditosModule } from './creditos/creditos.module';
 
 @Module({
   imports: [
@@ -35,6 +43,14 @@ import { ReportesModule } from './reportes/reportes.module';
     DescuentosModule,
     UploadsModule,
     ReportesModule,
+    ClientesModule,
+    VentasModule,
+    FacturasModule,
+    RegimenFiscalModule,
+    TelefonosModule,
+    DomiciliosModule,
+    FacturacionClienteModule,
+    CreditosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

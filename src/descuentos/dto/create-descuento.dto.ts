@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, IsUUID, IsDateString, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, IsUUID, IsDateString, Min, IsInt } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
@@ -31,6 +31,10 @@ export class CreateDescuentoDto {
 
   @IsOptional()
   prioridad?: number;
+
+  @IsOptional()
+  @IsInt()
+  statusId?: number;
 }
 
 export class UpdateDescuentoDto {

@@ -45,6 +45,15 @@ export class Producto {
   @Column({ default: 10 })
   stockMinimo: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  precio: number;
+
+  @Column({ nullable: true })
+  claveProdServ: string;
+
+  @Column({ nullable: true })
+  claveUnidad: string;
+
   @Column({
     type: 'enum',
     enum: StatusId,

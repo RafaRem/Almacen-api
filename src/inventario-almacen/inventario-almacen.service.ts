@@ -115,8 +115,12 @@ export class InventarioAlmacenService {
     productoId: string,
     cantidad: number,
     almacenTipoOrigen: AlmacenTipo,
-    almacenTipoDestino: AlmacenTipo,
-  ): Promise<{ успешно: boolean; mensaje: string }> {
+    almacenTipoDestino?: AlmacenTipo | null,
+  ): Promise<{ 
+    успешно: boolean; 
+    mensaje: string;
+    lotesUtilizados: { loteId: string; numeroLote: string; cantidad: number; precio: number }[];
+  }> {
     const inventarios = await this.inventarioRepository.find({
       where: { productoId, almacenTipo: almacenTipoOrigen },
       relations: ['lote'],
@@ -132,10 +136,13 @@ export class InventarioAlmacenService {
       return {
         успешно: false,
         mensaje: `Stock insuficiente. Disponible: ${totalDisponible}, Solicitado: ${cantidad}`,
+        lotesUtilizados: [],
       };
     }
 
+    const lotesUtilizados: { loteId: string; numeroLote: string; cantidad: number; precio: number }[] = [];
     let restante = cantidad;
+
     for (const inv of inventarios) {
       if (restante <= 0) break;
 
@@ -145,14 +152,26 @@ export class InventarioAlmacenService {
       inv.cantidadActual -= aTransferir;
       await this.inventarioRepository.save(inv);
 
-      await this.agregarStock(productoId, inv.loteId, almacenTipoDestino, aTransferir);
+      if (almacenTipoDestino) {
+        await this.agregarStock(productoId, inv.loteId, almacenTipoDestino, aTransferir);
+      }
+
+      lotesUtilizados.push({
+        loteId: inv.loteId,
+        numeroLote: inv.lote?.numeroLote || 'N/A',
+        cantidad: aTransferir,
+        precio: Number(inv.lote?.precio) || 0,
+      });
 
       restante -= aTransferir;
     }
 
+    const operacion = almacenTipoDestino ? `Transferido ${cantidad}` : `Vendido ${cantidad}`;
+
     return {
       успешно: true,
-      mensaje: `Transferido ${cantidad} unidades usando FIFO`,
+      mensaje: `${operacion} unidades usando FEPU`,
+      lotesUtilizados,
     };
   }
 

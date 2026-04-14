@@ -11,6 +11,9 @@ import { CreateVentaDto } from './dto/create-venta.dto';
 import { ProductosService } from '../productos/productos.service';
 import { LotesService } from '../lotes/lotes.service';
 import { DescuentosService } from '../descuentos/descuentos.service';
+import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
+import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-almacen.service';
+import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 
 @Injectable()
 export class VentasService {
@@ -24,6 +27,8 @@ export class VentasService {
     private productosService: ProductosService,
     private lotesService: LotesService,
     private descuentosService: DescuentosService,
+    private inventarioAlmacenService: InventarioAlmacenService,
+    private movimientosAlmacenService: MovimientosAlmacenService,
   ) {}
 
   async create(createVentaDto: CreateVentaDto, usuarioId: string): Promise<Venta> {
@@ -34,26 +39,56 @@ export class VentasService {
     let subtotal = 0;
     let descuentoTotal = 0;
     const detalles: Partial<DetalleVenta>[] = [];
+    const movimientosLotes: { productoId: string; loteId: string; numeroLote: string; cantidad: number }[] = [];
 
     for (const productoVenta of createVentaDto.productos) {
       const producto = await this.productosService.findOne(productoVenta.productoId);
 
-      const loteId = productoVenta.loteId || producto.loteId || '';
-      const lote = await this.lotesService.findOne(loteId);
+      if (!producto) {
+        throw new BadRequestException(`Producto ${productoVenta.productoId} no encontrado`);
+      }
 
-      if (!producto || !lote) {
+      const stockDisponible = await this.inventarioAlmacenService.getStockTotal(
+        productoVenta.productoId,
+        AlmacenTipo.VENTAS,
+      );
+
+      if (stockDisponible < productoVenta.cantidad) {
         throw new BadRequestException(
-          `Producto ${productoVenta.productoId} o Lote ${loteId} no encontrado`,
+          `Stock insuficiente para ${producto.nombre}. Disponible: ${stockDisponible}, Solicitado: ${productoVenta.cantidad}`,
         );
       }
 
-      if (producto.stock < productoVenta.cantidad) {
-        throw new BadRequestException(
-          `Stock insuficiente para ${producto.nombre}. Disponible: ${producto.stock}, Solicitado: ${productoVenta.cantidad}`,
-        );
+      const resultadoFEPU = await this.inventarioAlmacenService.reducirStockFIFO(
+        productoVenta.productoId,
+        productoVenta.cantidad,
+        AlmacenTipo.VENTAS,
+        null,
+      );
+
+      if (!resultadoFEPU.успешно) {
+        throw new BadRequestException(resultadoFEPU.mensaje);
       }
 
-      const precioUnitario = Number(lote.precio);
+      for (const loteInfo of resultadoFEPU.lotesUtilizados) {
+        movimientosLotes.push({
+          productoId: productoVenta.productoId,
+          loteId: loteInfo.loteId,
+          numeroLote: loteInfo.numeroLote,
+          cantidad: loteInfo.cantidad,
+        });
+
+        await this.movimientosAlmacenService.create({
+          productoId: productoVenta.productoId,
+          loteId: loteInfo.loteId,
+          almacenOrigen: AlmacenTipo.VENTAS,
+          almacenDestino: null,
+          cantidad: loteInfo.cantidad,
+          observaciones: `Venta - Lote: ${loteInfo.numeroLote}`,
+        }, usuarioId);
+      }
+
+      const precioUnitario = Number(producto.precio);
 
       let descuentoLinea = 0;
       try {
@@ -67,7 +102,6 @@ export class VentasService {
           descuentoLinea = (precioUnitario * productoVenta.cantidad * calculo.mejorDescuento) / 100;
         }
       } catch {
-        // No discount available
       }
 
       const subtotalLinea = precioUnitario * productoVenta.cantidad - descuentoLinea;
@@ -75,19 +109,16 @@ export class VentasService {
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
+      const primerLoteId = resultadoFEPU.lotesUtilizados[0]?.loteId || producto.loteId || '';
+
       detalles.push({
         productoId: productoVenta.productoId,
-        loteId: productoVenta.loteId,
+        loteId: primerLoteId,
         cantidad: productoVenta.cantidad,
         precioUnitario,
         descuentoLinea,
         subtotal: subtotalLinea,
       });
-
-      await this.productosService.updateStock(
-        productoVenta.productoId,
-        producto.stock - productoVenta.cantidad,
-      );
     }
 
     const iva = (subtotal - descuentoTotal) * this.IVA_RATE;
@@ -163,7 +194,6 @@ export class VentasService {
 
     for (const productoVenta of productos) {
       let producto;
-      let lote;
 
       try {
         producto = await this.productosService.findOne(productoVenta.productoId);
@@ -172,15 +202,6 @@ export class VentasService {
             productoId: productoVenta.productoId,
             descuento: 0,
             motivo: 'Producto no encontrado',
-          });
-          continue;
-        }
-        lote = await this.lotesService.findOne(producto.loteId);
-        if (!lote) {
-          descuentoPorProducto.push({
-            productoId: productoVenta.productoId,
-            descuento: 0,
-            motivo: 'Lote no encontrado',
           });
           continue;
         }
@@ -193,7 +214,7 @@ export class VentasService {
         continue;
       }
 
-      const precioUnitario = Number(lote.precio);
+      const precioUnitario = Number(producto.precio);
       const subtotalLinea = precioUnitario * productoVenta.cantidad;
 
       let descuentoLinea = 0;
@@ -211,7 +232,6 @@ export class VentasService {
           motivoDescuento = calculo.motivo;
         }
       } catch {
-        // No discount available
       }
 
       subtotal += subtotalLinea;

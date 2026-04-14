@@ -7,6 +7,8 @@ import { DetalleVenta } from './entities/detalle-venta.entity';
 import { ProductosModule } from '../productos/productos.module';
 import { LotesModule } from '../lotes/lotes.module';
 import { DescuentosModule } from '../descuentos/descuentos.module';
+import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almacen.module';
+import { MovimientosAlmacenModule } from '../movimientos-almacen/movimientos-almacen.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { DescuentosModule } from '../descuentos/descuentos.module';
     ProductosModule,
     LotesModule,
     DescuentosModule,
+    InventarioAlmacenModule,
+    MovimientosAlmacenModule,
   ],
   controllers: [VentasController],
   providers: [VentasService],

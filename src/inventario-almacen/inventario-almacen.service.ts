@@ -440,4 +440,65 @@ export class InventarioAlmacenService {
       detalles: correcciones,
     };
   }
+
+  async getProximosAVencer(dias: number = 60): Promise<any> {
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() + dias);
+
+    const inventarios = await this.inventarioRepository.find({
+      relations: ['producto', 'lote'],
+      order: { lote: { fechaCaducidad: 'ASC' } },
+    });
+
+    const productosFiltrados = inventarios.filter(inv => {
+      if (!inv.lote?.fechaCaducidad) return false;
+      const fechaCaducidad = new Date(inv.lote.fechaCaducidad);
+      return fechaCaducidad <= fechaLimite && inv.cantidadActual > 0;
+    });
+
+    let vencidos = 0;
+    let proximos = 0;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const productos = productosFiltrados.map(inv => {
+      const fechaCaducidad = new Date(inv.lote.fechaCaducidad);
+      const diffTime = fechaCaducidad.getTime() - hoy.getTime();
+      const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      const estado = diasRestantes < 0 ? 'VENCIDO' : 'PROXIMO';
+      if (estado === 'VENCIDO') vencidos++;
+      else proximos++;
+
+      const almacenTipoMap: Record<number, string> = {
+        1: 'BODEGA',
+        2: 'VENTAS',
+        3: 'MERMAS',
+        4: 'CADUCADOS',
+        5: 'DONADOS',
+        6: 'DESTRUCCION',
+      };
+
+      return {
+        productoId: inv.productoId,
+        nombre: inv.producto?.nombre || 'Sin nombre',
+        loteId: inv.loteId,
+        numeroLote: inv.lote?.numeroLote || 'N/A',
+        fechaCaducidad: inv.lote?.fechaCaducidad,
+        diasRestantes,
+        cantidadActual: Number(inv.cantidadActual),
+        almacenTipo: inv.almacenTipo,
+        almacenNombre: almacenTipoMap[inv.almacenTipo] || 'DESCONOCIDO',
+        estado,
+      };
+    });
+
+    return {
+      total: productos.length,
+      vencidos,
+      proximos,
+      diasUmbral: dias,
+      productos,
+    };
+  }
 }

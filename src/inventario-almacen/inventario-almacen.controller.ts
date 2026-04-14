@@ -150,6 +150,13 @@ export class InventarioAlmacenController {
     return this.inventarioService.syncInventory();
   }
 
+  @Get('proximos-a-vencer')
+  @UseGuards(JwtAuthGuard)
+  getProximosAVencer(@Query('dias') dias?: string) {
+    const diasNum = dias ? parseInt(dias, 10) : 60;
+    return this.inventarioService.getProximosAVencer(diasNum);
+  }
+
   @Post('agregar')
   @UseGuards(JwtAuthGuard)
   agregarStock(

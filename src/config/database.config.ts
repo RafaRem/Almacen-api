@@ -16,6 +16,8 @@ import { Telefono } from '../telefonos/entities/telefono.entity';
 import { Domicilio } from '../domicilios/entities/domicilio.entity';
 import { FacturacionCliente } from '../facturacion-cliente/entities/facturacion-cliente.entity';
 import { Credito } from '../creditos/entities/credito.entity';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
+import { Configuracion } from '../configuraciones/entities/configuracion.entity';
 
 export const getDatabaseConfig = (
   configService: ConfigService,
@@ -43,6 +45,8 @@ export const getDatabaseConfig = (
     Domicilio,
     FacturacionCliente,
     Credito,
+    InventarioAlmacen,
+    Configuracion,
   ],
-  synchronize: true,
+  synchronize: false,
 });

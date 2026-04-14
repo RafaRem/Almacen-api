@@ -10,6 +10,10 @@ export class CreateLaboratorioDto {
   descripcion?: string;
 
   @IsOptional()
+  @IsString()
+  rfc?: string;
+
+  @IsOptional()
   @IsInt()
   statusId?: number;
 }

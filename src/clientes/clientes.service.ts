@@ -42,8 +42,13 @@ export class ClientesService {
     return this.clientesRepository.save(cliente);
   }
 
-  async findAll(): Promise<Cliente[]> {
+  async findAll(statusId?: string): Promise<Cliente[]> {
+    const where: any = {};
+    if (statusId) {
+      where.statusId = parseInt(statusId, 10);
+    }
     return this.clientesRepository.find({
+      where,
       relations: [
         'categoriaCliente',
         'telefonos',

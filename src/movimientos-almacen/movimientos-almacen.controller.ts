@@ -6,7 +6,7 @@ import {
   Param,
   Query,
   UseGuards,
-  Headers,
+  Request,
 } from '@nestjs/common';
 import { MovimientosAlmacenService } from './movimientos-almacen.service';
 import { CreateMovimientoAlmacenDto } from './dto/create-movimiento-almacen.dto';
@@ -20,9 +20,9 @@ export class MovimientosAlmacenController {
   @UseGuards(JwtAuthGuard)
   create(
     @Body() createMovimientoDto: CreateMovimientoAlmacenDto,
-    @Headers('x-user-id') userId: string,
+    @Request() req: any,
   ) {
-    return this.movimientosService.create(createMovimientoDto, userId || '00000000-0000-0000-0000-000000000000');
+    return this.movimientosService.create(createMovimientoDto, req.user.id);
   }
 
   @Get()

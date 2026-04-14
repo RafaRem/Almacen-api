@@ -97,4 +97,22 @@ export class ProductosService {
     producto.stock = newStock;
     return this.productosRepository.save(producto);
   }
+
+  async checkExistence(codigosBarras: string[]): Promise<{ codigoBarras: string; existe: boolean; nombre?: string }[]> {
+    const productos = await this.productosRepository
+      .createQueryBuilder('producto')
+      .where('producto.codigoBarras IN (:...codigosBarras)')
+      .setParameter('codigosBarras', codigosBarras)
+      .select(['producto.codigoBarras', 'producto.nombre'])
+      .getMany();
+
+    return codigosBarras.map(codigo => {
+      const existente = productos.find(p => p.codigoBarras === codigo);
+      return {
+        codigoBarras: codigo,
+        existe: !!existente,
+        nombre: existente?.nombre,
+      };
+    });
+  }
 }

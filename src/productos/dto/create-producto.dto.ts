@@ -30,6 +30,22 @@ export class CreateProductoDto {
   stockMinimo?: number;
 
   @IsOptional()
+  @IsNumber()
+  stockMaximo?: number;
+
+  @IsOptional()
+  @IsNumber()
+  precio?: number;
+
+  @IsOptional()
+  @IsNumber()
+  precioVenta?: number;
+
+  @IsOptional()
+  @IsNumber()
+  margenRecomendado?: number;
+
+  @IsOptional()
   @IsInt()
   statusId?: number;
 }

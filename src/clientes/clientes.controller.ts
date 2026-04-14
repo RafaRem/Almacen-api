@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ClientesService } from './clientes.service';
@@ -24,8 +25,8 @@ export class ClientesController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  findAll() {
-    return this.clientesService.findAll();
+  findAll(@Query('statusId') statusId?: string) {
+    return this.clientesService.findAll(statusId);
   }
 
   @Get(':id')

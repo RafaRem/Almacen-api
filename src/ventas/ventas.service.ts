@@ -38,7 +38,7 @@ export class VentasService {
     for (const productoVenta of createVentaDto.productos) {
       const producto = await this.productosService.findOne(productoVenta.productoId);
 
-      const loteId = productoVenta.loteId || producto.loteId;
+      const loteId = productoVenta.loteId || producto.loteId || '';
       const lote = await this.lotesService.findOne(loteId);
 
       if (!producto || !lote) {

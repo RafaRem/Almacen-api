@@ -132,6 +132,24 @@ export class InventarioAlmacenController {
     return this.inventarioService.debugFindByProductAndLote(productoId, loteId, parseInt(almacenTipo) as AlmacenTipo);
   }
 
+  @Get('capas/:productoId')
+  @UseGuards(JwtAuthGuard)
+  getCapasPorProducto(@Param('productoId') productoId: string) {
+    return this.inventarioService.getCapasPorProducto(productoId);
+  }
+
+  @Get('verify')
+  @UseGuards(JwtAuthGuard)
+  verifyInventory() {
+    return this.inventarioService.verifyInventory();
+  }
+
+  @Post('sync')
+  @UseGuards(JwtAuthGuard)
+  syncInventory() {
+    return this.inventarioService.syncInventory();
+  }
+
   @Post('agregar')
   @UseGuards(JwtAuthGuard)
   agregarStock(

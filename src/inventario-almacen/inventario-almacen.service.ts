@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
+import { Producto } from '../productos/entities/producto.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 
 @Injectable()
@@ -9,6 +10,8 @@ export class InventarioAlmacenService {
   constructor(
     @InjectRepository(InventarioAlmacen)
     private inventarioRepository: Repository<InventarioAlmacen>,
+    @InjectRepository(Producto)
+    private productoRepository: Repository<Producto>,
   ) {}
 
   async findAll(): Promise<InventarioAlmacen[]> {
@@ -287,6 +290,135 @@ export class InventarioAlmacenService {
         almacenTipoExactMatch: inv.almacenTipo === almacenTipo
       })),
       filtrado
+    };
+  }
+
+  async getCapasPorProducto(productoId: string): Promise<any> {
+    const inventarios = await this.inventarioRepository.find({
+      where: { productoId },
+      relations: ['producto', 'lote'],
+      order: { lote: { fechaCaducidad: 'ASC' } },
+    });
+
+    if (inventarios.length === 0) {
+      throw new NotFoundException('No se encontró inventario para este producto');
+    }
+
+    const producto = inventarios[0].producto;
+    let totalStock = 0;
+    let costoTotal = 0;
+
+    const capas = inventarios.map(inv => {
+      const cantidad = Number(inv.cantidadActual);
+      const precio = Number(inv.lote?.precio) || 0;
+      totalStock += cantidad;
+      costoTotal += cantidad * precio;
+
+      return {
+        id: inv.id,
+        loteId: inv.loteId,
+        numeroLote: inv.lote?.numeroLote,
+        fechaCaducidad: inv.lote?.fechaCaducidad,
+        precio: precio,
+        almacenTipo: inv.almacenTipo,
+        cantidadActual: cantidad,
+        costoTotal: cantidad * precio,
+      };
+    });
+
+    return {
+      productoId,
+      producto: {
+        id: producto?.id,
+        nombre: producto?.nombre,
+        codigoBarras: producto?.codigoBarras,
+      },
+      totalStock,
+      costoTotal,
+      capas,
+    };
+  }
+
+  async verifyInventory(): Promise<any> {
+    const productos = await this.productoRepository.find();
+    const resultados: any[] = [];
+    let consistentes = 0;
+    let inconsistentes = 0;
+
+    for (const producto of productos) {
+      const inventarios = await this.inventarioRepository.find({
+        where: { productoId: producto.id },
+      });
+
+      const stockInventario = inventarios.reduce(
+        (sum, inv) => sum + Number(inv.cantidadActual),
+        0,
+      );
+      const stockProducto = producto.stock || 0;
+      const diferencia = stockInventario - stockProducto;
+
+      const esConsistente = diferencia === 0;
+      if (esConsistente) {
+        consistentes++;
+      } else {
+        inconsistentes++;
+      }
+
+      resultados.push({
+        productoId: producto.id,
+        nombre: producto.nombre,
+        codigoBarras: producto.codigoBarras,
+        stockProducto,
+        stockInventario,
+        diferencia,
+        estado: esConsistente ? 'CONSISTENTE' : 'INCONSISTENTE',
+        numeroCapas: inventarios.length,
+      });
+    }
+
+    return {
+      productos: resultados,
+      resumen: {
+        total: productos.length,
+        consistentes,
+        inconsistentes,
+      },
+    };
+  }
+
+  async syncInventory(): Promise<any> {
+    const productos = await this.productoRepository.find();
+    const correcciones: any[] = [];
+
+    for (const producto of productos) {
+      const inventarios = await this.inventarioRepository.find({
+        where: { productoId: producto.id },
+      });
+
+      const stockInventario = inventarios.reduce(
+        (sum, inv) => sum + Number(inv.cantidadActual),
+        0,
+      );
+
+      if (producto.stock !== stockInventario) {
+        const stockAnterior = producto.stock || 0;
+        producto.stock = stockInventario;
+        await this.productoRepository.save(producto);
+
+        correcciones.push({
+          productoId: producto.id,
+          nombre: producto.nombre,
+          stockAnterior,
+          stockNuevo: stockInventario,
+          diferencia: stockInventario - stockAnterior,
+        });
+      }
+    }
+
+    return {
+      mensaje: 'Sincronización completada',
+      correccionesRealizadas: correcciones.length,
+      detalles: correcciones,
     };
   }
 }

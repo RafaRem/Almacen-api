@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
-import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { CfdiPreviewDto, RecepcionConfirmadaDto, ConceptoDto } from './dto/procesar-recepcion.dto';
@@ -18,8 +17,6 @@ export class CfdiService {
     private loteRepository: Repository<Lote>,
     @InjectRepository(Laboratorio)
     private laboratorioRepository: Repository<Laboratorio>,
-    @InjectRepository(MovimientoAlmacen)
-    private movimientoRepository: Repository<MovimientoAlmacen>,
     private inventarioAlmacenService: InventarioAlmacenService,
   ) {}
 
@@ -37,7 +34,6 @@ export class CfdiService {
     laboratorio: { rfc: string; nombre: string; esNuevo: boolean };
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
-    movimientosCreados: number;
     mensaje: string;
   }> {
     const xml = this.removeXmlDeclaration(dto.xmlContent);
@@ -62,7 +58,6 @@ export class CfdiService {
       },
       productosCreados,
       productosExistentes,
-      movimientosCreados: productosCreados.length + productosExistentes.length,
       mensaje,
     };
   }
@@ -159,7 +154,8 @@ export class CfdiService {
 
     const numeroLoteUnico = `LOTE-${serie || 'X'}-${folio || '0'}`;
     const fechaCaducidadGeneral = productosDto[0]?.fechaCaducidad;
-    const lote = await this.crearOLocalizarLote(numeroLoteUnico, fechaCaducidadGeneral, laboratorioId);
+    const precioLote = conceptos.find(c => c.noIdentificacion === productosDto[0]?.productoId)?.valorUnitario || 0;
+    const lote = await this.crearOLocalizarLote(numeroLoteUnico, fechaCaducidadGeneral, laboratorioId, precioLote);
 
     for (const prodDto of productosDto) {
       const concepto = conceptos.find(c => c.noIdentificacion === prodDto.productoId);
@@ -184,8 +180,6 @@ export class CfdiService {
       }
 
       await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad);
-
-      await this.crearMovimientoRecepcion(producto.id, lote.id, prodDto.cantidad, userId);
     }
 
     return { productosCreados, productosExistentes };
@@ -209,36 +203,27 @@ export class CfdiService {
     return this.productoRepository.save(producto) as Promise<Producto>;
   }
 
-  private async crearOLocalizarLote(numeroLote: string, fechaCaducidad: string | undefined, laboratorioId: string): Promise<Lote> {
+  private async crearOLocalizarLote(numeroLote: string, fechaCaducidad: string | undefined, laboratorioId: string, precio: number): Promise<Lote> {
     const loteExistente = await this.loteRepository.findOne({
       where: { numeroLote: numeroLote },
     });
 
     if (loteExistente) {
+      if (loteExistente.precio === 0 && precio > 0) {
+        loteExistente.precio = precio;
+        return this.loteRepository.save(loteExistente);
+      }
       return loteExistente;
     }
 
     const nuevoLote = this.loteRepository.create({
       numeroLote: numeroLote,
       fechaCaducidad: fechaCaducidad ? new Date(fechaCaducidad) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      precio: 0,
+      precio: precio,
       laboratorioId: laboratorioId,
       statusId: 1,
     });
     return this.loteRepository.save(nuevoLote);
-  }
-
-  private async crearMovimientoRecepcion(productoId: string, loteId: string, cantidad: number, userId: string): Promise<void> {
-    const movimiento = this.movimientoRepository.create({
-      productoId: productoId,
-      loteId: loteId,
-      almacenOrigen: AlmacenTipo.RECEPCION,
-      almacenDestino: AlmacenTipo.VENTAS,
-      cantidad: cantidad,
-      userId: userId,
-      observaciones: 'Recepción desde CFDI',
-    });
-    await this.movimientoRepository.save(movimiento);
   }
 
   private generarMensaje(

@@ -43,6 +43,12 @@ export class MovimientosAlmacenController {
     return this.movimientosService.findByAlmacen(parseInt(tipo, 10));
   }
 
+  @Get('lote/:loteId')
+  @UseGuards(JwtAuthGuard)
+  findByLote(@Param('loteId') loteId: string) {
+    return this.movimientosService.findByLote(loteId);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {

@@ -152,9 +152,13 @@ export class InventarioAlmacenController {
 
   @Get('proximos-a-vencer')
   @UseGuards(JwtAuthGuard)
-  getProximosAVencer(@Query('dias') dias?: string) {
+  getProximosAVencer(
+    @Query('dias') dias?: string,
+    @Query('almacenTipo') almacenTipo?: string,
+  ) {
     const diasNum = dias ? parseInt(dias, 10) : 60;
-    return this.inventarioService.getProximosAVencer(diasNum);
+    const almacenTipoNum = almacenTipo ? parseInt(almacenTipo, 10) as AlmacenTipo : undefined;
+    return this.inventarioService.getProximosAVencer(diasNum, almacenTipoNum);
   }
 
   @Post('agregar')

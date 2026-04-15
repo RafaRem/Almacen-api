@@ -441,11 +441,17 @@ export class InventarioAlmacenService {
     };
   }
 
-  async getProximosAVencer(dias: number = 60): Promise<any> {
+  async getProximosAVencer(dias: number = 60, almacenTipo?: AlmacenTipo): Promise<any> {
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + dias);
 
+    const where: any = {};
+    if (almacenTipo !== undefined) {
+      where.almacenTipo = almacenTipo;
+    }
+
     const inventarios = await this.inventarioRepository.find({
+      where,
       relations: ['producto', 'lote'],
       order: { lote: { fechaCaducidad: 'ASC' } },
     });

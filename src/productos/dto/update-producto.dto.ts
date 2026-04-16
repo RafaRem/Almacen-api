@@ -31,6 +31,22 @@ export class UpdateProductoDto {
   stockMinimo?: number;
 
   @IsOptional()
+  @IsNumber()
+  stockMaximo?: number;
+
+  @IsOptional()
+  @IsNumber()
+  precio?: number;
+
+  @IsOptional()
+  @IsNumber()
+  precioVenta?: number;
+
+  @IsOptional()
+  @IsNumber()
+  margenRecomendado?: number;
+
+  @IsOptional()
   @IsEnum(StatusId)
   statusId?: StatusId;
 }

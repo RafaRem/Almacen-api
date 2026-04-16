@@ -18,6 +18,9 @@ export class Laboratorio {
   @Column({ nullable: true })
   descripcion: string;
 
+  @Column({ unique: true, nullable: true })
+  rfc: string;
+
   @Column({
     type: 'enum',
     enum: StatusId,

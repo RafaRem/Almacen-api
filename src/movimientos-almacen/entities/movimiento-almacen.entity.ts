@@ -39,8 +39,9 @@ export class MovimientoAlmacen {
   @Column({
     type: 'enum',
     enum: AlmacenTipo,
+    nullable: true,
   })
-  almacenDestino: AlmacenTipo;
+  almacenDestino: AlmacenTipo | null;
 
   @Column()
   cantidad: number;

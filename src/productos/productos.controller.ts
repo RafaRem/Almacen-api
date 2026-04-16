@@ -25,6 +25,12 @@ export class ProductosController {
     return this.productosService.create(createProductoDto);
   }
 
+  @Post('check-existence')
+  @UseGuards(JwtAuthGuard)
+  checkExistence(@Body() body: { codigosBarras: string[] }) {
+    return this.productosService.checkExistence(body.codigosBarras);
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard)
   findAll() {

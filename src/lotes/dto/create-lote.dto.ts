@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsNumber, IsUUID, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsUUID, IsDateString, IsOptional, IsInt } from 'class-validator';
 
 export class CreateLoteDto {
   @IsString()
@@ -16,4 +16,8 @@ export class CreateLoteDto {
   @IsUUID()
   @IsNotEmpty()
   laboratorioId: string;
+
+  @IsOptional()
+  @IsInt()
+  statusId?: number;
 }

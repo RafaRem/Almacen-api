@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
@@ -12,6 +12,7 @@ export class InventarioAlmacenService {
     private inventarioRepository: Repository<InventarioAlmacen>,
     @InjectRepository(Producto)
     private productoRepository: Repository<Producto>,
+    private dataSource: DataSource,
   ) {}
 
   async findAll(): Promise<InventarioAlmacen[]> {
@@ -84,20 +85,13 @@ export class InventarioAlmacenService {
     almacenTipo: AlmacenTipo,
     cantidad: number,
   ): Promise<InventarioAlmacen> {
-    console.log('[agregarStock] Recibido:', { productoId, loteId, almacenTipo, cantidad });
-    
     let inventario = await this.inventarioRepository.findOne({
       where: { productoId, loteId, almacenTipo },
     });
 
-    console.log('[agregarStock] Inventario encontrado:', inventario);
-
     if (inventario) {
-      const nuevaCantidad = Number(inventario.cantidadActual) + cantidad;
-      console.log('[agregarStock] Sumando al existente:', { existente: inventario.cantidadActual, cantidad, nuevaCantidad });
-      inventario.cantidadActual = nuevaCantidad;
+      inventario.cantidadActual = Number(inventario.cantidadActual) + cantidad;
     } else {
-      console.log('[agregarStock] Creando nuevo registro');
       inventario = this.inventarioRepository.create({
         productoId,
         loteId,
@@ -106,9 +100,7 @@ export class InventarioAlmacenService {
       });
     }
 
-    const resultado = await this.inventarioRepository.save(inventario);
-    console.log('[agregarStock] Guardado:', resultado);
-    return resultado;
+    return this.inventarioRepository.save(inventario);
   }
 
   async reducirStockFIFO(
@@ -182,48 +174,41 @@ export class InventarioAlmacenService {
     almacenTipoOrigen: AlmacenTipo,
     almacenTipoDestino: AlmacenTipo,
   ): Promise<InventarioAlmacen> {
-    console.log('[moverStock] === INICIO ===');
-    console.log('[moverStock] Recibido:', { productoId, loteId, cantidad, almacenTipoOrigen, almacenTipoDestino });
-    console.log('[moverStock] Tipos:', { 
-      cantidadType: typeof cantidad, 
-      almacenTipoOrigenType: typeof almacenTipoOrigen,
-      almacenTipoDestinoType: typeof almacenTipoDestino 
+    return this.dataSource.transaction(async (manager) => {
+      const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
+        where: { productoId, loteId, almacenTipo: almacenTipoOrigen },
+      });
+
+      if (!inventarioOrigen) {
+        throw new BadRequestException('No se encontró inventario en el almacén de origen');
+      }
+
+      const stockActual = Number(inventarioOrigen.cantidadActual);
+      
+      if (stockActual < cantidad) {
+        throw new BadRequestException(`Stock insuficiente. Disponible: ${stockActual}, Solicitado: ${cantidad}`);
+      }
+
+      inventarioOrigen.cantidadActual = stockActual - cantidad;
+      await manager.save(inventarioOrigen);
+
+      let inventarioDestino = await manager.findOne(InventarioAlmacen, {
+        where: { productoId, loteId, almacenTipo: almacenTipoDestino },
+      });
+
+      if (inventarioDestino) {
+        inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) + cantidad;
+      } else {
+        inventarioDestino = manager.create(InventarioAlmacen, {
+          productoId,
+          loteId,
+          almacenTipo: almacenTipoDestino,
+          cantidadActual: cantidad,
+        });
+      }
+      
+      return manager.save(inventarioDestino);
     });
-    
-    const inventarioOrigen = await this.inventarioRepository.findOne({
-      where: { productoId, loteId, almacenTipo: almacenTipoOrigen },
-    });
-
-    console.log('[moverStock] Inventario origen encontrado:', inventarioOrigen);
-    console.log('[moverStock] inventarioOrigen.cantidadActual:', inventarioOrigen?.cantidadActual, 'tipo:', typeof inventarioOrigen?.cantidadActual);
-
-    if (!inventarioOrigen) {
-      console.log('[moverStock] ERROR: No se encontró inventario en origen');
-      console.log('[moverStock] Query buscada:', { productoId, loteId, almacenTipo: almacenTipoOrigen });
-      throw new BadRequestException('No se encontró inventario en el almacén de origen');
-    }
-
-    const stockActual = Number(inventarioOrigen.cantidadActual);
-    console.log('[moverStock] Stock actual (parseado):', stockActual);
-    
-    if (stockActual < cantidad) {
-      console.log('[moverStock] ERROR: Stock insuficiente', { disponible: stockActual, solicitado: cantidad });
-      throw new BadRequestException(`Stock insuficiente. Disponible: ${stockActual}, Solicitado: ${cantidad}`);
-    }
-
-    const nuevaCantidadOrigen = stockActual - cantidad;
-    inventarioOrigen.cantidadActual = nuevaCantidadOrigen;
-    console.log('[moverStock] Nueva cantidad origen:', nuevaCantidadOrigen);
-    
-    const savedOrigen = await this.inventarioRepository.save(inventarioOrigen);
-    console.log('[moverStock] Guardado origen:', savedOrigen);
-
-    console.log('[moverStock] Llamando agregarStock al destino:', { productoId, loteId, cantidad, almacenTipoDestino });
-    const resultado = await this.agregarStock(productoId, loteId, almacenTipoDestino, cantidad);
-    console.log('[moverStock] Resultado agregarStock:', resultado);
-    console.log('[moverStock] === FIN ===');
-
-    return resultado;
   }
 
   async moverStockBatch(
@@ -231,7 +216,6 @@ export class InventarioAlmacenService {
     almacenTipoOrigen: AlmacenTipo,
     almacenTipoDestino: AlmacenTipo,
   ): Promise<{ success: boolean; moved: number; errors: string[] }> {
-    console.log('[moverStockBatch] Recibido:', { items, almacenTipoOrigen, almacenTipoDestino });
     const errors: string[] = [];
     let moved = 0;
 
@@ -246,12 +230,9 @@ export class InventarioAlmacenService {
         );
         moved++;
       } catch (error) {
-        console.log('[moverStockBatch] ERROR en item:', item, error.message);
         errors.push(`Producto ${item.productoId} (Lote ${item.loteId}): ${error.message}`);
       }
     }
-
-    console.log('[moverStockBatch] Resultado:', { moved, errors, success: errors.length === 0 });
 
     return {
       success: errors.length === 0,
@@ -438,6 +419,73 @@ export class InventarioAlmacenService {
       mensaje: 'Sincronización completada',
       correccionesRealizadas: correcciones.length,
       detalles: correcciones,
+    };
+  }
+
+  async getProximosAVencer(dias: number = 60, almacenTipo?: AlmacenTipo): Promise<any> {
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() + dias);
+
+    const where: any = {};
+    if (almacenTipo !== undefined) {
+      where.almacenTipo = almacenTipo;
+    }
+
+    const inventarios = await this.inventarioRepository.find({
+      where,
+      relations: ['producto', 'lote'],
+      order: { lote: { fechaCaducidad: 'ASC' } },
+    });
+
+    const productosFiltrados = inventarios.filter(inv => {
+      if (!inv.lote?.fechaCaducidad) return false;
+      const fechaCaducidad = new Date(inv.lote.fechaCaducidad);
+      return fechaCaducidad <= fechaLimite && inv.cantidadActual > 0;
+    });
+
+    let vencidos = 0;
+    let proximos = 0;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const productos = productosFiltrados.map(inv => {
+      const fechaCaducidad = new Date(inv.lote.fechaCaducidad);
+      const diffTime = fechaCaducidad.getTime() - hoy.getTime();
+      const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      const estado = diasRestantes < 0 ? 'VENCIDO' : 'PROXIMO';
+      if (estado === 'VENCIDO') vencidos++;
+      else proximos++;
+
+      const almacenTipoMap: Record<number, string> = {
+        1: 'BODEGA',
+        2: 'VENTAS',
+        3: 'MERMAS',
+        4: 'CADUCADOS',
+        5: 'DONADOS',
+        6: 'DESTRUCCION',
+      };
+
+      return {
+        productoId: inv.productoId,
+        nombre: inv.producto?.nombre || 'Sin nombre',
+        loteId: inv.loteId,
+        numeroLote: inv.lote?.numeroLote || 'N/A',
+        fechaCaducidad: inv.lote?.fechaCaducidad,
+        diasRestantes,
+        cantidadActual: Number(inv.cantidadActual),
+        almacenTipo: inv.almacenTipo,
+        almacenNombre: almacenTipoMap[inv.almacenTipo] || 'DESCONOCIDO',
+        estado,
+      };
+    });
+
+    return {
+      total: productos.length,
+      vencidos,
+      proximos,
+      diasUmbral: dias,
+      productos,
     };
   }
 }

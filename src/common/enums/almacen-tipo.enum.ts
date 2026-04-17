@@ -5,4 +5,5 @@ export enum AlmacenTipo {
   CADUCADOS = 4,
   DONADOS = 5,
   DESTRUCCION = 6,
+  CLIENTE = 7,
 }

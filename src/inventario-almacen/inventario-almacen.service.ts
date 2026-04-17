@@ -191,7 +191,7 @@ export class InventarioAlmacenService {
         productoId,
         loteId: inventarios[0]?.loteId,
         almacenOrigen: almacenTipoOrigen,
-        almacenDestino: null,
+        almacenDestino: AlmacenTipo.CLIENTE,
         cantidad,
         userId,
         observaciones: metadata?.referenciaExterna || 'Venta',

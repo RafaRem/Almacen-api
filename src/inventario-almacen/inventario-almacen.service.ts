@@ -3,7 +3,20 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { Lote } from '../lotes/entities/lote.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { SYSTEM_USER_ID, TipoMovimiento, OrigenOperacion } from '../common/constants';
+
+export interface MovimientoMetadata {
+  sucursalId?: string;
+  turno?: string;
+  caja?: string;
+  terminalId?: string;
+  sessionId?: string;
+  origenOperacion?: OrigenOperacion;
+  referenciaExterna?: string;
+}
 
 @Injectable()
 export class InventarioAlmacenService {
@@ -12,6 +25,10 @@ export class InventarioAlmacenService {
     private inventarioRepository: Repository<InventarioAlmacen>,
     @InjectRepository(Producto)
     private productoRepository: Repository<Producto>,
+    @InjectRepository(Lote)
+    private loteRepository: Repository<Lote>,
+    @InjectRepository(MovimientoAlmacen)
+    private movimientoRepository: Repository<MovimientoAlmacen>,
     private dataSource: DataSource,
   ) {}
 
@@ -120,64 +137,77 @@ export class InventarioAlmacenService {
     productoId: string,
     cantidad: number,
     almacenTipoOrigen: AlmacenTipo,
-    almacenTipoDestino?: AlmacenTipo | null,
+    userId: string = SYSTEM_USER_ID,
+    metadata?: MovimientoMetadata,
   ): Promise<{ 
-    успешно: boolean; 
-    mensaje: string;
-    lotesUtilizados: { loteId: string; numeroLote: string; cantidad: number; precio: number }[];
+    success: boolean; 
+    message: string;
+    lotsUsed: { loteId: string; numeroLote: string; cantidad: number; precio: number }[];
+    movimientoId?: string;
   }> {
-    const inventarios = await this.inventarioRepository.find({
-      where: { productoId, almacenTipo: almacenTipoOrigen },
-      relations: ['lote'],
-      order: { lote: { fechaCaducidad: 'ASC' } },
-    });
-
-    let totalDisponible = 0;
-    for (const inv of inventarios) {
-      totalDisponible += Number(inv.cantidadActual);
-    }
-
-    if (totalDisponible < cantidad) {
-      return {
-        успешно: false,
-        mensaje: `Stock insuficiente. Disponible: ${totalDisponible}, Solicitado: ${cantidad}`,
-        lotesUtilizados: [],
-      };
-    }
-
-    const lotesUtilizados: { loteId: string; numeroLote: string; cantidad: number; precio: number }[] = [];
-    let restante = cantidad;
-
-    for (const inv of inventarios) {
-      if (restante <= 0) break;
-
-      const disponible = Number(inv.cantidadActual);
-      const aTransferir = Math.min(disponible, restante);
-
-      inv.cantidadActual -= aTransferir;
-      await this.inventarioRepository.save(inv);
-
-      if (almacenTipoDestino) {
-        await this.agregarStock(productoId, inv.loteId, almacenTipoDestino, aTransferir);
-      }
-
-      lotesUtilizados.push({
-        loteId: inv.loteId,
-        numeroLote: inv.lote?.numeroLote || 'N/A',
-        cantidad: aTransferir,
-        precio: Number(inv.lote?.precio) || 0,
+    return this.dataSource.transaction(async (manager) => {
+      const inventarios = await manager.find(InventarioAlmacen, {
+        where: { productoId, almacenTipo: almacenTipoOrigen },
+        relations: ['lote'],
+        order: { lote: { fechaCaducidad: 'ASC' } },
       });
 
-      restante -= aTransferir;
-    }
+      let totalDisponible = 0;
+      for (const inv of inventarios) {
+        totalDisponible += Number(inv.cantidadActual);
+      }
 
-    const operacion = almacenTipoDestino ? `Transferido ${cantidad}` : `Vendido ${cantidad}`;
+      if (totalDisponible < cantidad) {
+        return {
+          success: false,
+          message: `Stock insuficiente. Disponible: ${totalDisponible}, Solicitado: ${cantidad}`,
+          lotsUsed: [],
+        };
+      }
 
-    return {
-      успешно: true,
-      mensaje: `${operacion} unidades usando FEPU`,
-      lotesUtilizados,
-    };
+      const lotsUsed: { loteId: string; numeroLote: string; cantidad: number; precio: number }[] = [];
+      let restante = cantidad;
+
+      for (const inv of inventarios) {
+        if (restante <= 0) break;
+
+        const disponible = Number(inv.cantidadActual);
+        const aTransferir = Math.min(disponible, restante);
+
+        inv.cantidadActual -= aTransferir;
+        await manager.save(inv);
+
+        lotsUsed.push({
+          loteId: inv.loteId,
+          numeroLote: inv.lote?.numeroLote || 'N/A',
+          cantidad: aTransferir,
+          precio: Number(inv.lote?.precio) || 0,
+        });
+
+        restante -= aTransferir;
+      }
+
+      const movimiento = manager.create(MovimientoAlmacen, {
+        productoId,
+        loteId: inventarios[0]?.loteId,
+        almacenOrigen: almacenTipoOrigen,
+        almacenDestino: null,
+        cantidad,
+        userId,
+        observaciones: metadata?.referenciaExterna || 'Venta',
+        tipoMovimiento: TipoMovimiento.VENTA,
+        origenOperacion: metadata?.origenOperacion || OrigenOperacion.POS,
+      });
+      
+      const savedMovimiento = await manager.save(movimiento);
+
+      return {
+        success: true,
+        message: `Vendido ${cantidad} unidades usando FEPU`,
+        lotsUsed,
+        movimientoId: savedMovimiento.id,
+      };
+    });
   }
 
   async moverStock(

@@ -10,7 +10,6 @@ import {
 import { AlmacenTipo } from '../../common/enums/almacen-tipo.enum';
 import { Producto } from '../../productos/entities/producto.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
-import { MovimientoAlmacen } from '../../movimientos-almacen/entities/movimiento-almacen.entity';
 
 @Entity('inventario_almacen')
 export class InventarioAlmacen {
@@ -45,10 +44,6 @@ export class InventarioAlmacen {
 
   @Column({ name: 'ultimo_movimiento_id', nullable: true })
   ultimoMovimientoId: string;
-
-  @ManyToOne(() => MovimientoAlmacen)
-  @JoinColumn({ name: 'ultimo_movimiento_id' })
-  ultimoMovimiento: MovimientoAlmacen;
 
   @CreateDateColumn()
   createdAt: Date;

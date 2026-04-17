@@ -63,29 +63,20 @@ export class VentasService {
         productoVenta.productoId,
         productoVenta.cantidad,
         AlmacenTipo.VENTAS,
-        null,
+        usuarioId,
       );
 
-      if (!resultadoFEPU.успешно) {
-        throw new BadRequestException(resultadoFEPU.mensaje);
+      if (!resultadoFEPU.success) {
+        throw new BadRequestException(resultadoFEPU.message);
       }
 
-      for (const loteInfo of resultadoFEPU.lotesUtilizados) {
+      for (const loteInfo of resultadoFEPU.lotsUsed) {
         movimientosLotes.push({
           productoId: productoVenta.productoId,
           loteId: loteInfo.loteId,
           numeroLote: loteInfo.numeroLote,
           cantidad: loteInfo.cantidad,
         });
-
-        await this.movimientosAlmacenService.create({
-          productoId: productoVenta.productoId,
-          loteId: loteInfo.loteId,
-          almacenOrigen: AlmacenTipo.VENTAS,
-          almacenDestino: null,
-          cantidad: loteInfo.cantidad,
-          observaciones: `Venta - Lote: ${loteInfo.numeroLote}`,
-        }, usuarioId);
       }
 
       const precioUnitario = Number(producto.precio);
@@ -109,7 +100,7 @@ export class VentasService {
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
-      const primerLoteId = resultadoFEPU.lotesUtilizados[0]?.loteId || producto.loteId || '';
+      const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || producto.loteId || '';
 
       detalles.push({
         productoId: productoVenta.productoId,

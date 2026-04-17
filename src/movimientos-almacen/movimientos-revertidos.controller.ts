@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MovimientosRevertidosService } from './movimientos-revertidos.service';
 import { TipoReversion } from './entities/movimiento-revertido.entity';
 
-@Controller('movimientos-almacen')
+@Controller('movimientos-revertidos')
 @UseGuards(JwtAuthGuard)
 export class MovimientosRevertidosController {
   constructor(private readonly revertidosService: MovimientosRevertidosService) {}

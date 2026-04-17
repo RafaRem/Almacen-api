@@ -25,6 +25,7 @@ import { CreditosModule } from './creditos/creditos.module';
 import { CfdiModule } from './cfdi/cfdi.module';
 import { InventarioAlmacenModule } from './inventario-almacen/inventario-almacen.module';
 import { ConfiguracionesModule } from './configuraciones/configuraciones.module';
+import { ConfiguracionModule } from './configuracion/configuracion.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { ConfiguracionesModule } from './configuraciones/configuraciones.module'
     LaboratoriosModule,
     LotesModule,
     ProductosModule,
+    ConfiguracionModule,
     MovimientosAlmacenModule,
     CategoriasClienteModule,
     DescuentosModule,

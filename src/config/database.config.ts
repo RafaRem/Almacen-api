@@ -18,6 +18,8 @@ import { FacturacionCliente } from '../facturacion-cliente/entities/facturacion-
 import { Credito } from '../creditos/entities/credito.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { Configuracion } from '../configuraciones/entities/configuracion.entity';
+import { ConfiguracionSistema } from '../configuracion/entities/configuracion-sistema.entity';
+import { MovimientoRevertido } from '../movimientos-almacen/entities/movimiento-revertido.entity';
 
 export const getDatabaseConfig = (
   configService: ConfigService,
@@ -47,6 +49,8 @@ export const getDatabaseConfig = (
     Credito,
     InventarioAlmacen,
     Configuracion,
+    ConfiguracionSistema,
+    MovimientoRevertido,
   ],
   synchronize: false,
 });

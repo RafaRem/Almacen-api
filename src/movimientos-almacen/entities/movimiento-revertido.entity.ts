@@ -49,10 +49,13 @@ export class MovimientoRevertido {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   cantidad: number;
 
-  @Column({ type: 'enum', enum: TipoReversion })
-  tipoReversion: TipoReversion;
+  @Column({ name: 'tipo_reversion', type: 'varchar', length: 50 })
+  tipoReversion: string;
 
-  @Column({ length: 500 })
+  @Column({ name: 'estado', type: 'varchar', length: 50, default: 'pendiente' })
+  estado: string;
+
+  @Column({ length: 500, nullable: true })
   motivo: string;
 
   @Column({ name: 'error_details', type: 'text', nullable: true })
@@ -61,7 +64,7 @@ export class MovimientoRevertido {
   @Column({ name: 'user_id_ejecuto' })
   userIdEjecuto: string;
 
-  @Column({ name: 'user_id_revirtio', nullable: true })
+  @Column({ name: 'revertido_por', nullable: true })
   userIdRevirtio: string;
 
   @Column({ name: 'reversion_automatica', default: false })
@@ -82,19 +85,22 @@ export class MovimientoRevertido {
   @Column({ name: 'session_id', length: 100, nullable: true })
   sessionId: string;
 
-  @Column({ type: 'enum', enum: OrigenOperacion })
-  origenOperacion: OrigenOperacion;
+  @Column({ name: 'origen_operacion', type: 'varchar', length: 50, nullable: true })
+  origenOperacion: string;
 
   @Column({ name: 'referencia_externa', length: 255, nullable: true })
   referenciaExterna: string;
 
-  @Column({ default: false })
+  @Column({ name: 'compensado', default: false })
   compensado: boolean;
 
-  @Column({ name: 'fecha_operacion_original', type: 'timestamp' })
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, any>;
+
+  @Column({ name: 'fecha_operacion_original', type: 'timestamp', nullable: true })
   fechaOperacionOriginal: Date;
 
-  @Column({ name: 'fecha_reversion', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ name: 'fecha_reversion', type: 'timestamp', nullable: true })
   fechaReversion: Date;
 
   @Column({ name: 'ip_address', length: 45, nullable: true })
@@ -119,6 +125,6 @@ export class MovimientoRevertido {
   userEjecuto: User;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'user_id_revirtio' })
+  @JoinColumn({ name: 'revertido_por' })
   userRevirtio: User;
 }

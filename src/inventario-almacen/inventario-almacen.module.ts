@@ -5,10 +5,11 @@ import { InventarioAlmacenService } from './inventario-almacen.service';
 import { InventarioAlmacenController } from './inventario-almacen.controller';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
+import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InventarioAlmacen, Producto, Lote]),
+    TypeOrmModule.forFeature([InventarioAlmacen, Producto, Lote, MovimientoAlmacen]),
   ],
   controllers: [InventarioAlmacenController],
   providers: [InventarioAlmacenService],

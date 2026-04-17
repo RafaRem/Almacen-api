@@ -169,6 +169,7 @@ export class MovimientosRevertidosService {
     userIdRevirtio?: string;
     fechaDesde?: Date;
     fechaHasta?: Date;
+    tipo?: string;
   }): Promise<{
     data: MovimientoRevertido[];
     total: number;
@@ -183,8 +184,17 @@ export class MovimientosRevertidosService {
     const queryBuilder = this.revertidoRepository
       .createQueryBuilder('mr')
       .leftJoinAndSelect('mr.producto', 'producto')
-      .leftJoinAndSelect('mr.lote', 'lote')
-      .where('mr.tipoReversion = :tipo', { tipo: TipoReversion.MANUAL_REVERSION });
+      .leftJoinAndSelect('mr.lote', 'lote');
+
+    // Si se especifica tipo, filtrar por ese tipo
+    if (filtros.tipo) {
+      queryBuilder.andWhere('mr.tipoReversion = :tipo', { tipo: filtros.tipo });
+    } else {
+      // Por defecto, mostrar todos los tipos excepto FAILED_BATCH y ROLLBACK
+      queryBuilder.andWhere('mr.tipoReversion NOT IN (:...tipos)', {
+        tipos: [TipoReversion.FAILED_BATCH, TipoReversion.ROLLBACK]
+      });
+    }
 
     if (filtros.productoId) {
       queryBuilder.andWhere('mr.productoId = :productoId', { productoId: filtros.productoId });

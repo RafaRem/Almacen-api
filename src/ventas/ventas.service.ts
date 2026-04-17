@@ -188,7 +188,7 @@ export class VentasService {
     return { data, total };
   }
 
-  async findOne(id: string): Promise<Venta & { detalles: DetalleVenta[] }> {
+  async findOne(id: string): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[] }> {
     const venta = await this.ventasRepository.findOne({
       where: { id },
       relations: ['cliente', 'usuario'],
@@ -203,7 +203,11 @@ export class VentasService {
       relations: ['producto', 'lote'],
     });
 
-    return { ...venta, detalles };
+    const pagos = await this.pagosRepository.find({
+      where: { ventaId: id },
+    });
+
+    return { ...venta, detalles, pagos };
   }
 
   async cancel(id: string): Promise<Venta> {

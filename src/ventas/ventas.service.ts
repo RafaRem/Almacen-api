@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Venta } from './entities/venta.entity';
 import { DetalleVenta } from './entities/detalle-venta.entity';
+import { PagoVenta } from './entities/pago-venta.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { ProductosService } from '../productos/productos.service';
 import { LotesService } from '../lotes/lotes.service';
@@ -14,6 +15,8 @@ import { DescuentosService } from '../descuentos/descuentos.service';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-almacen.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { MetodoPago } from '../common/enums/metodo-pago.enum';
+import { FormaPago } from '../common/enums/forma-pago.enum';
 
 @Injectable()
 export class VentasService {
@@ -24,6 +27,8 @@ export class VentasService {
     private ventasRepository: Repository<Venta>,
     @InjectRepository(DetalleVenta)
     private detallesRepository: Repository<DetalleVenta>,
+    @InjectRepository(PagoVenta)
+    private pagosRepository: Repository<PagoVenta>,
     private productosService: ProductosService,
     private lotesService: LotesService,
     private descuentosService: DescuentosService,
@@ -115,6 +120,33 @@ export class VentasService {
     const iva = (subtotal - descuentoTotal) * this.IVA_RATE;
     const total = subtotal - descuentoTotal + iva;
 
+    let pagosData: { formaPago: FormaPago; monto: number; referencia?: string }[] = [];
+
+    if (createVentaDto.pagos && createVentaDto.pagos.length > 0) {
+      const sumaPagos = createVentaDto.pagos.reduce((sum, p) => sum + Number(p.monto), 0);
+      if (Math.abs(sumaPagos - total) > 0.01) {
+        throw new BadRequestException(
+          `La suma de pagos (${sumaPagos.toFixed(2)}) no coincide con el total (${total.toFixed(2)})`,
+        );
+      }
+      pagosData = createVentaDto.pagos.map((p) => ({
+        formaPago: p.formaPago,
+        monto: Number(p.monto),
+        referencia: p.referencia || undefined,
+      }));
+    } else if (createVentaDto.metodoPago) {
+      pagosData = [{
+        formaPago: this.convertirMetodoPago(createVentaDto.metodoPago),
+        monto: total,
+      }];
+    } else {
+      throw new BadRequestException('Debe especificar método de pago');
+    }
+
+    const metodoPagoLegacy = pagosData.length === 1
+      ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
+      : MetodoPago.EFECTIVO;
+
     const venta = this.ventasRepository.create({
       clienteId: createVentaDto.clienteId,
       usuarioId,
@@ -122,7 +154,7 @@ export class VentasService {
       descuentoAplicado: descuentoTotal,
       iva,
       total,
-      metodoPago: createVentaDto.metodoPago,
+      metodoPago: metodoPagoLegacy,
       observaciones: createVentaDto.observaciones,
     });
 
@@ -132,6 +164,16 @@ export class VentasService {
       detalle.ventaId = savedVenta.id;
     }
     await this.detallesRepository.save(detalles);
+
+    for (const pago of pagosData) {
+      const pagoVenta = this.pagosRepository.create({
+        ventaId: savedVenta.id,
+        formaPago: pago.formaPago,
+        monto: pago.monto,
+        referencia: pago.referencia,
+      });
+      await this.pagosRepository.save(pagoVenta);
+    }
 
     return this.findOne(savedVenta.id);
   }
@@ -245,5 +287,20 @@ export class VentasService {
       total,
       descuentoPorProducto,
     };
+  }
+
+  private convertirMetodoPago(metodo: MetodoPago): FormaPago {
+    const mapa: Record<MetodoPago, FormaPago> = {
+      [MetodoPago.EFECTIVO]: FormaPago.EFECTIVO,
+      [MetodoPago.TARJETA]: FormaPago.TARJETA_CREDITO,
+      [MetodoPago.TRANSFERENCIA]: FormaPago.TRANSFERENCIA,
+    };
+    return mapa[metodo] || FormaPago.EFECTIVO;
+  }
+
+  private convertirFormaPagoAMetodoPago(forma: FormaPago): MetodoPago {
+    if (forma === FormaPago.EFECTIVO) return MetodoPago.EFECTIVO;
+    if (forma === FormaPago.TRANSFERENCIA) return MetodoPago.TRANSFERENCIA;
+    return MetodoPago.TARJETA;
   }
 }

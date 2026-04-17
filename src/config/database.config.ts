@@ -11,6 +11,7 @@ import { DocumentoCliente } from '../uploads/entities/documento-cliente.entity';
 import { Cliente } from '../clientes/entities/cliente.entity';
 import { Venta } from '../ventas/entities/venta.entity';
 import { DetalleVenta } from '../ventas/entities/detalle-venta.entity';
+import { PagoVenta } from '../ventas/entities/pago-venta.entity';
 import { RegimenFiscal } from '../regimen-fiscal/entities/regimen-fiscal.entity';
 import { Telefono } from '../telefonos/entities/telefono.entity';
 import { Domicilio } from '../domicilios/entities/domicilio.entity';
@@ -42,6 +43,7 @@ export const getDatabaseConfig = (
     Cliente,
     Venta,
     DetalleVenta,
+    PagoVenta,
     RegimenFiscal,
     Telefono,
     Domicilio,

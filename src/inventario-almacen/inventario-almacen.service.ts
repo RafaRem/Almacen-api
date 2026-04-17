@@ -42,6 +42,7 @@ export class InventarioAlmacenService {
     const inventarios = await this.inventarioRepository.find({
       where: { almacenTipo },
       relations: ['producto', 'lote'],
+      order: { lote: { fechaCaducidad: 'ASC' } },
     });
 
     const agrupado = new Map<string, any>();
@@ -76,7 +77,19 @@ export class InventarioAlmacenService {
       }
     }
 
-    return Array.from(agrupado.values());
+    const resultado = Array.from(agrupado.values());
+    
+    for (const item of resultado) {
+      if (item.lotes && item.lotes.length > 0) {
+        item.lotes.sort((a, b) => {
+          const dateA = new Date(a.fechaCaducidad || '9999-12-31');
+          const dateB = new Date(b.fechaCaducidad || '9999-12-31');
+          return dateA.getTime() - dateB.getTime();
+        });
+      }
+    }
+    
+    return resultado;
   }
 
   async agregarStock(

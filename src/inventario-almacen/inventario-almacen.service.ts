@@ -210,12 +210,48 @@ export class InventarioAlmacenService {
     });
   }
 
+  private determinarTipoMovimiento(
+    almacenOrigen: AlmacenTipo,
+    almacenDestino: AlmacenTipo | null,
+  ): TipoMovimiento {
+    if (almacenDestino === null) {
+      return TipoMovimiento.VENTA;
+    }
+    
+    if (almacenOrigen === AlmacenTipo.RECEPCION && almacenDestino === AlmacenTipo.VENTAS) {
+      return TipoMovimiento.TRANSFERENCIA_BODEGA_VENTAS;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.RECEPCION) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_BODEGA;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.MERMAS) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_MERMAS;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.CADUCADOS) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_CADUCADOS;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.DONADOS) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_DONACION;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.DESTRUCCION) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_DESTRUCCION;
+    }
+    if (almacenOrigen === AlmacenTipo.RECEPCION && almacenDestino === AlmacenTipo.MERMAS) {
+      return TipoMovimiento.TRANSFERENCIA_BODEGA_MERMAS;
+    }
+    
+    return TipoMovimiento.TRANSFERENCIA_OTRO;
+  }
+
   async moverStock(
     productoId: string,
     loteId: string,
     cantidad: number,
     almacenTipoOrigen: AlmacenTipo,
     almacenTipoDestino: AlmacenTipo,
+    userId: string = SYSTEM_USER_ID,
+    observaciones?: string,
+    metadata?: MovimientoMetadata,
   ): Promise<InventarioAlmacen> {
     return this.dataSource.transaction(async (manager) => {
       const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
@@ -250,7 +286,38 @@ export class InventarioAlmacenService {
         });
       }
       
-      return manager.save(inventarioDestino);
+      const savedDestino = await manager.save(inventarioDestino);
+
+      const tipoMovimiento = this.determinarTipoMovimiento(almacenTipoOrigen, almacenTipoDestino);
+      
+      const movimiento = manager.create(MovimientoAlmacen, {
+        productoId,
+        loteId,
+        almacenOrigen: almacenTipoOrigen,
+        almacenDestino: almacenTipoDestino,
+        cantidad,
+        userId,
+        observaciones,
+        tipoMovimiento,
+        origenOperacion: metadata?.origenOperacion || OrigenOperacion.ADMIN,
+      });
+      
+      const savedMovimiento = await manager.save(movimiento);
+
+      inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
+      await manager.save(inventarioOrigen);
+      
+      if (savedDestino.id) {
+        const destinoActualizado = await manager.findOne(InventarioAlmacen, {
+          where: { id: savedDestino.id },
+        });
+        if (destinoActualizado) {
+          destinoActualizado.ultimoMovimientoId = savedMovimiento.id;
+          await manager.save(destinoActualizado);
+        }
+      }
+
+      return savedDestino;
     });
   }
 
@@ -258,30 +325,112 @@ export class InventarioAlmacenService {
     items: { productoId: string; loteId: string; cantidad: number }[],
     almacenTipoOrigen: AlmacenTipo,
     almacenTipoDestino: AlmacenTipo,
-  ): Promise<{ success: boolean; moved: number; errors: string[] }> {
-    const errors: string[] = [];
-    let moved = 0;
+    userId: string = SYSTEM_USER_ID,
+    metadata?: MovimientoMetadata,
+  ): Promise<{ 
+    success: boolean; 
+    moved: number; 
+    errors: string[];
+    failedItems: { productoId: string; loteId: string; cantidad: number; error: string }[];
+  }> {
+    return this.dataSource.transaction(async (manager) => {
+      const errors: string[] = [];
+      const failedItems: { productoId: string; loteId: string; cantidad: number; error: string }[] = [];
+      let moved = 0;
 
-    for (const item of items) {
-      try {
-        await this.moverStock(
-          item.productoId,
-          item.loteId,
-          item.cantidad,
-          almacenTipoOrigen,
-          almacenTipoDestino,
-        );
-        moved++;
-      } catch (error) {
-        errors.push(`Producto ${item.productoId} (Lote ${item.loteId}): ${error.message}`);
+      for (const item of items) {
+        try {
+          const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
+            where: { 
+              productoId: item.productoId, 
+              loteId: item.loteId, 
+              almacenTipo: almacenTipoOrigen 
+            },
+          });
+
+          if (!inventarioOrigen) {
+            throw new Error('No se encontró inventario en el almacén de origen');
+          }
+
+          const stockActual = Number(inventarioOrigen.cantidadActual);
+          
+          if (stockActual < item.cantidad) {
+            throw new Error(`Stock insuficiente. Disponible: ${stockActual}, Solicitado: ${item.cantidad}`);
+          }
+
+          inventarioOrigen.cantidadActual = stockActual - item.cantidad;
+          await manager.save(inventarioOrigen);
+
+          let inventarioDestino = await manager.findOne(InventarioAlmacen, {
+            where: { productoId: item.productoId, loteId: item.loteId, almacenTipo: almacenTipoDestino },
+          });
+
+          if (inventarioDestino) {
+            inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) + item.cantidad;
+          } else {
+            inventarioDestino = manager.create(InventarioAlmacen, {
+              productoId: item.productoId,
+              loteId: item.loteId,
+              almacenTipo: almacenTipoDestino,
+              cantidadActual: item.cantidad,
+            });
+          }
+          
+          const savedDestino = await manager.save(inventarioDestino);
+
+          const tipoMovimiento = this.determinarTipoMovimiento(almacenTipoOrigen, almacenTipoDestino);
+          
+          const movimiento = manager.create(MovimientoAlmacen, {
+            productoId: item.productoId,
+            loteId: item.loteId,
+            almacenOrigen: almacenTipoOrigen,
+            almacenDestino: almacenTipoDestino,
+            cantidad: item.cantidad,
+            userId,
+            observaciones: `Transferencia batch ${almacenTipoOrigen} -> ${almacenTipoDestino}`,
+            tipoMovimiento,
+            origenOperacion: metadata?.origenOperacion || OrigenOperacion.ADMIN,
+          });
+          
+          const savedMovimiento = await manager.save(movimiento);
+
+          inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
+          await manager.save(inventarioOrigen);
+          
+          if (savedDestino.id) {
+            const destinoActualizado = await manager.findOne(InventarioAlmacen, {
+              where: { id: savedDestino.id },
+            });
+            if (destinoActualizado) {
+              destinoActualizado.ultimoMovimientoId = savedMovimiento.id;
+              await manager.save(destinoActualizado);
+            }
+          }
+
+          moved++;
+        } catch (error) {
+          const errorMessage = error.message || 'Error desconocido';
+          errors.push(`Producto ${item.productoId} (Lote ${item.loteId}): ${errorMessage}`);
+          failedItems.push({
+            productoId: item.productoId,
+            loteId: item.loteId,
+            cantidad: item.cantidad,
+            error: errorMessage,
+          });
+        }
       }
-    }
 
-    return {
-      success: errors.length === 0,
-      moved,
-      errors,
-    };
+      if (failedItems.length > 0) {
+        throw new Error(`Batch completed with ${failedItems.length} failures`);
+      }
+
+      return {
+        success: errors.length === 0,
+        moved,
+        errors,
+        failedItems,
+      };
+    });
   }
 
   async getStockTotal(productoId: string, almacenTipo?: AlmacenTipo): Promise<number> {

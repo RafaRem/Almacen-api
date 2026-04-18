@@ -124,9 +124,9 @@ export class VentasService {
 
     if (createVentaDto.pagos && createVentaDto.pagos.length > 0) {
       const sumaPagos = createVentaDto.pagos.reduce((sum, p) => sum + Number(p.monto), 0);
-      if (Math.abs(sumaPagos - total) > 0.01) {
+      if (sumaPagos < total - 0.01) {
         throw new BadRequestException(
-          `La suma de pagos (${sumaPagos.toFixed(2)}) no coincide con el total (${total.toFixed(2)})`,
+          `La suma de pagos (${sumaPagos.toFixed(2)}) es menor al total (${total.toFixed(2)})`,
         );
       }
       pagosData = createVentaDto.pagos.map((p) => ({

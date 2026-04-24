@@ -183,6 +183,20 @@ CREATE TABLE "detalle_venta" (
 );
 
 -- =============================================
+-- Configuraciones Sistema
+-- =============================================
+CREATE TABLE "configuraciones_sistema" (
+  "id" SERIAL PRIMARY KEY,
+  "clave" varchar UNIQUE NOT NULL,
+  "valor" jsonb DEFAULT '{}',
+  "created_at" timestamp DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO configuraciones_sistema ("clave", "valor") VALUES
+  ('empresa', '{"nombre": "Distribuidora", "direccion": "", "rfc": "", "telefono": "", "email": ""}');
+
+-- =============================================
 -- DATOS DE PRUEBA
 -- =============================================
 

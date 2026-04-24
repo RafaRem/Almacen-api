@@ -178,13 +178,32 @@ export class VentasService {
     return this.findOne(savedVenta.id);
   }
 
-  async findAll(skip = 0, take = 20): Promise<{ data: Venta[]; total: number }> {
-    const [data, total] = await this.ventasRepository.findAndCount({
-      relations: ['cliente', 'usuario'],
-      order: { createdAt: 'DESC' },
-      skip,
-      take,
-    });
+  async findAll(
+    skip = 0,
+    take = 20,
+    filters?: { fechaFrom?: string; fechaTo?: string; clienteId?: string; statusId?: string },
+  ): Promise<{ data: Venta[]; total: number }> {
+    const query = this.ventasRepository.createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
+      .leftJoinAndSelect('venta.usuario', 'usuario')
+      .orderBy('venta.createdAt', 'DESC')
+      .skip(skip)
+      .take(take);
+
+    if (filters?.fechaFrom) {
+      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', { fechaFrom: filters.fechaFrom });
+    }
+    if (filters?.fechaTo) {
+      query.andWhere('DATE(venta.createdAt) <= :fechaTo', { fechaTo: filters.fechaTo });
+    }
+    if (filters?.clienteId) {
+      query.andWhere('venta.clienteId = :clienteId', { clienteId: filters.clienteId });
+    }
+    if (filters?.statusId) {
+      query.andWhere('venta.statusId = :statusId', { statusId: parseInt(filters.statusId, 10) });
+    }
+
+    const [data, total] = await query.getManyAndCount();
     return { data, total };
   }
 

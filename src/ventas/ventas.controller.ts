@@ -25,10 +25,17 @@ export class VentasController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  findAll(@Query('skip') skip?: string, @Query('take') take?: string) {
+  findAll(
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+    @Query('fechaFrom') fechaFrom?: string,
+    @Query('fechaTo') fechaTo?: string,
+    @Query('clienteId') clienteId?: string,
+    @Query('statusId') statusId?: string,
+  ) {
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
-    return this.ventasService.findAll(skipNum, takeNum);
+    return this.ventasService.findAll(skipNum, takeNum, { fechaFrom, fechaTo, clienteId, statusId });
   }
 
   @Get('preview-descuento')

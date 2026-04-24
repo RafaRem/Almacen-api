@@ -61,8 +61,9 @@ export class DescuentosService {
     cantidad: number,
     laboratorioId: string,
     categoriaClienteId?: string,
+    fechaCaducidad?: Date,
   ): Promise<{ mejorDescuento: number; tipo: string; motivo: string }> {
-    const descuentos: { porcentaje: number; tipo: DescuentoTipo; motivo: string; prioridad: number }[] = [];
+    const descuentos: { porcentaje: number; monto: number | null; tipo: DescuentoTipo; motivo: string; prioridad: number }[] = [];
 
     const todosDescuentos = await this.descuentosRepository.find({
       where: { statusId: 1 },
@@ -70,10 +71,11 @@ export class DescuentosService {
 
     for (const d of todosDescuentos) {
       if (d.tipo === DescuentoTipo.VOLUMEN && d.condiciones) {
-        const { minPiezas, maxPiezas } = d.condiciones;
-        if (cantidad >= minPiezas && (!maxPiezas || cantidad <= maxPiezas)) {
+        const { minCantidad, maxCantidad } = d.condiciones;
+        if (minCantidad && cantidad >= minCantidad && (!maxCantidad || cantidad <= maxCantidad)) {
           descuentos.push({
             porcentaje: Number(d.porcentaje),
+            monto: d.monto ? Number(d.monto) : null,
             tipo: d.tipo,
             motivo: `Descuento por volumen: ${cantidad} piezas`,
             prioridad: d.prioridad,
@@ -82,33 +84,42 @@ export class DescuentosService {
       }
 
       if (d.tipo === DescuentoTipo.LABORATORIO && d.laboratorioId === laboratorioId) {
-        if (!d.fechaInicio || !d.fechaFin) {
+        const dentroRangoFechas = (!d.fechaInicio && !d.fechaFin) ||
+          (d.fechaInicio && d.fechaFin && d.fechaInicio <= new Date() && d.fechaFin >= new Date());
+        if (dentroRangoFechas) {
           descuentos.push({
             porcentaje: Number(d.porcentaje),
+            monto: d.monto ? Number(d.monto) : null,
             tipo: d.tipo,
             motivo: `Promoción de laboratorio`,
             prioridad: d.prioridad,
           });
-        } else {
-          const hoy = new Date();
-          if (d.fechaInicio <= hoy && d.fechaFin >= hoy) {
-            descuentos.push({
-              porcentaje: Number(d.porcentaje),
-              tipo: d.tipo,
-              motivo: `Promoción de laboratorio activa`,
-              prioridad: d.prioridad,
-            });
-          }
         }
       }
 
       if (d.tipo === DescuentoTipo.CATEGORIA && d.categoriaClienteId === categoriaClienteId) {
         descuentos.push({
           porcentaje: Number(d.porcentaje),
+          monto: d.monto ? Number(d.monto) : null,
           tipo: d.tipo,
           motivo: `Descuento por categoría de cliente`,
           prioridad: d.prioridad,
         });
+      }
+
+      if (d.tipo === DescuentoTipo.CADUCIDAD && d.condiciones && fechaCaducidad) {
+        const { diasPrevios } = d.condiciones;
+        const hoy = new Date();
+        const diasHastaCaducidad = Math.floor((fechaCaducidad.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        if (diasPrevios && diasHastaCaducidad <= diasPrevios && diasHastaCaducidad >= 0) {
+          descuentos.push({
+            porcentaje: Number(d.porcentaje),
+            monto: d.monto ? Number(d.monto) : null,
+            tipo: d.tipo,
+            motivo: `Descuento por caducidad próxima: ${diasHastaCaducidad} días`,
+            prioridad: d.prioridad,
+          });
+        }
       }
     }
 
@@ -119,6 +130,9 @@ export class DescuentosService {
     descuentos.sort((a, b) => {
       if (b.porcentaje !== a.porcentaje) {
         return b.porcentaje - a.porcentaje;
+      }
+      if ((b.monto || 0) !== (a.monto || 0)) {
+        return (b.monto || 0) - (a.monto || 0);
       }
       return b.prioridad - a.prioridad;
     });

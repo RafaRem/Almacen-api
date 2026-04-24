@@ -277,11 +277,13 @@ export class VentasService {
       let motivoDescuento = 'Sin descuento';
 
       try {
+        const fechaCaducidad = producto.lote?.fechaCaducidad;
         const calculo = await this.descuentosService.calcularMejorDescuento(
           productoVenta.productoId,
           productoVenta.cantidad,
           producto.laboratorioId,
           clienteId,
+          fechaCaducidad,
         );
         if (calculo?.mejorDescuento) {
           descuentoLinea = (subtotalLinea * calculo.mejorDescuento) / 100;

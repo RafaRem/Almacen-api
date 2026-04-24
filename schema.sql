@@ -124,6 +124,7 @@ CREATE TABLE "descuentos" (
   "tipo" "descuento_tipo" NOT NULL,
   "condiciones" jsonb,
   "porcentaje" decimal(5,2) NOT NULL,
+  "monto" decimal(10,2),
   "laboratorioId" uuid,
   "categoriaClienteId" uuid,
   "fechaInicio" date,
@@ -274,13 +275,13 @@ INSERT INTO clientes ("nombre", "email", "telefono", "direccion", "rfc", "catego
   ('Roberto Sánchez', 'roberto@example.com', '555-567-8901', 'Calle Nogal 654, León', 'RSHZ760330MNO', NULL);
 
 -- Descuentos de prueba
-INSERT INTO descuentos ("tipo", "condiciones", "porcentaje", "categoriaClienteId", "laboratorioId", "statusId", "prioridad") 
-SELECT 'CATEGORIA', '{"minCantidad": 10}', 5.00, id, NULL, 1, 1 FROM categorias_cliente WHERE nombre = 'Categoría 1'
+INSERT INTO descuentos ("tipo", "condiciones", "porcentaje", "monto", "categoriaClienteId", "laboratorioId", "statusId", "prioridad")
+SELECT 'CATEGORIA', '{"minCantidad": 10}', 5.00, NULL, id, NULL, 1, 1 FROM categorias_cliente WHERE nombre = 'Categoría 1'
 UNION ALL
-SELECT 'VOLUMEN', '{"minCantidad": 5}', 3.00, NULL, NULL, 1, 2
+SELECT 'VOLUMEN', '{"minCantidad": 5}', 3.00, NULL, NULL, NULL, 1, 2
 UNION ALL
-SELECT 'LABORATORIO', '{"minCantidad": 1}', 10.00, NULL, (SELECT id FROM laboratorios WHERE nombre = 'Pfizer'), 1, 3
+SELECT 'LABORATORIO', '{"minCantidad": 1}', 10.00, NULL, NULL, (SELECT id FROM laboratorios WHERE nombre = 'Pfizer'), 1, 3
 UNION ALL
-SELECT 'CADUCIDAD', '{"diasPrevios": 30}', 15.00, NULL, NULL, 1, 0
+SELECT 'CADUCIDAD', '{"diasPrevios": 30}', 15.00, NULL, NULL, NULL, 1, 0
 UNION ALL
-SELECT 'CATEGORIA', '{"minCantidad": 1}', 8.00, (SELECT id FROM categorias_cliente WHERE nombre = 'Categoría 3'), NULL, 1, 1;
+SELECT 'CATEGORIA', '{"minCantidad": 1}', 8.00, NULL, (SELECT id FROM categorias_cliente WHERE nombre = 'Categoría 3'), NULL, 1, 1;

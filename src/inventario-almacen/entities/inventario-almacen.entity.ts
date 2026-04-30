@@ -42,6 +42,9 @@ export class InventarioAlmacen {
   @Column({ name: 'iva_personalizado', type: 'decimal', precision: 5, scale: 2, nullable: true })
   ivaPersonalizado: number | null;
 
+  @Column({ name: 'iva_cfdi', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  ivaCfdi: number | null;
+
   @Column({ name: 'ultimo_movimiento_id', nullable: true })
   ultimoMovimientoId: string;
 

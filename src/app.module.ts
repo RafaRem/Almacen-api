@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { getDatabaseConfig } from './config/database.config';
@@ -26,11 +28,17 @@ import { CfdiModule } from './cfdi/cfdi.module';
 import { InventarioAlmacenModule } from './inventario-almacen/inventario-almacen.module';
 import { ConfiguracionesModule } from './configuraciones/configuraciones.module';
 import { ConfiguracionModule } from './configuracion/configuracion.module';
+import { EmpresaModule } from './empresa/empresa.module';
+import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -59,6 +67,8 @@ import { ConfiguracionModule } from './configuracion/configuracion.module';
     CfdiModule,
     InventarioAlmacenModule,
     ConfiguracionesModule,
+    EmpresaModule,
+    TicketUploadsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

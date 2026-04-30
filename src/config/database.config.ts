@@ -21,6 +21,8 @@ import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-alm
 import { Configuracion } from '../configuraciones/entities/configuracion.entity';
 import { ConfiguracionSistema } from '../configuracion/entities/configuracion-sistema.entity';
 import { MovimientoRevertido } from '../movimientos-almacen/entities/movimiento-revertido.entity';
+import { UserPermission } from '../users/entities/user-permission.entity';
+import { DatosEmpresa } from '../empresa/entities/datos-empresa.entity';
 
 export const getDatabaseConfig = (
   configService: ConfigService,
@@ -33,6 +35,7 @@ export const getDatabaseConfig = (
   database: configService.get<string>('DATABASE_NAME'),
   entities: [
     User,
+    UserPermission,
     Laboratorio,
     Lote,
     Producto,
@@ -53,6 +56,7 @@ export const getDatabaseConfig = (
     Configuracion,
     ConfiguracionSistema,
     MovimientoRevertido,
+    DatosEmpresa,
   ],
   synchronize: false,
 });

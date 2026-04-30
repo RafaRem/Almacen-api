@@ -83,6 +83,7 @@ export class InventarioAlmacenService {
           lote: inv.lote,
           loteId: inv.loteId,
           ivaPersonalizado: inv.ivaPersonalizado,
+          ivaCfdi: inv.ivaCfdi,
           lotes: [{
             loteId: inv.loteId,
             numeroLote: inv.lote?.numeroLote,
@@ -114,6 +115,7 @@ export class InventarioAlmacenService {
     loteId: string,
     almacenTipo: AlmacenTipo,
     cantidad: number,
+    ivaCfdi?: number | null,
   ): Promise<InventarioAlmacen> {
     let inventario = await this.inventarioRepository.findOne({
       where: { productoId, loteId, almacenTipo },
@@ -121,12 +123,16 @@ export class InventarioAlmacenService {
 
     if (inventario) {
       inventario.cantidadActual = Number(inventario.cantidadActual) + cantidad;
+      if (ivaCfdi !== undefined && ivaCfdi !== null) {
+        inventario.ivaCfdi = ivaCfdi;
+      }
     } else {
       inventario = this.inventarioRepository.create({
         productoId,
         loteId,
         almacenTipo,
         cantidadActual: cantidad,
+        ivaCfdi: ivaCfdi ?? null,
       });
     }
 

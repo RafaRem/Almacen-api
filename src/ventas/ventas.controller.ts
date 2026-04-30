@@ -32,10 +32,11 @@ export class VentasController {
     @Query('fechaTo') fechaTo?: string,
     @Query('clienteId') clienteId?: string,
     @Query('statusId') statusId?: string,
+    @Query('usuarioId') usuarioId?: string,
   ) {
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
-    return this.ventasService.findAll(skipNum, takeNum, { fechaFrom, fechaTo, clienteId, statusId });
+    return this.ventasService.findAll(skipNum, takeNum, { fechaFrom, fechaTo, clienteId, statusId, usuarioId });
   }
 
   @Get('preview-descuento')

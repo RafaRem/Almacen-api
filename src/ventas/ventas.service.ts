@@ -36,6 +36,14 @@ export class VentasService {
     private movimientosAlmacenService: MovimientosAlmacenService,
   ) {}
 
+  private async getNextFolio(): Promise<number> {
+    const result = await this.ventasRepository
+      .createQueryBuilder('venta')
+      .select('MAX(venta.folio)', 'maxFolio')
+      .getRawOne();
+    return (result?.maxFolio || 0) + 1;
+  }
+
   async create(createVentaDto: CreateVentaDto, usuarioId: string): Promise<Venta> {
     if (!createVentaDto.productos || createVentaDto.productos.length === 0) {
       throw new BadRequestException('La venta debe tener al menos un producto');
@@ -94,8 +102,13 @@ export class VentasService {
           producto.laboratorioId,
           createVentaDto.clienteId,
         );
-        if (calculo?.mejorDescuento) {
-          descuentoLinea = (precioUnitario * productoVenta.cantidad * calculo.mejorDescuento) / 100;
+        if (calculo?.mejorDescuento && calculo.mejorDescuento.tipo !== 'NINGUNO') {
+          const mejor = calculo.mejorDescuento;
+          if (mejor.monto && mejor.monto > 0) {
+            descuentoLinea = mejor.monto;
+          } else {
+            descuentoLinea = (precioUnitario * productoVenta.cantidad * mejor.porcentaje) / 100;
+          }
         }
       } catch {
       }
@@ -119,6 +132,16 @@ export class VentasService {
 
     const iva = (subtotal - descuentoTotal) * this.IVA_RATE;
     const total = subtotal - descuentoTotal + iva;
+
+    if (createVentaDto.descuentoPreview) {
+      const diffDescuento = Math.abs(descuentoTotal - createVentaDto.descuentoPreview.descuentoAplicado);
+      const diffTotal = Math.abs(total - createVentaDto.descuentoPreview.total);
+      if (diffDescuento > 0.10 || diffTotal > 0.10) {
+        throw new BadRequestException(
+          `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${createVentaDto.descuentoPreview.descuentoAplicado.toFixed(2)}, total=${createVentaDto.descuentoPreview.total.toFixed(2)}. Posible manipulacion.`,
+        );
+      }
+    }
 
     let pagosData: { formaPago: FormaPago; monto: number; referencia?: string }[] = [];
 
@@ -147,7 +170,10 @@ export class VentasService {
       ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
       : MetodoPago.EFECTIVO;
 
+    const nextFolio = await this.getNextFolio();
+
     const venta = this.ventasRepository.create({
+      folio: nextFolio,
       clienteId: createVentaDto.clienteId,
       usuarioId,
       subtotal,
@@ -181,7 +207,7 @@ export class VentasService {
   async findAll(
     skip = 0,
     take = 20,
-    filters?: { fechaFrom?: string; fechaTo?: string; clienteId?: string; statusId?: string },
+    filters?: { fechaFrom?: string; fechaTo?: string; clienteId?: string; statusId?: string; usuarioId?: string },
   ): Promise<{ data: Venta[]; total: number }> {
     const query = this.ventasRepository.createQueryBuilder('venta')
       .leftJoinAndSelect('venta.cliente', 'cliente')
@@ -201,6 +227,9 @@ export class VentasService {
     }
     if (filters?.statusId) {
       query.andWhere('venta.statusId = :statusId', { statusId: parseInt(filters.statusId, 10) });
+    }
+    if (filters?.usuarioId) {
+      query.andWhere('venta.usuarioId = :usuarioId', { usuarioId: filters.usuarioId });
     }
 
     const [data, total] = await query.getManyAndCount();
@@ -243,10 +272,28 @@ export class VentasService {
   async previewDescuento(
     productos: { productoId: string; cantidad: number }[],
     clienteId?: string,
-  ): Promise<{ subtotal: number; descuentoAplicado: number; iva: number; total: number; descuentoPorProducto: { productoId: string; descuento: number; motivo: string }[] }> {
+  ): Promise<{
+    subtotal: number;
+    descuentoAplicado: number;
+    iva: number;
+    total: number;
+    descuentoPorProducto: {
+      productoId: string;
+      descuento: number;
+      motivo: string;
+      mejorDescuento: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string };
+      preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[];
+    }[];
+  }> {
     let subtotal = 0;
     let descuentoTotal = 0;
-    const descuentoPorProducto: { productoId: string; descuento: number; motivo: string }[] = [];
+    const descuentoPorProducto: {
+      productoId: string;
+      descuento: number;
+      motivo: string;
+      mejorDescuento: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string };
+      preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[];
+    }[] = [];
 
     for (const productoVenta of productos) {
       let producto;
@@ -258,6 +305,8 @@ export class VentasService {
             productoId: productoVenta.productoId,
             descuento: 0,
             motivo: 'Producto no encontrado',
+            mejorDescuento: { tipo: 'NINGUNO', porcentaje: 0, monto: null, precioConDescuento: 0, motivo: 'No encontrado' },
+            preciosAlternativos: [],
           });
           continue;
         }
@@ -266,6 +315,8 @@ export class VentasService {
           productoId: productoVenta.productoId,
           descuento: 0,
           motivo: 'Producto no encontrado',
+          mejorDescuento: { tipo: 'NINGUNO', porcentaje: 0, monto: null, precioConDescuento: 0, motivo: 'No encontrado' },
+          preciosAlternativos: [],
         });
         continue;
       }
@@ -274,7 +325,8 @@ export class VentasService {
       const subtotalLinea = precioUnitario * productoVenta.cantidad;
 
       let descuentoLinea = 0;
-      let motivoDescuento = 'Sin descuento';
+      let mejorDescuentoInfo: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string } = { tipo: 'NINGUNO', porcentaje: 0, monto: null, precioConDescuento: subtotalLinea, motivo: 'Sin descuento' };
+      let preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[] = [];
 
       try {
         const fechaCaducidad = producto.lote?.fechaCaducidad;
@@ -284,10 +336,24 @@ export class VentasService {
           producto.laboratorioId,
           clienteId,
           fechaCaducidad,
+          subtotalLinea,
         );
-        if (calculo?.mejorDescuento) {
-          descuentoLinea = (subtotalLinea * calculo.mejorDescuento) / 100;
-          motivoDescuento = calculo.motivo;
+
+        if (calculo?.mejorDescuento && calculo.mejorDescuento.tipo !== 'NINGUNO') {
+          const mejor = calculo.mejorDescuento;
+          if (mejor.monto && mejor.monto > 0) {
+            descuentoLinea = mejor.monto;
+          } else {
+            descuentoLinea = (subtotalLinea * mejor.porcentaje) / 100;
+          }
+          mejorDescuentoInfo = {
+            tipo: mejor.tipo,
+            porcentaje: mejor.porcentaje,
+            monto: mejor.monto,
+            precioConDescuento: mejor.precioConDescuento,
+            motivo: mejor.motivo,
+          };
+          preciosAlternativos = calculo.preciosAlternativos;
         }
       } catch {
       }
@@ -298,7 +364,9 @@ export class VentasService {
       descuentoPorProducto.push({
         productoId: productoVenta.productoId,
         descuento: descuentoLinea,
-        motivo: motivoDescuento,
+        motivo: mejorDescuentoInfo.motivo,
+        mejorDescuento: mejorDescuentoInfo,
+        preciosAlternativos,
       });
     }
 

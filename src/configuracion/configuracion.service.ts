@@ -22,6 +22,16 @@ export class ConfiguracionService {
         valor: { minStock: 0, maxStock: 999999 },
         descripcion: 'Parámetros globales de control de stock',
       },
+      {
+        clave: 'descuentos',
+        valor: { permiteCAE: false },
+        descripcion: 'Configuración de descuentos. permiteCAE: muestra campo de Código de Autorización de Descuento',
+      },
+      {
+        clave: 'ticket',
+        valor: { mensaje: '¡Gracias por su preferencia!' },
+        descripcion: 'Configuración de impresión de tickets. mensaje: texto mostrado al final del ticket',
+      },
     ];
 
     for (const config of configuraciones) {

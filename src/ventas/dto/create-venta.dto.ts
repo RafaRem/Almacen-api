@@ -50,6 +50,12 @@ export class CreateVentaDto {
   @ValidateNested({ each: true })
   @Type(() => ProductoVentaDto)
   productos: ProductoVentaDto[];
+
+  @IsOptional()
+  descuentoPreview?: {
+    descuentoAplicado: number;
+    total: number;
+  };
 }
 
 export class UpdateVentaDto {

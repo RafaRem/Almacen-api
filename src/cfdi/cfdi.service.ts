@@ -96,6 +96,9 @@ export class CfdiService {
       const claveProdServ = this.getXmlValue(conceptoXml, /ClaveProdServ="([^"]+)"/) || '';
       const claveUnidad = this.getXmlValue(conceptoXml, /ClaveUnidad="([^"]+)"/) || '';
 
+      const tasaMatch = conceptoXml.match(/TasaOCuota="([^"]+)"/);
+      const ivaCfdi = tasaMatch ? parseFloat(tasaMatch[1]) * 100 : null;
+
       return {
         cantidad,
         noIdentificacion,
@@ -103,6 +106,7 @@ export class CfdiService {
         valorUnitario,
         claveProdServ,
         claveUnidad,
+        ivaCfdi,
       };
     });
 
@@ -179,7 +183,7 @@ export class CfdiService {
         });
       }
 
-      await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad);
+      await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad, concepto?.ivaCfdi);
     }
 
     return { productosCreados, productosExistentes };

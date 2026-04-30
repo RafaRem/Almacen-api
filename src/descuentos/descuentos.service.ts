@@ -62,7 +62,11 @@ export class DescuentosService {
     laboratorioId: string,
     categoriaClienteId?: string,
     fechaCaducidad?: Date,
-  ): Promise<{ mejorDescuento: number; tipo: string; motivo: string }> {
+    subtotalLinea?: number,
+  ): Promise<{
+    mejorDescuento: { tipo: string; porcentaje: number; monto: number | null; motivo: string; precioConDescuento: number };
+    preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[];
+  }> {
     const descuentos: { porcentaje: number; monto: number | null; tipo: DescuentoTipo; motivo: string; prioridad: number }[] = [];
 
     const todosDescuentos = await this.descuentosRepository.find({
@@ -124,7 +128,10 @@ export class DescuentosService {
     }
 
     if (descuentos.length === 0) {
-      return { mejorDescuento: 0, tipo: 'NINGUNO', motivo: 'No hay descuentos aplicables' };
+      return {
+        mejorDescuento: { tipo: 'NINGUNO', porcentaje: 0, monto: null, motivo: 'No hay descuentos aplicables', precioConDescuento: 0 },
+        preciosAlternativos: [],
+      };
     }
 
     descuentos.sort((a, b) => {
@@ -137,11 +144,31 @@ export class DescuentosService {
       return b.prioridad - a.prioridad;
     });
 
+    const calcularPrecioConDescuento = (porcentaje: number, monto: number | null, subtotal: number) => {
+      if (monto && monto > 0) {
+        return Math.max(0, subtotal - monto);
+      }
+      return Math.max(0, subtotal - (subtotal * porcentaje / 100));
+    };
+
     const mejor = descuentos[0];
+    const alternativas = descuentos.slice(1, 5).map(d => ({
+      tipo: d.tipo,
+      porcentaje: d.porcentaje,
+      monto: d.monto,
+      precioConDescuento: subtotalLinea ? calcularPrecioConDescuento(d.porcentaje, d.monto, subtotalLinea) : 0,
+      motivo: d.motivo,
+    }));
+
     return {
-      mejorDescuento: mejor.porcentaje,
-      tipo: mejor.tipo,
-      motivo: mejor.motivo,
+      mejorDescuento: {
+        tipo: mejor.tipo,
+        porcentaje: mejor.porcentaje,
+        monto: mejor.monto,
+        motivo: mejor.motivo,
+        precioConDescuento: subtotalLinea ? calcularPrecioConDescuento(mejor.porcentaje, mejor.monto, subtotalLinea) : 0,
+      },
+      preciosAlternativos: alternativas,
     };
   }
 }

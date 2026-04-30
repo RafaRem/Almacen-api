@@ -19,6 +19,9 @@ export class Venta {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ name: 'folio', unique: true })
+  folio: number;
+
   @Column({ type: 'uuid', name: 'clienteid', nullable: true })
   clienteId: string;
 

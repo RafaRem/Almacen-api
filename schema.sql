@@ -26,6 +26,17 @@ CREATE TABLE "users" (
 );
 
 -- =============================================
+-- User Permissions
+-- =============================================
+CREATE TABLE "user_permissions" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+  "module" varchar(50) NOT NULL,
+  "can_view" boolean DEFAULT true,
+  UNIQUE("user_id", "module")
+);
+
+-- =============================================
 -- Laboratorios
 -- =============================================
 CREATE TABLE "laboratorios" (
@@ -156,6 +167,7 @@ CREATE TABLE "documentos_cliente" (
 -- =============================================
 CREATE TABLE "ventas" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "folio" serial UNIQUE,
   "clienteid" uuid REFERENCES "clientes"("id"),
   "usuarioid" uuid NOT NULL REFERENCES "users"("id"),
   "subtotal" decimal(10,2) DEFAULT 0,

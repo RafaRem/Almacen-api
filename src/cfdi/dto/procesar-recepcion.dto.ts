@@ -21,6 +21,10 @@ export class ConceptoDto {
   @IsString()
   @IsOptional()
   claveUnidad?: string;
+
+  @IsNumber()
+  @IsOptional()
+  ivaCfdi?: number | null;
 }
 
 export class EmisorDto {

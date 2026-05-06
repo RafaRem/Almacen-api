@@ -69,6 +69,12 @@ export class InventarioAlmacenController {
     return this.inventarioService.findByProducto(productoId);
   }
 
+  @Get('lote/:loteId')
+  @UseGuards(JwtAuthGuard)
+  findByLote(@Param('loteId') loteId: string) {
+    return this.inventarioService.findByLote(loteId);
+  }
+
   @Get('producto/:productoId/stock')
   @UseGuards(JwtAuthGuard)
   getStockProducto(

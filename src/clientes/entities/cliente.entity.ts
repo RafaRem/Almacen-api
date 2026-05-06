@@ -34,12 +34,6 @@ export class Cliente {
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  telefono: string;
-
-  @Column({ type: 'text', nullable: true })
-  direccion: string;
-
   @Column({ type: 'varchar', length: 20, unique: true, nullable: true })
   rfc: string;
 
@@ -64,6 +58,9 @@ export class Cliente {
 
   @Column({ type: 'varchar', length: 10, nullable: true, name: 'tipo_persona' })
   tipoPersona: TipoPersona;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  empresa: string;
 
   @CreateDateColumn({ name: 'createdat' })
   createdAt: Date;

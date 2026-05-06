@@ -10,6 +10,8 @@ import { LotesModule } from '../lotes/lotes.module';
 import { DescuentosModule } from '../descuentos/descuentos.module';
 import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almacen.module';
 import { MovimientosAlmacenModule } from '../movimientos-almacen/movimientos-almacen.module';
+import { ConfiguracionesModule } from '../configuraciones/configuraciones.module';
+import { ClientesModule } from '../clientes/clientes.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { MovimientosAlmacenModule } from '../movimientos-almacen/movimientos-alm
     DescuentosModule,
     InventarioAlmacenModule,
     MovimientosAlmacenModule,
+    ConfiguracionesModule,
+    ClientesModule,
   ],
   controllers: [VentasController],
   providers: [VentasService],

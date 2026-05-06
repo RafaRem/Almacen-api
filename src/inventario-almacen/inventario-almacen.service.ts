@@ -55,6 +55,14 @@ export class InventarioAlmacenService {
     });
   }
 
+  async findByLote(loteId: string): Promise<InventarioAlmacen[]> {
+    return this.inventarioRepository.find({
+      where: { loteId },
+      relations: ['producto'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async getStockPorAlmacen(almacenTipo: AlmacenTipo): Promise<any[]> {
     const inventarios = await this.inventarioRepository.find({
       where: { almacenTipo },
@@ -71,7 +79,7 @@ export class InventarioAlmacenService {
         agrupado.get(key).lotes.push({
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote,
-          precio: inv.lote?.precio,
+          precio: inv.producto?.precio,
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
         });
@@ -87,7 +95,7 @@ export class InventarioAlmacenService {
           lotes: [{
             loteId: inv.loteId,
             numeroLote: inv.lote?.numeroLote,
-            precio: inv.lote?.precio,
+            precio: inv.producto?.precio,
             fechaCaducidad: inv.lote?.fechaCaducidad,
             cantidad: Number(inv.cantidadActual),
           }],
@@ -187,7 +195,7 @@ export class InventarioAlmacenService {
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote || 'N/A',
           cantidad: aTransferir,
-          precio: Number(inv.lote?.precio) || 0,
+          precio: Number(inv.producto?.precio) || 0,
         });
 
         restante -= aTransferir;
@@ -508,7 +516,7 @@ export class InventarioAlmacenService {
 
     const capas = inventarios.map(inv => {
       const cantidad = Number(inv.cantidadActual);
-      const precio = Number(inv.lote?.precio) || 0;
+      const precio = Number(inv.producto?.precio) || 0;
       totalStock += cantidad;
       costoTotal += cantidad * precio;
 

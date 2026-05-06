@@ -17,11 +17,11 @@ import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-al
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { FormaPago } from '../common/enums/forma-pago.enum';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
+import { ClientesService } from '../clientes/clientes.service';
 
 @Injectable()
 export class VentasService {
-  private readonly IVA_RATE = 0.16;
-
   constructor(
     @InjectRepository(Venta)
     private ventasRepository: Repository<Venta>,
@@ -34,7 +34,13 @@ export class VentasService {
     private descuentosService: DescuentosService,
     private inventarioAlmacenService: InventarioAlmacenService,
     private movimientosAlmacenService: MovimientosAlmacenService,
+    private configuracionesService: ConfiguracionesService,
+    private clientesService: ClientesService,
   ) {}
+
+  private async getIvaRate(): Promise<number> {
+    return (await this.configuracionesService.getIvaGlobal()) / 100;
+  }
 
   private async getNextFolio(): Promise<number> {
     const result = await this.ventasRepository
@@ -53,6 +59,14 @@ export class VentasService {
     let descuentoTotal = 0;
     const detalles: Partial<DetalleVenta>[] = [];
     const movimientosLotes: { productoId: string; loteId: string; numeroLote: string; cantidad: number }[] = [];
+
+    let categoriaClienteId: string | undefined;
+    if (createVentaDto.clienteId) {
+      try {
+        const cliente = await this.clientesService.findOne(createVentaDto.clienteId);
+        categoriaClienteId = cliente?.categoriaClienteId;
+      } catch {}
+    }
 
     for (const productoVenta of createVentaDto.productos) {
       const producto = await this.productosService.findOne(productoVenta.productoId);
@@ -100,7 +114,7 @@ export class VentasService {
           productoVenta.productoId,
           productoVenta.cantidad,
           producto.laboratorioId,
-          createVentaDto.clienteId,
+          categoriaClienteId,
         );
         if (calculo?.mejorDescuento && calculo.mejorDescuento.tipo !== 'NINGUNO') {
           const mejor = calculo.mejorDescuento;
@@ -130,7 +144,8 @@ export class VentasService {
       });
     }
 
-    const iva = (subtotal - descuentoTotal) * this.IVA_RATE;
+    const ivaRate = await this.getIvaRate();
+    const iva = (subtotal - descuentoTotal) * ivaRate;
     const total = subtotal - descuentoTotal + iva;
 
     if (createVentaDto.descuentoPreview) {
@@ -295,6 +310,14 @@ export class VentasService {
       preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[];
     }[] = [];
 
+    let categoriaClienteId: string | undefined;
+    if (clienteId) {
+      try {
+        const cliente = await this.clientesService.findOne(clienteId);
+        categoriaClienteId = cliente?.categoriaClienteId;
+      } catch {}
+    }
+
     for (const productoVenta of productos) {
       let producto;
 
@@ -334,7 +357,7 @@ export class VentasService {
           productoVenta.productoId,
           productoVenta.cantidad,
           producto.laboratorioId,
-          clienteId,
+          categoriaClienteId,
           fechaCaducidad,
           subtotalLinea,
         );
@@ -370,7 +393,8 @@ export class VentasService {
       });
     }
 
-    const iva = (subtotal - descuentoTotal) * this.IVA_RATE;
+    const ivaRate = await this.getIvaRate();
+    const iva = (subtotal - descuentoTotal) * ivaRate;
     const total = subtotal - descuentoTotal + iva;
 
     return {

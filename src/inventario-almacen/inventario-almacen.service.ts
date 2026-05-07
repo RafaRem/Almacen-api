@@ -3,7 +3,20 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { Lote } from '../lotes/entities/lote.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { SYSTEM_USER_ID, TipoMovimiento, OrigenOperacion } from '../common/constants';
+
+export interface MovimientoMetadata {
+  sucursalId?: string;
+  turno?: string;
+  caja?: string;
+  terminalId?: string;
+  sessionId?: string;
+  origenOperacion?: OrigenOperacion;
+  referenciaExterna?: string;
+}
 
 @Injectable()
 export class InventarioAlmacenService {
@@ -12,6 +25,10 @@ export class InventarioAlmacenService {
     private inventarioRepository: Repository<InventarioAlmacen>,
     @InjectRepository(Producto)
     private productoRepository: Repository<Producto>,
+    @InjectRepository(Lote)
+    private loteRepository: Repository<Lote>,
+    @InjectRepository(MovimientoAlmacen)
+    private movimientoRepository: Repository<MovimientoAlmacen>,
     private dataSource: DataSource,
   ) {}
 
@@ -38,10 +55,19 @@ export class InventarioAlmacenService {
     });
   }
 
+  async findByLote(loteId: string): Promise<InventarioAlmacen[]> {
+    return this.inventarioRepository.find({
+      where: { loteId },
+      relations: ['producto'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async getStockPorAlmacen(almacenTipo: AlmacenTipo): Promise<any[]> {
     const inventarios = await this.inventarioRepository.find({
       where: { almacenTipo },
       relations: ['producto', 'lote'],
+      order: { lote: { fechaCaducidad: 'ASC' } },
     });
 
     const agrupado = new Map<string, any>();
@@ -53,7 +79,7 @@ export class InventarioAlmacenService {
         agrupado.get(key).lotes.push({
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote,
-          precio: inv.lote?.precio,
+          precio: inv.producto?.precio,
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
         });
@@ -65,10 +91,11 @@ export class InventarioAlmacenService {
           lote: inv.lote,
           loteId: inv.loteId,
           ivaPersonalizado: inv.ivaPersonalizado,
+          ivaCfdi: inv.ivaCfdi,
           lotes: [{
             loteId: inv.loteId,
             numeroLote: inv.lote?.numeroLote,
-            precio: inv.lote?.precio,
+            precio: inv.producto?.precio,
             fechaCaducidad: inv.lote?.fechaCaducidad,
             cantidad: Number(inv.cantidadActual),
           }],
@@ -76,7 +103,19 @@ export class InventarioAlmacenService {
       }
     }
 
-    return Array.from(agrupado.values());
+    const resultado = Array.from(agrupado.values());
+    
+    for (const item of resultado) {
+      if (item.lotes && item.lotes.length > 0) {
+        item.lotes.sort((a, b) => {
+          const dateA = new Date(a.fechaCaducidad || '9999-12-31');
+          const dateB = new Date(b.fechaCaducidad || '9999-12-31');
+          return dateA.getTime() - dateB.getTime();
+        });
+      }
+    }
+    
+    return resultado;
   }
 
   async agregarStock(
@@ -84,6 +123,7 @@ export class InventarioAlmacenService {
     loteId: string,
     almacenTipo: AlmacenTipo,
     cantidad: number,
+    ivaCfdi?: number | null,
   ): Promise<InventarioAlmacen> {
     let inventario = await this.inventarioRepository.findOne({
       where: { productoId, loteId, almacenTipo },
@@ -91,12 +131,16 @@ export class InventarioAlmacenService {
 
     if (inventario) {
       inventario.cantidadActual = Number(inventario.cantidadActual) + cantidad;
+      if (ivaCfdi !== undefined && ivaCfdi !== null) {
+        inventario.ivaCfdi = ivaCfdi;
+      }
     } else {
       inventario = this.inventarioRepository.create({
         productoId,
         loteId,
         almacenTipo,
         cantidadActual: cantidad,
+        ivaCfdi: ivaCfdi ?? null,
       });
     }
 
@@ -107,64 +151,110 @@ export class InventarioAlmacenService {
     productoId: string,
     cantidad: number,
     almacenTipoOrigen: AlmacenTipo,
-    almacenTipoDestino?: AlmacenTipo | null,
+    userId: string = SYSTEM_USER_ID,
+    metadata?: MovimientoMetadata,
   ): Promise<{ 
-    успешно: boolean; 
-    mensaje: string;
-    lotesUtilizados: { loteId: string; numeroLote: string; cantidad: number; precio: number }[];
+    success: boolean; 
+    message: string;
+    lotsUsed: { loteId: string; numeroLote: string; cantidad: number; precio: number }[];
+    movimientoId?: string;
   }> {
-    const inventarios = await this.inventarioRepository.find({
-      where: { productoId, almacenTipo: almacenTipoOrigen },
-      relations: ['lote'],
-      order: { lote: { fechaCaducidad: 'ASC' } },
-    });
-
-    let totalDisponible = 0;
-    for (const inv of inventarios) {
-      totalDisponible += Number(inv.cantidadActual);
-    }
-
-    if (totalDisponible < cantidad) {
-      return {
-        успешно: false,
-        mensaje: `Stock insuficiente. Disponible: ${totalDisponible}, Solicitado: ${cantidad}`,
-        lotesUtilizados: [],
-      };
-    }
-
-    const lotesUtilizados: { loteId: string; numeroLote: string; cantidad: number; precio: number }[] = [];
-    let restante = cantidad;
-
-    for (const inv of inventarios) {
-      if (restante <= 0) break;
-
-      const disponible = Number(inv.cantidadActual);
-      const aTransferir = Math.min(disponible, restante);
-
-      inv.cantidadActual -= aTransferir;
-      await this.inventarioRepository.save(inv);
-
-      if (almacenTipoDestino) {
-        await this.agregarStock(productoId, inv.loteId, almacenTipoDestino, aTransferir);
-      }
-
-      lotesUtilizados.push({
-        loteId: inv.loteId,
-        numeroLote: inv.lote?.numeroLote || 'N/A',
-        cantidad: aTransferir,
-        precio: Number(inv.lote?.precio) || 0,
+    return this.dataSource.transaction(async (manager) => {
+      const inventarios = await manager.find(InventarioAlmacen, {
+        where: { productoId, almacenTipo: almacenTipoOrigen },
+        relations: ['lote'],
+        order: { lote: { fechaCaducidad: 'ASC' } },
       });
 
-      restante -= aTransferir;
+      let totalDisponible = 0;
+      for (const inv of inventarios) {
+        totalDisponible += Number(inv.cantidadActual);
+      }
+
+      if (totalDisponible < cantidad) {
+        return {
+          success: false,
+          message: `Stock insuficiente. Disponible: ${totalDisponible}, Solicitado: ${cantidad}`,
+          lotsUsed: [],
+        };
+      }
+
+      const lotsUsed: { loteId: string; numeroLote: string; cantidad: number; precio: number }[] = [];
+      let restante = cantidad;
+
+      for (const inv of inventarios) {
+        if (restante <= 0) break;
+
+        const disponible = Number(inv.cantidadActual);
+        const aTransferir = Math.min(disponible, restante);
+
+        inv.cantidadActual -= aTransferir;
+        await manager.save(inv);
+
+        lotsUsed.push({
+          loteId: inv.loteId,
+          numeroLote: inv.lote?.numeroLote || 'N/A',
+          cantidad: aTransferir,
+          precio: Number(inv.producto?.precio) || 0,
+        });
+
+        restante -= aTransferir;
+      }
+
+      const movimiento = manager.create(MovimientoAlmacen, {
+        productoId,
+        loteId: inventarios[0]?.loteId,
+        almacenOrigen: almacenTipoOrigen,
+        almacenDestino: AlmacenTipo.CLIENTE,
+        cantidad,
+        userId,
+        observaciones: metadata?.referenciaExterna || 'Venta',
+        tipoMovimiento: TipoMovimiento.VENTA,
+        origenOperacion: metadata?.origenOperacion || OrigenOperacion.POS,
+      });
+      
+      const savedMovimiento = await manager.save(movimiento);
+
+      return {
+        success: true,
+        message: `Vendido ${cantidad} unidades usando FEPU`,
+        lotsUsed,
+        movimientoId: savedMovimiento.id,
+      };
+    });
+  }
+
+  private determinarTipoMovimiento(
+    almacenOrigen: AlmacenTipo,
+    almacenDestino: AlmacenTipo | null,
+  ): TipoMovimiento {
+    if (almacenDestino === null) {
+      return TipoMovimiento.VENTA;
     }
-
-    const operacion = almacenTipoDestino ? `Transferido ${cantidad}` : `Vendido ${cantidad}`;
-
-    return {
-      успешно: true,
-      mensaje: `${operacion} unidades usando FEPU`,
-      lotesUtilizados,
-    };
+    
+    if (almacenOrigen === AlmacenTipo.RECEPCION && almacenDestino === AlmacenTipo.VENTAS) {
+      return TipoMovimiento.TRANSFERENCIA_BODEGA_VENTAS;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.RECEPCION) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_BODEGA;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.MERMAS) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_MERMAS;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.CADUCADOS) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_CADUCADOS;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.DONADOS) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_DONACION;
+    }
+    if (almacenOrigen === AlmacenTipo.VENTAS && almacenDestino === AlmacenTipo.DESTRUCCION) {
+      return TipoMovimiento.TRANSFERENCIA_VENTAS_DESTRUCCION;
+    }
+    if (almacenOrigen === AlmacenTipo.RECEPCION && almacenDestino === AlmacenTipo.MERMAS) {
+      return TipoMovimiento.TRANSFERENCIA_BODEGA_MERMAS;
+    }
+    
+    return TipoMovimiento.TRANSFERENCIA_OTRO;
   }
 
   async moverStock(
@@ -173,6 +263,9 @@ export class InventarioAlmacenService {
     cantidad: number,
     almacenTipoOrigen: AlmacenTipo,
     almacenTipoDestino: AlmacenTipo,
+    userId: string = SYSTEM_USER_ID,
+    observaciones?: string,
+    metadata?: MovimientoMetadata,
   ): Promise<InventarioAlmacen> {
     return this.dataSource.transaction(async (manager) => {
       const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
@@ -207,7 +300,38 @@ export class InventarioAlmacenService {
         });
       }
       
-      return manager.save(inventarioDestino);
+      const savedDestino = await manager.save(inventarioDestino);
+
+      const tipoMovimiento = this.determinarTipoMovimiento(almacenTipoOrigen, almacenTipoDestino);
+      
+      const movimiento = manager.create(MovimientoAlmacen, {
+        productoId,
+        loteId,
+        almacenOrigen: almacenTipoOrigen,
+        almacenDestino: almacenTipoDestino,
+        cantidad,
+        userId,
+        observaciones,
+        tipoMovimiento,
+        origenOperacion: metadata?.origenOperacion || OrigenOperacion.ADMIN,
+      });
+      
+      const savedMovimiento = await manager.save(movimiento);
+
+      inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
+      await manager.save(inventarioOrigen);
+      
+      if (savedDestino.id) {
+        const destinoActualizado = await manager.findOne(InventarioAlmacen, {
+          where: { id: savedDestino.id },
+        });
+        if (destinoActualizado) {
+          destinoActualizado.ultimoMovimientoId = savedMovimiento.id;
+          await manager.save(destinoActualizado);
+        }
+      }
+
+      return savedDestino;
     });
   }
 
@@ -215,30 +339,112 @@ export class InventarioAlmacenService {
     items: { productoId: string; loteId: string; cantidad: number }[],
     almacenTipoOrigen: AlmacenTipo,
     almacenTipoDestino: AlmacenTipo,
-  ): Promise<{ success: boolean; moved: number; errors: string[] }> {
-    const errors: string[] = [];
-    let moved = 0;
+    userId: string = SYSTEM_USER_ID,
+    metadata?: MovimientoMetadata,
+  ): Promise<{ 
+    success: boolean; 
+    moved: number; 
+    errors: string[];
+    failedItems: { productoId: string; loteId: string; cantidad: number; error: string }[];
+  }> {
+    return this.dataSource.transaction(async (manager) => {
+      const errors: string[] = [];
+      const failedItems: { productoId: string; loteId: string; cantidad: number; error: string }[] = [];
+      let moved = 0;
 
-    for (const item of items) {
-      try {
-        await this.moverStock(
-          item.productoId,
-          item.loteId,
-          item.cantidad,
-          almacenTipoOrigen,
-          almacenTipoDestino,
-        );
-        moved++;
-      } catch (error) {
-        errors.push(`Producto ${item.productoId} (Lote ${item.loteId}): ${error.message}`);
+      for (const item of items) {
+        try {
+          const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
+            where: { 
+              productoId: item.productoId, 
+              loteId: item.loteId, 
+              almacenTipo: almacenTipoOrigen 
+            },
+          });
+
+          if (!inventarioOrigen) {
+            throw new Error('No se encontró inventario en el almacén de origen');
+          }
+
+          const stockActual = Number(inventarioOrigen.cantidadActual);
+          
+          if (stockActual < item.cantidad) {
+            throw new Error(`Stock insuficiente. Disponible: ${stockActual}, Solicitado: ${item.cantidad}`);
+          }
+
+          inventarioOrigen.cantidadActual = stockActual - item.cantidad;
+          await manager.save(inventarioOrigen);
+
+          let inventarioDestino = await manager.findOne(InventarioAlmacen, {
+            where: { productoId: item.productoId, loteId: item.loteId, almacenTipo: almacenTipoDestino },
+          });
+
+          if (inventarioDestino) {
+            inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) + item.cantidad;
+          } else {
+            inventarioDestino = manager.create(InventarioAlmacen, {
+              productoId: item.productoId,
+              loteId: item.loteId,
+              almacenTipo: almacenTipoDestino,
+              cantidadActual: item.cantidad,
+            });
+          }
+          
+          const savedDestino = await manager.save(inventarioDestino);
+
+          const tipoMovimiento = this.determinarTipoMovimiento(almacenTipoOrigen, almacenTipoDestino);
+          
+          const movimiento = manager.create(MovimientoAlmacen, {
+            productoId: item.productoId,
+            loteId: item.loteId,
+            almacenOrigen: almacenTipoOrigen,
+            almacenDestino: almacenTipoDestino,
+            cantidad: item.cantidad,
+            userId,
+            observaciones: `Transferencia batch ${almacenTipoOrigen} -> ${almacenTipoDestino}`,
+            tipoMovimiento,
+            origenOperacion: metadata?.origenOperacion || OrigenOperacion.ADMIN,
+          });
+          
+          const savedMovimiento = await manager.save(movimiento);
+
+          inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
+          await manager.save(inventarioOrigen);
+          
+          if (savedDestino.id) {
+            const destinoActualizado = await manager.findOne(InventarioAlmacen, {
+              where: { id: savedDestino.id },
+            });
+            if (destinoActualizado) {
+              destinoActualizado.ultimoMovimientoId = savedMovimiento.id;
+              await manager.save(destinoActualizado);
+            }
+          }
+
+          moved++;
+        } catch (error) {
+          const errorMessage = error.message || 'Error desconocido';
+          errors.push(`Producto ${item.productoId} (Lote ${item.loteId}): ${errorMessage}`);
+          failedItems.push({
+            productoId: item.productoId,
+            loteId: item.loteId,
+            cantidad: item.cantidad,
+            error: errorMessage,
+          });
+        }
       }
-    }
 
-    return {
-      success: errors.length === 0,
-      moved,
-      errors,
-    };
+      if (failedItems.length > 0) {
+        throw new Error(`Batch completed with ${failedItems.length} failures`);
+      }
+
+      return {
+        success: errors.length === 0,
+        moved,
+        errors,
+        failedItems,
+      };
+    });
   }
 
   async getStockTotal(productoId: string, almacenTipo?: AlmacenTipo): Promise<number> {
@@ -310,7 +516,7 @@ export class InventarioAlmacenService {
 
     const capas = inventarios.map(inv => {
       const cantidad = Number(inv.cantidadActual);
-      const precio = Number(inv.lote?.precio) || 0;
+      const precio = Number(inv.producto?.precio) || 0;
       totalStock += cantidad;
       costoTotal += cantidad * precio;
 

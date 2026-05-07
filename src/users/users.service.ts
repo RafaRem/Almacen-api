@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,12 +11,15 @@ import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersPermissionsService } from './users-permissions.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @Inject(forwardRef(() => UsersPermissionsService))
+    private usersPermissionsService: UsersPermissionsService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -36,7 +41,11 @@ export class UsersService {
       password: hashedPassword,
     });
 
-    return this.usersRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
+
+    await this.usersPermissionsService.createDefaultPermissions(savedUser.id, savedUser.tipo);
+
+    return savedUser;
   }
 
   async findAll(): Promise<User[]> {
@@ -72,6 +81,7 @@ export class UsersService {
 
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
+    await this.usersPermissionsService.deletePermissionsForUser(id);
     await this.usersRepository.remove(user);
   }
 }

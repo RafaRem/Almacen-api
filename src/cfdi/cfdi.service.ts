@@ -96,6 +96,9 @@ export class CfdiService {
       const claveProdServ = this.getXmlValue(conceptoXml, /ClaveProdServ="([^"]+)"/) || '';
       const claveUnidad = this.getXmlValue(conceptoXml, /ClaveUnidad="([^"]+)"/) || '';
 
+      const tasaMatch = conceptoXml.match(/TasaOCuota="([^"]+)"/);
+      const ivaCfdi = tasaMatch ? parseFloat(tasaMatch[1]) * 100 : null;
+
       return {
         cantidad,
         noIdentificacion,
@@ -103,6 +106,7 @@ export class CfdiService {
         valorUnitario,
         claveProdServ,
         claveUnidad,
+        ivaCfdi,
       };
     });
 
@@ -154,8 +158,7 @@ export class CfdiService {
 
     const numeroLoteUnico = `LOTE-${serie || 'X'}-${folio || '0'}`;
     const fechaCaducidadGeneral = productosDto[0]?.fechaCaducidad;
-    const precioLote = conceptos.find(c => c.noIdentificacion === productosDto[0]?.productoId)?.valorUnitario || 0;
-    const lote = await this.crearOLocalizarLote(numeroLoteUnico, fechaCaducidadGeneral, laboratorioId, precioLote);
+    const lote = await this.crearOLocalizarLote(numeroLoteUnico, fechaCaducidadGeneral, laboratorioId);
 
     for (const prodDto of productosDto) {
       const concepto = conceptos.find(c => c.noIdentificacion === prodDto.productoId);
@@ -179,7 +182,7 @@ export class CfdiService {
         });
       }
 
-      await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad);
+      await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad, concepto?.ivaCfdi);
     }
 
     return { productosCreados, productosExistentes };
@@ -203,23 +206,18 @@ export class CfdiService {
     return this.productoRepository.save(producto) as Promise<Producto>;
   }
 
-  private async crearOLocalizarLote(numeroLote: string, fechaCaducidad: string | undefined, laboratorioId: string, precio: number): Promise<Lote> {
+  private async crearOLocalizarLote(numeroLote: string, fechaCaducidad: string | undefined, laboratorioId: string): Promise<Lote> {
     const loteExistente = await this.loteRepository.findOne({
       where: { numeroLote: numeroLote },
     });
 
     if (loteExistente) {
-      if (loteExistente.precio === 0 && precio > 0) {
-        loteExistente.precio = precio;
-        return this.loteRepository.save(loteExistente);
-      }
       return loteExistente;
     }
 
     const nuevoLote = this.loteRepository.create({
       numeroLote: numeroLote,
       fechaCaducidad: fechaCaducidad ? new Date(fechaCaducidad) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      precio: precio,
       laboratorioId: laboratorioId,
       statusId: 1,
     });

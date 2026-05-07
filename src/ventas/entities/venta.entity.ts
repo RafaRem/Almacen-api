@@ -11,12 +11,16 @@ import {
 import { Cliente } from '../../clientes/entities/cliente.entity';
 import { User } from '../../users/entities/user.entity';
 import { DetalleVenta } from './detalle-venta.entity';
+import { PagoVenta } from './pago-venta.entity';
 import { MetodoPago } from '../../common/enums/metodo-pago.enum';
 
 @Entity('ventas')
 export class Venta {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'folio', unique: true })
+  folio: number;
 
   @Column({ type: 'uuid', name: 'clienteid', nullable: true })
   clienteId: string;
@@ -34,6 +38,9 @@ export class Venta {
 
   @OneToMany(() => DetalleVenta, (detalle) => detalle.venta)
   detalles: DetalleVenta[];
+
+  @OneToMany(() => PagoVenta, (pago) => pago.venta)
+  pagos: PagoVenta[];
 
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'subtotal', default: 0 })
   subtotal: number;

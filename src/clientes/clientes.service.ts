@@ -80,6 +80,7 @@ export class ClientesService {
   }
 
   async update(id: string, updateClienteDto: UpdateClienteDto): Promise<Cliente> {
+    console.log('🔍 DEBUG update() - received DTO:', JSON.stringify(updateClienteDto, null, 2));
     const cliente = await this.findOne(id);
 
     if (updateClienteDto.email && updateClienteDto.email !== cliente.email) {
@@ -105,7 +106,14 @@ export class ClientesService {
     }
 
     Object.assign(cliente, updateClienteDto);
-    return this.clientesRepository.save(cliente);
+    await this.clientesRepository.save(cliente);
+
+    if (updateClienteDto.categoriaClienteId !== undefined) {
+      cliente.categoriaCliente = undefined as any;
+      await this.clientesRepository.save(cliente);
+    }
+
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {

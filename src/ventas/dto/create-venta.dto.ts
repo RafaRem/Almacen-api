@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MetodoPago } from '../../common/enums/metodo-pago.enum';
+import { PagoDetalleDto } from './pago-detalle.dto';
 
 export class ProductoVentaDto {
   @IsUUID()
@@ -31,8 +32,15 @@ export class CreateVentaDto {
   @IsUUID()
   clienteId?: string;
 
+  @IsOptional()
   @IsEnum(MetodoPago)
-  metodoPago: MetodoPago;
+  metodoPago?: MetodoPago;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PagoDetalleDto)
+  pagos?: PagoDetalleDto[];
 
   @IsOptional()
   @IsString()
@@ -42,6 +50,12 @@ export class CreateVentaDto {
   @ValidateNested({ each: true })
   @Type(() => ProductoVentaDto)
   productos: ProductoVentaDto[];
+
+  @IsOptional()
+  descuentoPreview?: {
+    descuentoAplicado: number;
+    total: number;
+  };
 }
 
 export class UpdateVentaDto {

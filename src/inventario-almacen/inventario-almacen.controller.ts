@@ -8,6 +8,7 @@ import {
   Body,
   UseGuards,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InventarioAlmacenService } from './inventario-almacen.service';
@@ -68,6 +69,12 @@ export class InventarioAlmacenController {
     return this.inventarioService.findByProducto(productoId);
   }
 
+  @Get('lote/:loteId')
+  @UseGuards(JwtAuthGuard)
+  findByLote(@Param('loteId') loteId: string) {
+    return this.inventarioService.findByLote(loteId);
+  }
+
   @Get('producto/:productoId/stock')
   @UseGuards(JwtAuthGuard)
   getStockProducto(
@@ -88,14 +95,36 @@ export class InventarioAlmacenController {
       cantidad: number;
       almacenOrigen: number;
       almacenDestino: number;
+      observaciones?: string;
+      metadata?: {
+        turno?: string;
+        caja?: string;
+        terminalId?: string;
+        sessionId?: string;
+        origenOperacion?: string;
+        referenciaExterna?: string;
+      };
     },
+    @Req() req: any,
   ) {
+    const userId = req.user?.id || req.user?.sub || 'SYSTEM';
+    const metadata = body.metadata ? {
+      turno: body.metadata.turno,
+      caja: body.metadata.caja,
+      terminalId: body.metadata.terminalId,
+      sessionId: body.metadata.sessionId,
+      origenOperacion: body.metadata.origenOperacion as any,
+      referenciaExterna: body.metadata.referenciaExterna,
+    } : undefined;
     return this.inventarioService.moverStock(
       body.productoId,
       body.loteId,
       body.cantidad,
       body.almacenOrigen as AlmacenTipo,
       body.almacenDestino as AlmacenTipo,
+      userId,
+      body.observaciones,
+      metadata,
     );
   }
 
@@ -111,13 +140,29 @@ export class InventarioAlmacenController {
       }[];
       almacenOrigen: number;
       almacenDestino: number;
+      metadata?: {
+        turno?: string;
+        caja?: string;
+        terminalId?: string;
+        sessionId?: string;
+        origenOperacion?: string;
+        referenciaExterna?: string;
+      };
     },
+    @Req() req: any,
   ) {
-    console.log('[mover-batch] Endpoint recibido:', JSON.stringify(body, null, 2));
+    const userId = req.user?.id || req.user?.sub || 'SYSTEM';
+    const metadata = body.metadata ? {
+      ...body.metadata,
+      origenOperacion: body.metadata.origenOperacion as any,
+    } : undefined;
+    
     return this.inventarioService.moverStockBatch(
       body.items,
       body.almacenOrigen as AlmacenTipo,
       body.almacenDestino as AlmacenTipo,
+      userId,
+      metadata,
     );
   }
 

@@ -26,6 +26,17 @@ CREATE TABLE "users" (
 );
 
 -- =============================================
+-- User Permissions
+-- =============================================
+CREATE TABLE "user_permissions" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+  "module" varchar(50) NOT NULL,
+  "can_view" boolean DEFAULT true,
+  UNIQUE("user_id", "module")
+);
+
+-- =============================================
 -- Laboratorios
 -- =============================================
 CREATE TABLE "laboratorios" (
@@ -124,6 +135,7 @@ CREATE TABLE "descuentos" (
   "tipo" "descuento_tipo" NOT NULL,
   "condiciones" jsonb,
   "porcentaje" decimal(5,2) NOT NULL,
+  "monto" decimal(10,2),
   "laboratorioId" uuid,
   "categoriaClienteId" uuid,
   "fechaInicio" date,
@@ -155,6 +167,7 @@ CREATE TABLE "documentos_cliente" (
 -- =============================================
 CREATE TABLE "ventas" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "folio" serial UNIQUE,
   "clienteid" uuid REFERENCES "clientes"("id"),
   "usuarioid" uuid NOT NULL REFERENCES "users"("id"),
   "subtotal" decimal(10,2) DEFAULT 0,
@@ -181,6 +194,20 @@ CREATE TABLE "detalle_venta" (
   "descuentolinea" decimal(10,2) DEFAULT 0,
   "subtotal" decimal(10,2) NOT NULL
 );
+
+-- =============================================
+-- Configuraciones Sistema
+-- =============================================
+CREATE TABLE "configuraciones_sistema" (
+  "id" SERIAL PRIMARY KEY,
+  "clave" varchar UNIQUE NOT NULL,
+  "valor" jsonb DEFAULT '{}',
+  "created_at" timestamp DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO configuraciones_sistema ("clave", "valor") VALUES
+  ('empresa', '{"nombre": "Distribuidora", "direccion": "", "rfc": "", "telefono": "", "email": ""}');
 
 -- =============================================
 -- DATOS DE PRUEBA
@@ -260,13 +287,13 @@ INSERT INTO clientes ("nombre", "email", "telefono", "direccion", "rfc", "catego
   ('Roberto Sánchez', 'roberto@example.com', '555-567-8901', 'Calle Nogal 654, León', 'RSHZ760330MNO', NULL);
 
 -- Descuentos de prueba
-INSERT INTO descuentos ("tipo", "condiciones", "porcentaje", "categoriaClienteId", "laboratorioId", "statusId", "prioridad") 
-SELECT 'CATEGORIA', '{"minCantidad": 10}', 5.00, id, NULL, 1, 1 FROM categorias_cliente WHERE nombre = 'Categoría 1'
+INSERT INTO descuentos ("tipo", "condiciones", "porcentaje", "monto", "categoriaClienteId", "laboratorioId", "statusId", "prioridad")
+SELECT 'CATEGORIA', '{"minCantidad": 10}', 5.00, NULL, id, NULL, 1, 1 FROM categorias_cliente WHERE nombre = 'Categoría 1'
 UNION ALL
-SELECT 'VOLUMEN', '{"minCantidad": 5}', 3.00, NULL, NULL, 1, 2
+SELECT 'VOLUMEN', '{"minCantidad": 5}', 3.00, NULL, NULL, NULL, 1, 2
 UNION ALL
-SELECT 'LABORATORIO', '{"minCantidad": 1}', 10.00, NULL, (SELECT id FROM laboratorios WHERE nombre = 'Pfizer'), 1, 3
+SELECT 'LABORATORIO', '{"minCantidad": 1}', 10.00, NULL, NULL, (SELECT id FROM laboratorios WHERE nombre = 'Pfizer'), 1, 3
 UNION ALL
-SELECT 'CADUCIDAD', '{"diasPrevios": 30}', 15.00, NULL, NULL, 1, 0
+SELECT 'CADUCIDAD', '{"diasPrevios": 30}', 15.00, NULL, NULL, NULL, 1, 0
 UNION ALL
-SELECT 'CATEGORIA', '{"minCantidad": 1}', 8.00, (SELECT id FROM categorias_cliente WHERE nombre = 'Categoría 3'), NULL, 1, 1;
+SELECT 'CATEGORIA', '{"minCantidad": 1}', 8.00, NULL, (SELECT id FROM categorias_cliente WHERE nombre = 'Categoría 3'), NULL, 1, 1;

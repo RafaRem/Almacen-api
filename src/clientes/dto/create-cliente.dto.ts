@@ -21,14 +21,6 @@ export class CreateClienteDto {
 
   @IsOptional()
   @IsString()
-  telefono?: string;
-
-  @IsOptional()
-  @IsString()
-  direccion?: string;
-
-  @IsOptional()
-  @IsString()
   rfc?: string;
 
   @IsOptional()
@@ -38,6 +30,10 @@ export class CreateClienteDto {
   @IsOptional()
   @IsIn(['fisica', 'moral'])
   tipoPersona?: TipoPersonaDto;
+
+  @IsOptional()
+  @IsString()
+  empresa?: string;
 
   @IsOptional()
   @IsInt()
@@ -80,6 +76,10 @@ export class UpdateClienteDto {
   @IsOptional()
   @IsIn(['fisica', 'moral'])
   tipoPersona?: TipoPersonaDto;
+
+  @IsOptional()
+  @IsString()
+  empresa?: string;
 
   @IsOptional()
   @IsInt()

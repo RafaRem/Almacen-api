@@ -79,7 +79,7 @@ export class InventarioAlmacenService {
         agrupado.get(key).lotes.push({
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote,
-          precio: inv.producto?.precio,
+          precio: inv.precioUnitarioLote > 0 ? inv.precioUnitarioLote : inv.producto?.precio,
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
         });
@@ -95,7 +95,7 @@ export class InventarioAlmacenService {
           lotes: [{
             loteId: inv.loteId,
             numeroLote: inv.lote?.numeroLote,
-            precio: inv.producto?.precio,
+            precio: inv.precioUnitarioLote > 0 ? inv.precioUnitarioLote : inv.producto?.precio,
             fechaCaducidad: inv.lote?.fechaCaducidad,
             cantidad: Number(inv.cantidadActual),
           }],

@@ -45,6 +45,9 @@ export class InventarioAlmacen {
   @Column({ name: 'iva_cfdi', type: 'decimal', precision: 5, scale: 2, nullable: true })
   ivaCfdi: number | null;
 
+  @Column({ name: 'precio_unitario_lote', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  precioUnitarioLote: number;
+
   @Column({ name: 'ultimo_movimiento_id', nullable: true })
   ultimoMovimientoId: string;
 

@@ -30,6 +30,7 @@ import { ConfiguracionesModule } from './configuraciones/configuraciones.module'
 import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { EmpresaModule } from './empresa/empresa.module';
 import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
+import { CartSessionModule } from './cart-session/cart-session.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
     ConfiguracionesModule,
     EmpresaModule,
     TicketUploadsModule,
+    CartSessionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

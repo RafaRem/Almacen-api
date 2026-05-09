@@ -215,6 +215,7 @@ export class InventarioAlmacenController {
       loteId: string;
       almacenTipo: number;
       cantidad: number;
+      precioUnitarioLote?: number;
     },
   ) {
     return this.inventarioService.agregarStock(
@@ -222,6 +223,8 @@ export class InventarioAlmacenController {
       body.loteId,
       body.almacenTipo as AlmacenTipo,
       body.cantidad,
+      undefined,
+      body.precioUnitarioLote,
     );
   }
 

@@ -182,7 +182,7 @@ export class CfdiService {
         });
       }
 
-      await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad, concepto?.ivaCfdi);
+      await this.inventarioAlmacenService.agregarStock(producto.id, lote.id, AlmacenTipo.RECEPCION, prodDto.cantidad, concepto?.ivaCfdi, producto.precio);
     }
 
     return { productosCreados, productosExistentes };

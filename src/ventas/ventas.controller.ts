@@ -49,6 +49,28 @@ export class VentasController {
     return this.ventasService.previewDescuento(productos, clienteId);
   }
 
+  @Get('folio/:folio')
+  @UseGuards(JwtAuthGuard)
+  findByFolio(@Param('folio') folio: string) {
+    return this.ventasService.findByFolio(parseInt(folio, 10));
+  }
+
+  @Get('folio/:folio/user/:userId')
+  @UseGuards(JwtAuthGuard)
+  findByFolioAndUserId(
+    @Param('folio') folio: string,
+    @Param('userId') userId: string,
+    @Query('fechaFrom') fechaFrom?: string,
+    @Query('fechaTo') fechaTo?: string,
+  ) {
+    return this.ventasService.findByFolioAndUserId(
+      parseInt(folio, 10),
+      userId,
+      fechaFrom,
+      fechaTo,
+    );
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {

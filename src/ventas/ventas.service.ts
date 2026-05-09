@@ -273,6 +273,33 @@ export class VentasService {
     return { ...venta, detalles, pagos };
   }
 
+  async findByFolio(folio: number): Promise<Venta | null> {
+    return this.ventasRepository.findOne({
+      where: { folio },
+      relations: ['cliente', 'usuario', 'detalles', 'pagos'],
+    });
+  }
+
+  async findByFolioAndUserId(folio: number, userId: string, fechaFrom?: string, fechaTo?: string): Promise<Venta | null> {
+    const query = this.ventasRepository.createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
+      .leftJoinAndSelect('venta.usuario', 'usuario')
+      .leftJoinAndSelect('venta.detalles', 'detalles')
+      .leftJoinAndSelect('detalles.producto', 'producto')
+      .leftJoinAndSelect('venta.pagos', 'pagos')
+      .where('venta.folio = :folio', { folio })
+      .andWhere('venta.usuarioId = :userId', { userId });
+
+    if (fechaFrom) {
+      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', { fechaFrom });
+    }
+    if (fechaTo) {
+      query.andWhere('DATE(venta.createdAt) <= :fechaTo', { fechaTo });
+    }
+
+    return query.getOne();
+  }
+
   async cancel(id: string): Promise<Venta> {
     const venta = await this.findOne(id);
 

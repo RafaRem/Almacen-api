@@ -44,9 +44,18 @@ export class ReportesService {
   async getVentasPorCliente(filters?: VentasPorClienteFilters): Promise<any[]> {
     const queryBuilder = this.detallesRepository
       .createQueryBuilder('detalle')
-      .leftJoinAndSelect('detalle.venta', 'venta')
-      .leftJoinAndSelect('venta.cliente', 'cliente')
-      .leftJoinAndSelect('detalle.producto', 'producto')
+      .leftJoin('detalle.venta', 'venta')
+      .leftJoin('venta.cliente', 'cliente')
+      .leftJoin('detalle.producto', 'producto')
+      .select([
+        'detalle.cantidad AS cantidad',
+        'detalle.preciounitario AS precioUnitario',
+        'detalle.subtotal AS subtotal',
+        'venta.folio AS folioVenta',
+        'venta.createdAt AS fechaVenta',
+        'cliente.nombre AS clienteNombre',
+        'producto.nombre AS productoNombre',
+      ])
       .where('venta.statusId = :statusId', { statusId: 1 });
 
     if (filters?.clienteNombre) {
@@ -70,26 +79,35 @@ export class ReportesService {
 
     const resultados = await queryBuilder
       .orderBy('venta.createdAt', 'DESC')
-      .getMany();
+      .getRawMany();
 
     return resultados.map((r) => ({
-      nombreCliente: r.venta?.cliente?.nombre || 'Mostrador',
-      folioVenta: r.venta?.folio,
-      fechaVenta: r.venta?.createdAt,
-      producto: r.producto?.nombre,
-      cantidad: r.cantidad,
-      precioVenta: r.precioUnitario,
-      total: Number(r.precioUnitario) * r.cantidad,
+      nombreCliente: r.clienteNombre || 'Mostrador',
+      folioVenta: r.folioVenta,
+      fechaVenta: r.fechaVenta,
+      producto: r.productoNombre,
+      cantidad: parseInt(r.cantidad, 10),
+      precioVenta: parseFloat(r.precioUnitario),
+      total: parseFloat(r.precioUnitario) * parseInt(r.cantidad, 10),
     }));
   }
 
   async getKardexInventario(filters?: KardexInventarioFilters): Promise<any[]> {
     const queryBuilder = this.detallesRepository
       .createQueryBuilder('detalle')
-      .leftJoinAndSelect('detalle.venta', 'venta')
-      .leftJoinAndSelect('venta.cliente', 'cliente')
-      .leftJoinAndSelect('detalle.producto', 'producto')
-      .leftJoinAndSelect('detalle.lote', 'lote')
+      .leftJoin('detalle.venta', 'venta')
+      .leftJoin('venta.cliente', 'cliente')
+      .leftJoin('detalle.producto', 'producto')
+      .leftJoin('detalle.lote', 'lote')
+      .select([
+        'venta.folio AS folioVenta',
+        'venta.createdAt AS fechaVenta',
+        'cliente.nombre AS clienteNombre',
+        'producto.nombre AS productoNombre',
+        'lote.numeroLote AS numeroLote',
+        'detalle.cantidad AS cantidadVenta',
+        'detalle.subtotal AS subtotal',
+      ])
       .where('venta.statusId = :statusId', { statusId: 1 });
 
     if (filters?.productoNombre) {
@@ -113,16 +131,16 @@ export class ReportesService {
 
     const resultados = await queryBuilder
       .orderBy('venta.createdAt', 'DESC')
-      .getMany();
+      .getRawMany();
 
     return resultados.map((r) => ({
-      folioVenta: r.venta?.folio,
-      nombreCliente: r.venta?.cliente?.nombre || 'Mostrador',
-      nombreProducto: r.producto?.nombre,
-      numeroLote: r.lote?.numeroLote || r.lote?.id,
-      cantidadVenta: r.cantidad,
-      fecha_venta: r.venta?.createdAt,
-      subtotal: r.subtotal,
+      folioVenta: r.folioVenta,
+      nombreCliente: r.clienteNombre || 'Mostrador',
+      nombreProducto: r.productoNombre,
+      numeroLote: r.numeroLote,
+      cantidadVenta: parseInt(r.cantidadVenta, 10),
+      fecha_venta: r.fechaVenta,
+      subtotal: parseFloat(r.subtotal),
     }));
   }
 

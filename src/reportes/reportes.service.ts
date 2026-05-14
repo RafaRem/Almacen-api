@@ -50,9 +50,10 @@ export class ReportesService {
       .where('venta.statusId = :statusId', { statusId: 1 });
 
     if (filters?.clienteNombre) {
-      queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
-        clienteNombre: `%${filters.clienteNombre}%`,
-      });
+      queryBuilder.andWhere(
+        '(LOWER(cliente.nombre) LIKE LOWER(:clienteNombre) OR cliente.nombre IS NULL)',
+        { clienteNombre: `%${filters.clienteNombre}%` },
+      );
     }
 
     if (filters?.fechaFrom) {
@@ -98,9 +99,10 @@ export class ReportesService {
     }
 
     if (filters?.clienteNombre) {
-      queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
-        clienteNombre: `%${filters.clienteNombre}%`,
-      });
+      queryBuilder.andWhere(
+        '(LOWER(cliente.nombre) LIKE LOWER(:clienteNombre) OR cliente.nombre IS NULL)',
+        { clienteNombre: `%${filters.clienteNombre}%` },
+      );
     }
 
     if (filters?.folioVenta) {
@@ -115,7 +117,7 @@ export class ReportesService {
 
     return resultados.map((r) => ({
       folioVenta: r.venta?.folio,
-      nombreCliente: r.venta?.cliente?.nombre || null,
+      nombreCliente: r.venta?.cliente?.nombre || 'Mostrador',
       nombreProducto: r.producto?.nombre,
       numeroLote: r.lote?.numeroLote || r.lote?.id,
       cantidadVenta: r.cantidad,

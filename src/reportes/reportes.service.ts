@@ -18,7 +18,6 @@ export interface VentasPorClienteFilters {
 
 export interface KardexInventarioFilters {
   productoNombre?: string;
-  clienteNombre?: string;
   folioVenta?: string;
 }
 
@@ -99,25 +98,18 @@ export class ReportesService {
       .leftJoin('detalle.producto', 'producto')
       .leftJoin('detalle.lote', 'lote')
       .select([
-        'venta.folio AS folio_venta',
-        'venta.createdat AS fecha_venta',
-        'cliente.nombre AS cliente_nombre',
+        'detalle.id AS detalle_id',
+        'producto.id AS producto_id',
         'producto.nombre AS producto_nombre',
         'lote.numeroLote AS numero_lote',
-        'detalle.cantidad AS cantidad_venta',
-        'detalle.subtotal AS subtotal',
+        'SUM(detalle.cantidad) AS total_cantidad_vendida',
       ])
-      .where('venta.statusId = :statusId', { statusId: 1 });
+      .where('venta.statusId = :statusId', { statusId: 1 })
+      .groupBy('detalle.id, producto.id, producto.nombre, lote.numeroLote');
 
     if (filters?.productoNombre) {
       queryBuilder.andWhere('LOWER(producto.nombre) LIKE LOWER(:productoNombre)', {
         productoNombre: `%${filters.productoNombre}%`,
-      });
-    }
-
-    if (filters?.clienteNombre) {
-      queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
-        clienteNombre: `%${filters.clienteNombre}%`,
       });
     }
 
@@ -128,18 +120,82 @@ export class ReportesService {
     }
 
     const resultados = await queryBuilder
-      .orderBy('venta.createdAt', 'DESC')
+      .orderBy('producto.nombre', 'ASC')
       .getRawMany();
 
     return resultados.map((r) => ({
-      folioVenta: r.folio_venta,
-      nombreCliente: r.cliente_nombre || 'Mostrador',
+      productoId: r.producto_id,
       nombreProducto: r.producto_nombre,
       numeroLote: r.numero_lote,
-      cantidadVenta: parseInt(r.cantidad_venta, 10),
-      fecha_venta: r.fecha_venta,
-      subtotal: parseFloat(r.subtotal),
+      totalCantidadVendida: parseInt(r.total_cantidad_vendida, 10),
     }));
+  }
+
+  async getKardexDetalleProducto(productoId: string): Promise<any> {
+    const producto = await this.productosRepository
+      .createQueryBuilder('producto')
+      .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
+      .where('producto.id = :id', { id: productoId })
+      .getOne();
+
+    if (!producto) {
+      return null;
+    }
+
+    const inventario = await this.inventarioRepository
+      .createQueryBuilder('inventario')
+      .leftJoinAndSelect('inventario.lote', 'lote')
+      .where('inventario.productoId = :productoId', { productoId })
+      .andWhere('inventario.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
+      .getOne();
+
+    const trazabilidadRaw = await this.detallesRepository
+      .createQueryBuilder('detalle')
+      .leftJoin('detalle.venta', 'venta')
+      .leftJoin('venta.cliente', 'cliente')
+      .leftJoin('detalle.lote', 'lote')
+      .select([
+        'venta.folio AS folio_venta',
+        'venta.createdat AS fecha_venta',
+        'cliente.nombre AS cliente_nombre',
+        'detalle.cantidad AS cantidad',
+        'lote.numeroLote AS numero_lote',
+        'inventario.precioUnitarioLote AS precio_unitario_lote',
+        'inventario.precioVenta AS precio_venta',
+        'detalle.subtotal AS subtotal',
+      ])
+      .leftJoin('inventario_almacen', 'inventario',
+        'inventario.productoid = detalle.productoid AND inventario.loteid = detalle.loteid AND inventario.almacenTipo = :tipo',
+        { tipo: AlmacenTipo.VENTAS })
+      .where('detalle.productoId = :productoId', { productoId })
+      .andWhere('venta.statusId = :statusId', { statusId: 1 })
+      .orderBy('venta.createdAt', 'DESC')
+      .getRawMany();
+
+    const trazabilidad = trazabilidadRaw.map((v) => ({
+      folioVenta: v.folio_venta,
+      fechaVenta: v.fecha_venta,
+      clienteNombre: v.cliente_nombre || 'Mostrador',
+      numeroLote: v.numero_lote,
+      cantidad: parseInt(v.cantidad, 10),
+      precioUnitarioLote: parseFloat(v.precio_unitario_lote || 0),
+      precioVenta: parseFloat(v.precio_venta || 0),
+      total: parseFloat(v.precio_venta || 0) * parseInt(v.cantidad, 10),
+    }));
+
+    return {
+      producto: {
+        id: producto.id,
+        nombre: producto.nombre,
+        laboratorio: producto.laboratorio?.nombre || 'N/A',
+        stockMinimo: producto.stockMinimo,
+        stockMaximo: producto.stockMaximo,
+        stockActual: producto.stock,
+      },
+      precioUnitarioLote: inventario?.precioUnitarioLote || 0,
+      precioVenta: inventario?.precioVenta || 0,
+      trazabilidad,
+    };
   }
 
   async getProductosProximosCaducar(meses: number = 6): Promise<any[]> {

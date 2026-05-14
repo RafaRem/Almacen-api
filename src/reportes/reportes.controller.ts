@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import { ReportesService, VentasPorClienteFilters, KardexInventarioFilters } from './reportes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -20,10 +20,15 @@ export class ReportesController {
   @UseGuards(JwtAuthGuard)
   getKardexInventario(
     @Query('productoNombre') productoNombre: string,
-    @Query('clienteNombre') clienteNombre: string,
     @Query('folioVenta') folioVenta: string,
   ) {
-    return this.reportesService.getKardexInventario({ productoNombre, clienteNombre, folioVenta });
+    return this.reportesService.getKardexInventario({ productoNombre, folioVenta });
+  }
+
+  @Get('kardex-inventario/detalle/:productoId')
+  @UseGuards(JwtAuthGuard)
+  getKardexDetalleProducto(@Param('productoId') productoId: string) {
+    return this.reportesService.getKardexDetalleProducto(productoId);
   }
 
   @Get('proximos-caducar')

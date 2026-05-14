@@ -11,14 +11,14 @@ import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-alm
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 
 export interface VentasPorClienteFilters {
-  clienteId?: string;
+  clienteNombre?: string;
   fechaFrom?: string;
   fechaTo?: string;
 }
 
 export interface KardexInventarioFilters {
-  productoId?: string;
-  clienteId?: string;
+  productoNombre?: string;
+  clienteNombre?: string;
   folioVenta?: string;
 }
 
@@ -49,9 +49,9 @@ export class ReportesService {
       .leftJoinAndSelect('detalle.producto', 'producto')
       .where('venta.statusId = :statusId', { statusId: 1 });
 
-    if (filters?.clienteId) {
-      queryBuilder.andWhere('venta.clienteId = :clienteId', {
-        clienteId: filters.clienteId,
+    if (filters?.clienteNombre) {
+      queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
+        clienteNombre: `%${filters.clienteNombre}%`,
       });
     }
 
@@ -86,19 +86,20 @@ export class ReportesService {
     const queryBuilder = this.detallesRepository
       .createQueryBuilder('detalle')
       .leftJoinAndSelect('detalle.venta', 'venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('detalle.producto', 'producto')
       .leftJoinAndSelect('detalle.lote', 'lote')
       .where('venta.statusId = :statusId', { statusId: 1 });
 
-    if (filters?.productoId) {
-      queryBuilder.andWhere('detalle.productoId = :productoId', {
-        productoId: filters.productoId,
+    if (filters?.productoNombre) {
+      queryBuilder.andWhere('LOWER(producto.nombre) LIKE LOWER(:productoNombre)', {
+        productoNombre: `%${filters.productoNombre}%`,
       });
     }
 
-    if (filters?.clienteId) {
-      queryBuilder.andWhere('venta.clienteId = :clienteId', {
-        clienteId: filters.clienteId,
+    if (filters?.clienteNombre) {
+      queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
+        clienteNombre: `%${filters.clienteNombre}%`,
       });
     }
 
@@ -113,10 +114,10 @@ export class ReportesService {
       .getMany();
 
     return resultados.map((r) => ({
-      idVenta: r.venta?.id,
-      idCliente: r.venta?.clienteId || null,
-      idProducto: r.productoId,
-      idLote: r.loteId,
+      folioVenta: r.venta?.folio,
+      nombreCliente: r.venta?.cliente?.nombre || null,
+      nombreProducto: r.producto?.nombre,
+      numeroLote: r.lote?.numeroLote || r.lote?.id,
       cantidadVenta: r.cantidad,
       fecha_venta: r.venta?.createdAt,
       subtotal: r.subtotal,

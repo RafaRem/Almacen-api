@@ -9,21 +9,21 @@ export class ReportesController {
   @Get('ventas-por-cliente')
   @UseGuards(JwtAuthGuard)
   getVentasPorCliente(
-    @Query('clienteId') clienteId: string,
+    @Query('clienteNombre') clienteNombre: string,
     @Query('fechaFrom') fechaFrom: string,
     @Query('fechaTo') fechaTo: string,
   ) {
-    return this.reportesService.getVentasPorCliente({ clienteId, fechaFrom, fechaTo });
+    return this.reportesService.getVentasPorCliente({ clienteNombre, fechaFrom, fechaTo });
   }
 
   @Get('kardex-inventario')
   @UseGuards(JwtAuthGuard)
   getKardexInventario(
-    @Query('productoId') productoId: string,
-    @Query('clienteId') clienteId: string,
+    @Query('productoNombre') productoNombre: string,
+    @Query('clienteNombre') clienteNombre: string,
     @Query('folioVenta') folioVenta: string,
   ) {
-    return this.reportesService.getKardexInventario({ productoId, clienteId, folioVenta });
+    return this.reportesService.getKardexInventario({ productoNombre, clienteNombre, folioVenta });
   }
 
   @Get('proximos-caducar')

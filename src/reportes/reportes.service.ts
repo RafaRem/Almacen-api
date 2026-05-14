@@ -1,9 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual, Between } from 'typeorm';
+import { Repository, LessThanOrEqual, MoreThanOrEqual, Between, ILike } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { DocumentoCliente } from '../uploads/entities/documento-cliente.entity';
+import { Venta } from '../ventas/entities/venta.entity';
+import { DetalleVenta } from '../ventas/entities/detalle-venta.entity';
+import { Cliente } from '../clientes/entities/cliente.entity';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
+import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+
+export interface VentasPorClienteFilters {
+  clienteId?: string;
+  fechaFrom?: string;
+  fechaTo?: string;
+}
+
+export interface KardexInventarioFilters {
+  productoId?: string;
+  clienteId?: string;
+  folioVenta?: string;
+}
 
 @Injectable()
 export class ReportesService {
@@ -14,32 +31,117 @@ export class ReportesService {
     private lotesRepository: Repository<Lote>,
     @InjectRepository(DocumentoCliente)
     private documentosRepository: Repository<DocumentoCliente>,
+    @InjectRepository(Venta)
+    private ventasRepository: Repository<Venta>,
+    @InjectRepository(DetalleVenta)
+    private detallesRepository: Repository<DetalleVenta>,
+    @InjectRepository(Cliente)
+    private clientesRepository: Repository<Cliente>,
+    @InjectRepository(InventarioAlmacen)
+    private inventarioRepository: Repository<InventarioAlmacen>,
   ) {}
 
-  async getProductosProximosCaducar(meses: number = 6): Promise<Producto[]> {
+  async getVentasPorCliente(filters?: VentasPorClienteFilters): Promise<any[]> {
+    const queryBuilder = this.detallesRepository
+      .createQueryBuilder('detalle')
+      .leftJoinAndSelect('detalle.venta', 'venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
+      .leftJoinAndSelect('detalle.producto', 'producto')
+      .where('venta.statusId = :statusId', { statusId: 1 });
+
+    if (filters?.clienteId) {
+      queryBuilder.andWhere('venta.clienteId = :clienteId', {
+        clienteId: filters.clienteId,
+      });
+    }
+
+    if (filters?.fechaFrom) {
+      queryBuilder.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
+        fechaFrom: filters.fechaFrom,
+      });
+    }
+
+    if (filters?.fechaTo) {
+      queryBuilder.andWhere('DATE(venta.createdAt) <= :fechaTo', {
+        fechaTo: filters.fechaTo,
+      });
+    }
+
+    const resultados = await queryBuilder
+      .orderBy('venta.createdAt', 'DESC')
+      .getMany();
+
+    return resultados.map((r) => ({
+      nombreCliente: r.venta?.cliente?.nombre || 'Mostrador',
+      folioVenta: r.venta?.folio,
+      fechaVenta: r.venta?.createdAt,
+      producto: r.producto?.nombre,
+      cantidad: r.cantidad,
+      precioVenta: r.precioUnitario,
+      total: Number(r.precioUnitario) * r.cantidad,
+    }));
+  }
+
+  async getKardexInventario(filters?: KardexInventarioFilters): Promise<any[]> {
+    const queryBuilder = this.detallesRepository
+      .createQueryBuilder('detalle')
+      .leftJoinAndSelect('detalle.venta', 'venta')
+      .leftJoinAndSelect('detalle.producto', 'producto')
+      .leftJoinAndSelect('detalle.lote', 'lote')
+      .where('venta.statusId = :statusId', { statusId: 1 });
+
+    if (filters?.productoId) {
+      queryBuilder.andWhere('detalle.productoId = :productoId', {
+        productoId: filters.productoId,
+      });
+    }
+
+    if (filters?.clienteId) {
+      queryBuilder.andWhere('venta.clienteId = :clienteId', {
+        clienteId: filters.clienteId,
+      });
+    }
+
+    if (filters?.folioVenta) {
+      queryBuilder.andWhere('venta.folio = :folioVenta', {
+        folioVenta: parseInt(filters.folioVenta, 10),
+      });
+    }
+
+    const resultados = await queryBuilder
+      .orderBy('venta.createdAt', 'DESC')
+      .getMany();
+
+    return resultados.map((r) => ({
+      idVenta: r.venta?.id,
+      idCliente: r.venta?.clienteId || null,
+      idProducto: r.productoId,
+      idLote: r.loteId,
+      cantidadVenta: r.cantidad,
+      fecha_venta: r.venta?.createdAt,
+      subtotal: r.subtotal,
+    }));
+  }
+
+  async getProductosProximosCaducar(meses: number = 6): Promise<any[]> {
     const hoy = new Date();
     const fechaLimite = new Date();
     fechaLimite.setMonth(hoy.getMonth() + meses);
 
-    const lotes = await this.lotesRepository.find({
-      where: {
-        fechaCaducidad: Between(hoy, fechaLimite),
-        statusId: 1,
-      },
-      relations: ['laboratorio'],
-    });
-
-    if (lotes.length === 0) {
-      return [];
-    }
-
-    const loteIds = lotes.map((l) => l.id);
-    return this.productosRepository
-      .createQueryBuilder('producto')
-      .leftJoinAndSelect('producto.lote', 'lote')
+    return this.inventarioRepository
+      .createQueryBuilder('inventario')
+      .leftJoinAndSelect('inventario.producto', 'producto')
+      .leftJoinAndSelect('inventario.lote', 'lote')
       .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
-      .where('producto.loteId IN (:...loteIds)', { loteIds })
-      .andWhere('producto.statusId = :statusId', { statusId: 1 })
+      .where('inventario.almacenTipo = :almacenTipo', {
+        almacenTipo: AlmacenTipo.VENTAS,
+      })
+      .andWhere('lote.fechaCaducidad BETWEEN :hoy AND :fechaLimite', {
+        hoy,
+        fechaLimite,
+      })
+      .andWhere('lote.statusId = :statusId', { statusId: 1 })
+      .andWhere('inventario.cantidadActual > 0')
       .orderBy('lote.fechaCaducidad', 'ASC')
       .getMany();
   }
@@ -69,27 +171,19 @@ export class ReportesService {
       .getMany();
   }
 
-  async getProductosCaducados(): Promise<Producto[]> {
+  async getProductosCaducados(): Promise<any[]> {
     const hoy = new Date();
 
-    const lotes = await this.lotesRepository.find({
-      where: {
-        fechaCaducidad: LessThanOrEqual(hoy),
-        statusId: 1,
-      },
-    });
-
-    if (lotes.length === 0) {
-      return [];
-    }
-
-    const loteIds = lotes.map((l) => l.id);
-    return this.productosRepository
-      .createQueryBuilder('producto')
-      .leftJoinAndSelect('producto.lote', 'lote')
+    return this.inventarioRepository
+      .createQueryBuilder('inventario')
+      .leftJoinAndSelect('inventario.producto', 'producto')
+      .leftJoinAndSelect('inventario.lote', 'lote')
       .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
-      .where('producto.loteId IN (:...loteIds)', { loteIds })
-      .andWhere('producto.statusId = :statusId', { statusId: 1 })
+      .where('inventario.almacenTipo = :almacenTipo', {
+        almacenTipo: AlmacenTipo.VENTAS,
+      })
+      .andWhere('lote.fechaCaducidad <= :hoy', { hoy })
+      .andWhere('lote.statusId = :statusId', { statusId: 1 })
       .orderBy('lote.fechaCaducidad', 'ASC')
       .getMany();
   }

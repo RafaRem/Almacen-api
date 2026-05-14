@@ -49,12 +49,12 @@ export class ReportesService {
       .leftJoin('detalle.producto', 'producto')
       .select([
         'detalle.cantidad AS cantidad',
-        'detalle.preciounitario AS precioUnitario',
+        'detalle.preciounitario AS precio_unitario',
         'detalle.subtotal AS subtotal',
-        'venta.folio AS folioVenta',
-        'venta.createdAt AS fechaVenta',
-        'cliente.nombre AS clienteNombre',
-        'producto.nombre AS productoNombre',
+        'venta.folio AS folio_venta',
+        'venta.createdat AS fecha_venta',
+        'cliente.nombre AS cliente_nombre',
+        'producto.nombre AS producto_nombre',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 });
 
@@ -82,13 +82,13 @@ export class ReportesService {
       .getRawMany();
 
     return resultados.map((r) => ({
-      nombreCliente: r.clienteNombre || 'Mostrador',
-      folioVenta: r.folioVenta,
-      fechaVenta: r.fechaVenta,
-      producto: r.productoNombre,
+      nombreCliente: r.cliente_nombre || 'Mostrador',
+      folioVenta: r.folio_venta,
+      fechaVenta: r.fecha_venta,
+      producto: r.producto_nombre,
       cantidad: parseInt(r.cantidad, 10),
-      precioVenta: parseFloat(r.precioUnitario),
-      total: parseFloat(r.precioUnitario) * parseInt(r.cantidad, 10),
+      precioVenta: parseFloat(r.precio_unitario),
+      total: parseFloat(r.precio_unitario) * parseInt(r.cantidad, 10),
     }));
   }
 
@@ -100,12 +100,12 @@ export class ReportesService {
       .leftJoin('detalle.producto', 'producto')
       .leftJoin('detalle.lote', 'lote')
       .select([
-        'venta.folio AS folioVenta',
-        'venta.createdAt AS fechaVenta',
-        'cliente.nombre AS clienteNombre',
-        'producto.nombre AS productoNombre',
-        'lote.numeroLote AS numeroLote',
-        'detalle.cantidad AS cantidadVenta',
+        'venta.folio AS folio_venta',
+        'venta.createdat AS fecha_venta',
+        'cliente.nombre AS cliente_nombre',
+        'producto.nombre AS producto_nombre',
+        'lote.numero_lote AS numero_lote',
+        'detalle.cantidad AS cantidad_venta',
         'detalle.subtotal AS subtotal',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 });
@@ -134,12 +134,12 @@ export class ReportesService {
       .getRawMany();
 
     return resultados.map((r) => ({
-      folioVenta: r.folioVenta,
-      nombreCliente: r.clienteNombre || 'Mostrador',
-      nombreProducto: r.productoNombre,
-      numeroLote: r.numeroLote,
-      cantidadVenta: parseInt(r.cantidadVenta, 10),
-      fecha_venta: r.fechaVenta,
+      folioVenta: r.folio_venta,
+      nombreCliente: r.cliente_nombre || 'Mostrador',
+      nombreProducto: r.producto_nombre,
+      numeroLote: r.numero_lote,
+      cantidadVenta: parseInt(r.cantidad_venta, 10),
+      fecha_venta: r.fecha_venta,
       subtotal: parseFloat(r.subtotal),
     }));
   }

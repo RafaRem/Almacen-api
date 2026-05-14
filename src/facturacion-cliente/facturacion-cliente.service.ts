@@ -1,7 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { IsString, IsNotEmpty, IsOptional, IsEmail, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEmail,
+  IsNumber,
+} from 'class-validator';
 import { FacturacionCliente } from './entities/facturacion-cliente.entity';
 
 export class CreateFacturacionClienteDto {
@@ -44,7 +50,10 @@ export class FacturacionClienteService {
     });
   }
 
-  async create(clienteId: string, createDto: CreateFacturacionClienteDto): Promise<FacturacionCliente> {
+  async create(
+    clienteId: string,
+    createDto: CreateFacturacionClienteDto,
+  ): Promise<FacturacionCliente> {
     const existente = await this.findByCliente(clienteId);
     if (existente) {
       Object.assign(existente, createDto);
@@ -58,10 +67,15 @@ export class FacturacionClienteService {
     return this.facturacionRepository.save(facturacion);
   }
 
-  async update(clienteId: string, updateDto: Partial<CreateFacturacionClienteDto>): Promise<FacturacionCliente> {
+  async update(
+    clienteId: string,
+    updateDto: Partial<CreateFacturacionClienteDto>,
+  ): Promise<FacturacionCliente> {
     const facturacion = await this.findByCliente(clienteId);
     if (!facturacion) {
-      throw new NotFoundException(`Facturación para cliente ${clienteId} no encontrada`);
+      throw new NotFoundException(
+        `Facturación para cliente ${clienteId} no encontrada`,
+      );
     }
     Object.assign(facturacion, updateDto);
     return this.facturacionRepository.save(facturacion);
@@ -70,7 +84,9 @@ export class FacturacionClienteService {
   async delete(clienteId: string): Promise<void> {
     const result = await this.facturacionRepository.delete({ clienteId });
     if (result.affected === 0) {
-      throw new NotFoundException(`Facturación para cliente ${clienteId} no encontrada`);
+      throw new NotFoundException(
+        `Facturación para cliente ${clienteId} no encontrada`,
+      );
     }
   }
 

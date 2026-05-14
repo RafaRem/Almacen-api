@@ -119,7 +119,9 @@ export class Factura {
   @JoinColumn({ name: 'usuarioid' })
   usuario: User;
 
-  @OneToMany(() => FacturaDetalle, (detalle) => detalle.factura, { cascade: true })
+  @OneToMany(() => FacturaDetalle, (detalle) => detalle.factura, {
+    cascade: true,
+  })
   detalles: FacturaDetalle[];
 
   @CreateDateColumn({ name: 'createdat' })

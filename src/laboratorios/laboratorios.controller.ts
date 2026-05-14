@@ -36,7 +36,10 @@ export class LaboratoriosController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(@Param('id') id: string, @Body() updateLaboratorioDto: UpdateLaboratorioDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateLaboratorioDto: UpdateLaboratorioDto,
+  ) {
     return this.laboratoriosService.update(id, updateLaboratorioDto);
   }
 

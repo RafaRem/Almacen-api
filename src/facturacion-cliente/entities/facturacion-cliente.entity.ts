@@ -19,7 +19,7 @@ export class FacturacionCliente {
   @Column({ type: 'uuid', name: 'cliente_id', unique: true })
   clienteId: string;
 
-  @OneToOne(() => Cliente, cliente => cliente.facturacionCliente)
+  @OneToOne(() => Cliente, (cliente) => cliente.facturacionCliente)
   @JoinColumn({ name: 'cliente_id' })
   cliente: Cliente;
 

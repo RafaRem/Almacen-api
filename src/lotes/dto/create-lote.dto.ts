@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsUUID, IsDateString, IsOptional, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsUUID,
+  IsDateString,
+  IsOptional,
+  IsInt,
+} from 'class-validator';
 
 export class CreateLoteDto {
   @IsString()

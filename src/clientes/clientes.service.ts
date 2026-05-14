@@ -79,8 +79,14 @@ export class ClientesService {
     return cliente;
   }
 
-  async update(id: string, updateClienteDto: UpdateClienteDto): Promise<Cliente> {
-    console.log('🔍 DEBUG update() - received DTO:', JSON.stringify(updateClienteDto, null, 2));
+  async update(
+    id: string,
+    updateClienteDto: UpdateClienteDto,
+  ): Promise<Cliente> {
+    console.log(
+      '🔍 DEBUG update() - received DTO:',
+      JSON.stringify(updateClienteDto, null, 2),
+    );
     const cliente = await this.findOne(id);
 
     if (updateClienteDto.email && updateClienteDto.email !== cliente.email) {

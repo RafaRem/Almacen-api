@@ -1,7 +1,16 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { CartSessionDto, SaveCartDto, CartSessionResponseDto } from './dto/cart-session.dto';
+import {
+  CartSessionDto,
+  SaveCartDto,
+  CartSessionResponseDto,
+} from './dto/cart-session.dto';
 
 @Injectable()
 export class CartSessionService implements OnModuleInit, OnModuleDestroy {
@@ -64,11 +73,17 @@ export class CartSessionService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async saveCartSession(userId: string, session: CartSessionDto): Promise<boolean> {
+  async saveCartSession(
+    userId: string,
+    session: CartSessionDto,
+  ): Promise<boolean> {
     try {
       const cleanedCarts = session.carts
-        .filter(c => c.items && c.items.length > 0)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .filter((c) => c.items && c.items.length > 0)
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
         .slice(0, 4);
 
       const sessionData: CartSessionResponseDto = {
@@ -104,7 +119,10 @@ export class CartSessionService implements OnModuleInit, OnModuleDestroy {
       const exists = await this.redis.exists(this.getKey(userId));
       return exists === 1;
     } catch (error) {
-      this.logger.error('Error checking cart session existence:', error.message);
+      this.logger.error(
+        'Error checking cart session existence:',
+        error.message,
+      );
       return false;
     }
   }

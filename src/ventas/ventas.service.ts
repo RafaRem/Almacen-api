@@ -50,7 +50,10 @@ export class VentasService {
     return (result?.maxFolio || 0) + 1;
   }
 
-  async create(createVentaDto: CreateVentaDto, usuarioId: string): Promise<Venta> {
+  async create(
+    createVentaDto: CreateVentaDto,
+    usuarioId: string,
+  ): Promise<Venta> {
     if (!createVentaDto.productos || createVentaDto.productos.length === 0) {
       throw new BadRequestException('La venta debe tener al menos un producto');
     }
@@ -58,21 +61,32 @@ export class VentasService {
     let subtotal = 0;
     let descuentoTotal = 0;
     const detalles: Partial<DetalleVenta>[] = [];
-    const movimientosLotes: { productoId: string; loteId: string; numeroLote: string; cantidad: number }[] = [];
+    const movimientosLotes: {
+      productoId: string;
+      loteId: string;
+      numeroLote: string;
+      cantidad: number;
+    }[] = [];
 
     let categoriaClienteId: string | undefined;
     if (createVentaDto.clienteId) {
       try {
-        const cliente = await this.clientesService.findOne(createVentaDto.clienteId);
+        const cliente = await this.clientesService.findOne(
+          createVentaDto.clienteId,
+        );
         categoriaClienteId = cliente?.categoriaClienteId;
       } catch {}
     }
 
     for (const productoVenta of createVentaDto.productos) {
-      const producto = await this.productosService.findOne(productoVenta.productoId);
+      const producto = await this.productosService.findOne(
+        productoVenta.productoId,
+      );
 
       if (!producto) {
-        throw new BadRequestException(`Producto ${productoVenta.productoId} no encontrado`);
+        throw new BadRequestException(
+          `Producto ${productoVenta.productoId} no encontrado`,
+        );
       }
 
       const stockDisponible = await this.inventarioAlmacenService.getStockTotal(
@@ -86,12 +100,13 @@ export class VentasService {
         );
       }
 
-      const resultadoFEPU = await this.inventarioAlmacenService.reducirStockFIFO(
-        productoVenta.productoId,
-        productoVenta.cantidad,
-        AlmacenTipo.VENTAS,
-        usuarioId,
-      );
+      const resultadoFEPU =
+        await this.inventarioAlmacenService.reducirStockFIFO(
+          productoVenta.productoId,
+          productoVenta.cantidad,
+          AlmacenTipo.VENTAS,
+          usuarioId,
+        );
 
       if (!resultadoFEPU.success) {
         throw new BadRequestException(resultadoFEPU.message);
@@ -116,23 +131,29 @@ export class VentasService {
           producto.laboratorioId,
           categoriaClienteId,
         );
-        if (calculo?.mejorDescuento && calculo.mejorDescuento.tipo !== 'NINGUNO') {
+        if (
+          calculo?.mejorDescuento &&
+          calculo.mejorDescuento.tipo !== 'NINGUNO'
+        ) {
           const mejor = calculo.mejorDescuento;
           if (mejor.monto && mejor.monto > 0) {
             descuentoLinea = mejor.monto;
           } else {
-            descuentoLinea = (precioUnitario * productoVenta.cantidad * mejor.porcentaje) / 100;
+            descuentoLinea =
+              (precioUnitario * productoVenta.cantidad * mejor.porcentaje) /
+              100;
           }
         }
-      } catch {
-      }
+      } catch {}
 
-      const subtotalLinea = precioUnitario * productoVenta.cantidad - descuentoLinea;
+      const subtotalLinea =
+        precioUnitario * productoVenta.cantidad - descuentoLinea;
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
-      const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || producto.loteId || '';
+      const primerLoteId =
+        resultadoFEPU.lotsUsed[0]?.loteId || producto.loteId || '';
 
       detalles.push({
         productoId: productoVenta.productoId,
@@ -149,19 +170,28 @@ export class VentasService {
     const total = subtotal - descuentoTotal + iva;
 
     if (createVentaDto.descuentoPreview) {
-      const diffDescuento = Math.abs(descuentoTotal - createVentaDto.descuentoPreview.descuentoAplicado);
+      const diffDescuento = Math.abs(
+        descuentoTotal - createVentaDto.descuentoPreview.descuentoAplicado,
+      );
       const diffTotal = Math.abs(total - createVentaDto.descuentoPreview.total);
-      if (diffDescuento > 0.10 || diffTotal > 0.10) {
+      if (diffDescuento > 0.1 || diffTotal > 0.1) {
         throw new BadRequestException(
           `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${createVentaDto.descuentoPreview.descuentoAplicado.toFixed(2)}, total=${createVentaDto.descuentoPreview.total.toFixed(2)}. Posible manipulacion.`,
         );
       }
     }
 
-    let pagosData: { formaPago: FormaPago; monto: number; referencia?: string }[] = [];
+    let pagosData: {
+      formaPago: FormaPago;
+      monto: number;
+      referencia?: string;
+    }[] = [];
 
     if (createVentaDto.pagos && createVentaDto.pagos.length > 0) {
-      const sumaPagos = createVentaDto.pagos.reduce((sum, p) => sum + Number(p.monto), 0);
+      const sumaPagos = createVentaDto.pagos.reduce(
+        (sum, p) => sum + Number(p.monto),
+        0,
+      );
       if (sumaPagos < total - 0.01) {
         throw new BadRequestException(
           `La suma de pagos (${sumaPagos.toFixed(2)}) es menor al total (${total.toFixed(2)})`,
@@ -173,17 +203,20 @@ export class VentasService {
         referencia: p.referencia || undefined,
       }));
     } else if (createVentaDto.metodoPago) {
-      pagosData = [{
-        formaPago: this.convertirMetodoPago(createVentaDto.metodoPago),
-        monto: total,
-      }];
+      pagosData = [
+        {
+          formaPago: this.convertirMetodoPago(createVentaDto.metodoPago),
+          monto: total,
+        },
+      ];
     } else {
       throw new BadRequestException('Debe especificar método de pago');
     }
 
-    const metodoPagoLegacy = pagosData.length === 1
-      ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
-      : MetodoPago.EFECTIVO;
+    const metodoPagoLegacy =
+      pagosData.length === 1
+        ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
+        : MetodoPago.EFECTIVO;
 
     const nextFolio = await this.getNextFolio();
 
@@ -222,9 +255,16 @@ export class VentasService {
   async findAll(
     skip = 0,
     take = 20,
-    filters?: { fechaFrom?: string; fechaTo?: string; clienteId?: string; statusId?: string; usuarioId?: string },
+    filters?: {
+      fechaFrom?: string;
+      fechaTo?: string;
+      clienteId?: string;
+      statusId?: string;
+      usuarioId?: string;
+    },
   ): Promise<{ data: Venta[]; total: number }> {
-    const query = this.ventasRepository.createQueryBuilder('venta')
+    const query = this.ventasRepository
+      .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('venta.usuario', 'usuario')
       .orderBy('venta.createdAt', 'DESC')
@@ -232,26 +272,38 @@ export class VentasService {
       .take(take);
 
     if (filters?.fechaFrom) {
-      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', { fechaFrom: filters.fechaFrom });
+      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
+        fechaFrom: filters.fechaFrom,
+      });
     }
     if (filters?.fechaTo) {
-      query.andWhere('DATE(venta.createdAt) <= :fechaTo', { fechaTo: filters.fechaTo });
+      query.andWhere('DATE(venta.createdAt) <= :fechaTo', {
+        fechaTo: filters.fechaTo,
+      });
     }
     if (filters?.clienteId) {
-      query.andWhere('venta.clienteId = :clienteId', { clienteId: filters.clienteId });
+      query.andWhere('venta.clienteId = :clienteId', {
+        clienteId: filters.clienteId,
+      });
     }
     if (filters?.statusId) {
-      query.andWhere('venta.statusId = :statusId', { statusId: parseInt(filters.statusId, 10) });
+      query.andWhere('venta.statusId = :statusId', {
+        statusId: parseInt(filters.statusId, 10),
+      });
     }
     if (filters?.usuarioId) {
-      query.andWhere('venta.usuarioId = :usuarioId', { usuarioId: filters.usuarioId });
+      query.andWhere('venta.usuarioId = :usuarioId', {
+        usuarioId: filters.usuarioId,
+      });
     }
 
     const [data, total] = await query.getManyAndCount();
     return { data, total };
   }
 
-  async findOne(id: string): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[] }> {
+  async findOne(
+    id: string,
+  ): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[] }> {
     const venta = await this.ventasRepository.findOne({
       where: { id },
       relations: ['cliente', 'usuario'],
@@ -280,8 +332,14 @@ export class VentasService {
     });
   }
 
-  async findByFolioAndUserId(folio: number, userId: string, fechaFrom?: string, fechaTo?: string): Promise<Venta | null> {
-    const query = this.ventasRepository.createQueryBuilder('venta')
+  async findByFolioAndUserId(
+    folio: number,
+    userId: string,
+    fechaFrom?: string,
+    fechaTo?: string,
+  ): Promise<Venta | null> {
+    const query = this.ventasRepository
+      .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('venta.usuario', 'usuario')
       .leftJoinAndSelect('venta.detalles', 'detalles')
@@ -323,8 +381,20 @@ export class VentasService {
       productoId: string;
       descuento: number;
       motivo: string;
-      mejorDescuento: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string };
-      preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[];
+      mejorDescuento: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        precioConDescuento: number;
+        motivo: string;
+      };
+      preciosAlternativos: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        precioConDescuento: number;
+        motivo: string;
+      }[];
     }[];
   }> {
     let subtotal = 0;
@@ -333,8 +403,20 @@ export class VentasService {
       productoId: string;
       descuento: number;
       motivo: string;
-      mejorDescuento: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string };
-      preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[];
+      mejorDescuento: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        precioConDescuento: number;
+        motivo: string;
+      };
+      preciosAlternativos: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        precioConDescuento: number;
+        motivo: string;
+      }[];
     }[] = [];
 
     let categoriaClienteId: string | undefined;
@@ -349,13 +431,21 @@ export class VentasService {
       let producto;
 
       try {
-        producto = await this.productosService.findOne(productoVenta.productoId);
+        producto = await this.productosService.findOne(
+          productoVenta.productoId,
+        );
         if (!producto) {
           descuentoPorProducto.push({
             productoId: productoVenta.productoId,
             descuento: 0,
             motivo: 'Producto no encontrado',
-            mejorDescuento: { tipo: 'NINGUNO', porcentaje: 0, monto: null, precioConDescuento: 0, motivo: 'No encontrado' },
+            mejorDescuento: {
+              tipo: 'NINGUNO',
+              porcentaje: 0,
+              monto: null,
+              precioConDescuento: 0,
+              motivo: 'No encontrado',
+            },
             preciosAlternativos: [],
           });
           continue;
@@ -365,7 +455,13 @@ export class VentasService {
           productoId: productoVenta.productoId,
           descuento: 0,
           motivo: 'Producto no encontrado',
-          mejorDescuento: { tipo: 'NINGUNO', porcentaje: 0, monto: null, precioConDescuento: 0, motivo: 'No encontrado' },
+          mejorDescuento: {
+            tipo: 'NINGUNO',
+            porcentaje: 0,
+            monto: null,
+            precioConDescuento: 0,
+            motivo: 'No encontrado',
+          },
           preciosAlternativos: [],
         });
         continue;
@@ -375,8 +471,26 @@ export class VentasService {
       const subtotalLinea = precioUnitario * productoVenta.cantidad;
 
       let descuentoLinea = 0;
-      let mejorDescuentoInfo: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string } = { tipo: 'NINGUNO', porcentaje: 0, monto: null, precioConDescuento: subtotalLinea, motivo: 'Sin descuento' };
-      let preciosAlternativos: { tipo: string; porcentaje: number; monto: number | null; precioConDescuento: number; motivo: string }[] = [];
+      let mejorDescuentoInfo: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        precioConDescuento: number;
+        motivo: string;
+      } = {
+        tipo: 'NINGUNO',
+        porcentaje: 0,
+        monto: null,
+        precioConDescuento: subtotalLinea,
+        motivo: 'Sin descuento',
+      };
+      let preciosAlternativos: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        precioConDescuento: number;
+        motivo: string;
+      }[] = [];
 
       try {
         const fechaCaducidad = producto.lote?.fechaCaducidad;
@@ -389,7 +503,10 @@ export class VentasService {
           subtotalLinea,
         );
 
-        if (calculo?.mejorDescuento && calculo.mejorDescuento.tipo !== 'NINGUNO') {
+        if (
+          calculo?.mejorDescuento &&
+          calculo.mejorDescuento.tipo !== 'NINGUNO'
+        ) {
           const mejor = calculo.mejorDescuento;
           if (mejor.monto && mejor.monto > 0) {
             descuentoLinea = mejor.monto;
@@ -405,8 +522,7 @@ export class VentasService {
           };
           preciosAlternativos = calculo.preciosAlternativos;
         }
-      } catch {
-      }
+      } catch {}
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;

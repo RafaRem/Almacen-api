@@ -15,7 +15,9 @@ export class DomiciliosController {
   constructor(private readonly domiciliosService: DomiciliosService) {}
 
   @Get('cliente/:clienteId')
-  async findByCliente(@Param('clienteId') clienteId: string): Promise<Domicilio | null> {
+  async findByCliente(
+    @Param('clienteId') clienteId: string,
+  ): Promise<Domicilio | null> {
     return this.domiciliosService.findByCliente(clienteId);
   }
 

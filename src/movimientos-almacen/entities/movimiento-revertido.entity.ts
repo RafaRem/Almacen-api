@@ -85,7 +85,12 @@ export class MovimientoRevertido {
   @Column({ name: 'session_id', length: 100, nullable: true })
   sessionId: string;
 
-  @Column({ name: 'origen_operacion', type: 'varchar', length: 50, nullable: true })
+  @Column({
+    name: 'origen_operacion',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
   origenOperacion: string;
 
   @Column({ name: 'referencia_externa', length: 255, nullable: true })
@@ -97,7 +102,11 @@ export class MovimientoRevertido {
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 
-  @Column({ name: 'fecha_operacion_original', type: 'timestamp', nullable: true })
+  @Column({
+    name: 'fecha_operacion_original',
+    type: 'timestamp',
+    nullable: true,
+  })
   fechaOperacionOriginal: Date;
 
   @Column({ name: 'fecha_reversion', type: 'timestamp', nullable: true })

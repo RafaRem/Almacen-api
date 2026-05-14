@@ -9,13 +9,17 @@ export class ReportesController {
   @Get('proximos-caducar')
   @UseGuards(JwtAuthGuard)
   getProductosProximosCaducar(@Query('meses') meses: string) {
-    return this.reportesService.getProductosProximosCaducar(meses ? parseInt(meses, 10) : 6);
+    return this.reportesService.getProductosProximosCaducar(
+      meses ? parseInt(meses, 10) : 6,
+    );
   }
 
   @Get('alertas-vigencia')
   @UseGuards(JwtAuthGuard)
   getAlertasVigencia(@Query('dias') dias: string) {
-    return this.reportesService.getAlertasVigencia(dias ? parseInt(dias, 10) : 30);
+    return this.reportesService.getAlertasVigencia(
+      dias ? parseInt(dias, 10) : 30,
+    );
   }
 
   @Get('stock-minimo')

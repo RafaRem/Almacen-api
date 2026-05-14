@@ -16,10 +16,14 @@ export class UsersPermissionsService {
   ) {}
 
   async getPermissionsForUser(userId: string): Promise<UserPermission[]> {
-    const permissions = await this.permissionsRepository.find({ where: { userId } });
+    const permissions = await this.permissionsRepository.find({
+      where: { userId },
+    });
 
     if (permissions.length === 0) {
-      const user = await this.usersRepository.findOne({ where: { id: userId } });
+      const user = await this.usersRepository.findOne({
+        where: { id: userId },
+      });
       const userTipo = user?.tipo || UserTipo.USER;
       await this.createDefaultPermissions(userId, userTipo);
       return this.permissionsRepository.find({ where: { userId } });
@@ -53,7 +57,9 @@ export class UsersPermissionsService {
     userId: string,
     userTipo: UserTipo = UserTipo.USER,
   ): Promise<void> {
-    const modules = ROLE_DEFAULT_PERMISSIONS[userTipo] || ROLE_DEFAULT_PERMISSIONS[UserTipo.USER];
+    const modules =
+      ROLE_DEFAULT_PERMISSIONS[userTipo] ||
+      ROLE_DEFAULT_PERMISSIONS[UserTipo.USER];
     const permissions = modules.map((module) =>
       this.permissionsRepository.create({
         userId,

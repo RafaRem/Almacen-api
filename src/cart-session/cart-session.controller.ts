@@ -37,9 +37,15 @@ export class CartSessionController {
       throw new HttpException('User ID mismatch', HttpStatus.FORBIDDEN);
     }
 
-    const success = await this.cartSessionService.saveCartSession(userId, cartSessionDto);
+    const success = await this.cartSessionService.saveCartSession(
+      userId,
+      cartSessionDto,
+    );
     if (!success) {
-      throw new HttpException('Failed to save cart session', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Failed to save cart session',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     return { success: true, message: 'Cart session saved' };
   }
@@ -48,7 +54,10 @@ export class CartSessionController {
   async deleteCartSession(@Param('userId') userId: string) {
     const success = await this.cartSessionService.deleteCartSession(userId);
     if (!success) {
-      throw new HttpException('Failed to delete cart session', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Failed to delete cart session',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     return { success: true, message: 'Cart session deleted' };
   }
@@ -63,7 +72,10 @@ export class CartSessionController {
   async refreshTTL(@Param('userId') userId: string) {
     const refreshed = await this.cartSessionService.refreshTTL(userId);
     if (!refreshed) {
-      throw new HttpException('No cart session to refresh', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        'No cart session to refresh',
+        HttpStatus.NOT_FOUND,
+      );
     }
     return { success: true, message: 'TTL refreshed' };
   }

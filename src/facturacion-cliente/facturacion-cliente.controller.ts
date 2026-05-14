@@ -7,7 +7,10 @@ import {
   Param,
   Body,
 } from '@nestjs/common';
-import { FacturacionClienteService, CreateFacturacionClienteDto } from './facturacion-cliente.service';
+import {
+  FacturacionClienteService,
+  CreateFacturacionClienteDto,
+} from './facturacion-cliente.service';
 import { FacturacionCliente } from './entities/facturacion-cliente.entity';
 
 @Controller('facturacion-cliente')
@@ -15,7 +18,9 @@ export class FacturacionClienteController {
   constructor(private readonly facturacionService: FacturacionClienteService) {}
 
   @Get('cliente/:clienteId')
-  async findByCliente(@Param('clienteId') clienteId: string): Promise<FacturacionCliente | null> {
+  async findByCliente(
+    @Param('clienteId') clienteId: string,
+  ): Promise<FacturacionCliente | null> {
     return this.facturacionService.findByCliente(clienteId);
   }
 

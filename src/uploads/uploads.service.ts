@@ -36,15 +36,28 @@ export class UploadsService {
 
     const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Tipo de archivo no permitido. Solo PDF, JPG, PNG');
+      throw new BadRequestException(
+        'Tipo de archivo no permitido. Solo PDF, JPG, PNG',
+      );
     }
 
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      throw new BadRequestException('El archivo excede el tamaño máximo de 10MB');
+      throw new BadRequestException(
+        'El archivo excede el tamaño máximo de 10MB',
+      );
     }
 
-    const uploadsDir = path.join(__dirname, '..', '..', '..', '..', 'uploads', 'clientes', createDto.clienteId);
+    const uploadsDir = path.join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      'uploads',
+      'clientes',
+      createDto.clienteId,
+    );
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
@@ -55,7 +68,12 @@ export class UploadsService {
 
     fs.writeFileSync(filePath, file.buffer);
 
-    const relativePath = path.join('uploads', 'clientes', createDto.clienteId, fileName);
+    const relativePath = path.join(
+      'uploads',
+      'clientes',
+      createDto.clienteId,
+      fileName,
+    );
 
     const documento = this.documentosRepository.create({
       ...createDto,
@@ -75,14 +93,19 @@ export class UploadsService {
   }
 
   async findOne(id: string): Promise<DocumentoCliente> {
-    const documento = await this.documentosRepository.findOne({ where: { id } });
+    const documento = await this.documentosRepository.findOne({
+      where: { id },
+    });
     if (!documento) {
       throw new NotFoundException(`Documento with ID ${id} not found`);
     }
     return documento;
   }
 
-  async updateVigencia(id: string, vigencia: string): Promise<DocumentoCliente> {
+  async updateVigencia(
+    id: string,
+    vigencia: string,
+  ): Promise<DocumentoCliente> {
     const documento = await this.findOne(id);
     documento.vigencia = new Date(vigencia);
     return this.documentosRepository.save(documento);

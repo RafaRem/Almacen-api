@@ -47,12 +47,14 @@ export enum RegimenFiscal {
 
 export const RegimenFiscalNombres: Record<string, string> = {
   [RegimenFiscal.GENERAL]: '601 - General de Ley Personas Morales',
-  [RegimenFiscal.PERSONA_MORAL]: '603 - Personas Morales con ingresos acumulables',
+  [RegimenFiscal.PERSONA_MORAL]:
+    '603 - Personas Morales con ingresos acumulables',
   [RegimenFiscal.SUELDOS]: '605 - Sueldos y salarios',
   [RegimenFiscal.ARRENDAMIENTO]: '606 - Arrendamiento',
   [RegimenFiscal.INCORPORACION_FISCAL]: '608 - Incorporación fiscal',
   [RegimenFiscal.COMPENSACIONES]: '609 - Compensaciones',
-  [RegimenFiscal.OPCION_VOLUNTARIA]: '610 - Opción de pago sin flujos de efectivo',
+  [RegimenFiscal.OPCION_VOLUNTARIA]:
+    '610 - Opción de pago sin flujos de efectivo',
   [RegimenFiscal.OPCION_CUMPLIMIENTO]: '611 - Opción de cumplimiento',
   [RegimenFiscal.SINDICATOS]: '612 - Sindicatos',
   [RegimenFiscal.NO_OBSTANTE_RETENCION]: '614 - No obstante retención',
@@ -70,7 +72,8 @@ export const RegimenFiscalNombres: Record<string, string> = {
   [RegimenFiscal.SEMARNAT]: '627 - SEMARNAT',
   [RegimenFiscal.IESPS]: '628 - IEPS',
   [RegimenFiscal.OPERACIONES_FINANCIERAS]: '629 - Operaciones Financieras',
-  [RegimenFiscal.SERVICIOS_PARCIALIDAD_FACTURAJA]: '630 - Servicios parcialidad',
+  [RegimenFiscal.SERVICIOS_PARCIALIDAD_FACTURAJA]:
+    '630 - Servicios parcialidad',
   [RegimenFiscal.SECTOR_HIDROCARBUROS]: '631 - Sector hidrocarburos',
   [RegimenFiscal.ASIMILABLES]: '633 - Asimilables a salarios',
   [RegimenFiscal.SOCIEDADES_COOPERATIVAS]: '634 - Sociedades Cooperativas',
@@ -85,9 +88,12 @@ export const RegimenFiscalNombres: Record<string, string> = {
   [RegimenFiscal.INCORPORACION_TECNOLOGICA]: '643 - Incorporación tecnológica',
   [RegimenFiscal.OPCIONES_FISCALES_TURISMO]: '644 - Opciones fiscales turismo',
   [RegimenFiscal.DIVIDENDOS]: '645 - Dividendos',
-  [RegimenFiscal.PERSONAS_MORALES_CONSORCIO]: '646 - Personas morales en consorcio',
-  [RegimenFiscal.ARRENDAMIENTO_NVO_REGIMEN]: '647 - Arrendamiento nuevo régimen',
+  [RegimenFiscal.PERSONAS_MORALES_CONSORCIO]:
+    '646 - Personas morales en consorcio',
+  [RegimenFiscal.ARRENDAMIENTO_NVO_REGIMEN]:
+    '647 - Arrendamiento nuevo régimen',
   [RegimenFiscal.EFECTOS_FISCALES]: '648 - Efectos fiscales',
   [RegimenFiscal.PAGOS_OTORGADOS]: '649 - Pagos otorgados',
-  [RegimenFiscal.OPERACIONES_GRAVABLES_IMPUESTO_CAJAS]: '650 - Operaciones grabables cajas',
+  [RegimenFiscal.OPERACIONES_GRAVABLES_IMPUESTO_CAJAS]:
+    '650 - Operaciones grabables cajas',
 };

@@ -11,7 +11,13 @@ import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almace
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Producto, Lote, Laboratorio, MovimientoAlmacen, InventarioAlmacen]),
+    TypeOrmModule.forFeature([
+      Producto,
+      Lote,
+      Laboratorio,
+      MovimientoAlmacen,
+      InventarioAlmacen,
+    ]),
     InventarioAlmacenModule,
   ],
   controllers: [CfdiController],

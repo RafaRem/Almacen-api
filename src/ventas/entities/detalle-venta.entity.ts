@@ -41,7 +41,13 @@ export class DetalleVenta {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'preciounitario' })
   precioUnitario: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'descuentolinea', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    name: 'descuentolinea',
+    default: 0,
+  })
   descuentoLinea: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'subtotal' })

@@ -17,7 +17,7 @@ export class Domicilio {
   @Column({ type: 'uuid', name: 'cliente_id', unique: true })
   clienteId: string;
 
-  @OneToOne(() => Cliente, cliente => cliente.domicilio)
+  @OneToOne(() => Cliente, (cliente) => cliente.domicilio)
   @JoinColumn({ name: 'cliente_id' })
   cliente: Cliente;
 

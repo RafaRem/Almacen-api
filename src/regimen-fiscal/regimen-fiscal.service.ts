@@ -17,7 +17,9 @@ export class RegimenFiscalService {
   }
 
   async findOne(id: number): Promise<RegimenFiscal> {
-    const regimen = await this.regimenFiscalRepository.findOne({ where: { id } });
+    const regimen = await this.regimenFiscalRepository.findOne({
+      where: { id },
+    });
     if (!regimen) {
       throw new NotFoundException(`Régimen fiscal con ID ${id} no encontrado`);
     }
@@ -25,9 +27,13 @@ export class RegimenFiscalService {
   }
 
   async findByCode(code: string): Promise<RegimenFiscal> {
-    const regimen = await this.regimenFiscalRepository.findOne({ where: { code } });
+    const regimen = await this.regimenFiscalRepository.findOne({
+      where: { code },
+    });
     if (!regimen) {
-      throw new NotFoundException(`Régimen fiscal con código ${code} no encontrado`);
+      throw new NotFoundException(
+        `Régimen fiscal con código ${code} no encontrado`,
+      );
     }
     return regimen;
   }

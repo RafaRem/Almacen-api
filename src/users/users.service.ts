@@ -43,7 +43,10 @@ export class UsersService {
 
     const savedUser = await this.usersRepository.save(user);
 
-    await this.usersPermissionsService.createDefaultPermissions(savedUser.id, savedUser.tipo);
+    await this.usersPermissionsService.createDefaultPermissions(
+      savedUser.id,
+      savedUser.tipo,
+    );
 
     return savedUser;
   }

@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, IsUUID, IsInt, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEmail,
+  IsUUID,
+  IsInt,
+  IsIn,
+} from 'class-validator';
 
 type TipoPersonaDto = 'fisica' | 'moral';
 

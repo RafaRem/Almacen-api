@@ -9,7 +9,12 @@ import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-al
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InventarioAlmacen, Producto, Lote, MovimientoAlmacen]),
+    TypeOrmModule.forFeature([
+      InventarioAlmacen,
+      Producto,
+      Lote,
+      MovimientoAlmacen,
+    ]),
   ],
   controllers: [InventarioAlmacenController],
   providers: [InventarioAlmacenService],

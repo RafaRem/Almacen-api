@@ -18,7 +18,9 @@ export class FacturaDetalle {
   @Column({ type: 'uuid', name: 'facturaid' })
   facturaId: string;
 
-  @ManyToOne(() => Factura, (factura) => factura.detalles, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Factura, (factura) => factura.detalles, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'facturaid' })
   factura: Factura;
 

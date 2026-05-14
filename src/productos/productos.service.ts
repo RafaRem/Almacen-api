@@ -9,12 +9,14 @@ import { Producto } from './entities/producto.entity';
 import { CreateProductoDto } from './dto/create-producto.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
 import { ChangeLoteDto } from './dto/change-lote.dto';
+import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 
 @Injectable()
 export class ProductosService {
   constructor(
     @InjectRepository(Producto)
     private productosRepository: Repository<Producto>,
+    private inventarioService: InventarioAlmacenService,
   ) {}
 
   async create(createProductoDto: CreateProductoDto): Promise<Producto> {
@@ -23,7 +25,9 @@ export class ProductosService {
     });
 
     if (existingProducto) {
-      throw new ConflictException('Producto with this codigoBarras already exists');
+      throw new ConflictException(
+        'Producto with this codigoBarras already exists',
+      );
     }
 
     const producto = this.productosRepository.create(createProductoDto);
@@ -53,7 +57,9 @@ export class ProductosService {
       relations: ['laboratorio', 'lote'],
     });
     if (!producto) {
-      throw new NotFoundException(`Producto with codigoBarras ${codigo} not found`);
+      throw new NotFoundException(
+        `Producto with codigoBarras ${codigo} not found`,
+      );
     }
     return producto;
   }
@@ -65,23 +71,48 @@ export class ProductosService {
     });
   }
 
-  async update(id: string, updateProductoDto: UpdateProductoDto): Promise<Producto> {
+  async update(
+    id: string,
+    updateProductoDto: UpdateProductoDto,
+  ): Promise<Producto> {
     const producto = await this.findOne(id);
 
-    if (updateProductoDto.codigoBarras && updateProductoDto.codigoBarras !== producto.codigoBarras) {
+    if (
+      updateProductoDto.codigoBarras &&
+      updateProductoDto.codigoBarras !== producto.codigoBarras
+    ) {
       const existingProducto = await this.productosRepository.findOne({
         where: { codigoBarras: updateProductoDto.codigoBarras },
       });
       if (existingProducto) {
-        throw new ConflictException('Producto with this codigoBarras already exists');
+        throw new ConflictException(
+          'Producto with this codigoBarras already exists',
+        );
       }
     }
 
+    const margenAnterior = producto.margenRecomendado;
+
     Object.assign(producto, updateProductoDto);
-    return this.productosRepository.save(producto);
+    const savedProducto = await this.productosRepository.save(producto);
+
+    if (
+      updateProductoDto.margenRecomendado !== undefined &&
+      updateProductoDto.margenRecomendado !== margenAnterior
+    ) {
+      const inventarios = await this.inventarioService.findByProducto(id);
+      for (const inv of inventarios) {
+        await this.inventarioService.actualizarPrecioVenta(inv);
+      }
+    }
+
+    return savedProducto;
   }
 
-  async changeLote(id: string, changeLoteDto: ChangeLoteDto): Promise<Producto> {
+  async changeLote(
+    id: string,
+    changeLoteDto: ChangeLoteDto,
+  ): Promise<Producto> {
     const producto = await this.findOne(id);
     producto.loteId = changeLoteDto.loteId;
     return this.productosRepository.save(producto);
@@ -98,7 +129,9 @@ export class ProductosService {
     return this.productosRepository.save(producto);
   }
 
-  async checkExistence(codigosBarras: string[]): Promise<{ codigoBarras: string; existe: boolean; nombre?: string }[]> {
+  async checkExistence(
+    codigosBarras: string[],
+  ): Promise<{ codigoBarras: string; existe: boolean; nombre?: string }[]> {
     const productos = await this.productosRepository
       .createQueryBuilder('producto')
       .where('producto.codigoBarras IN (:...codigosBarras)')
@@ -106,8 +139,8 @@ export class ProductosService {
       .select(['producto.codigoBarras', 'producto.nombre'])
       .getMany();
 
-    return codigosBarras.map(codigo => {
-      const existente = productos.find(p => p.codigoBarras === codigo);
+    return codigosBarras.map((codigo) => {
+      const existente = productos.find((p) => p.codigoBarras === codigo);
       return {
         codigoBarras: codigo,
         existe: !!existente,

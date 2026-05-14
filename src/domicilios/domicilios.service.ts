@@ -58,13 +58,16 @@ export class DomiciliosService {
     });
   }
 
-  async create(clienteId: string, createDomicilioDto: CreateDomicilioDto): Promise<Domicilio> {
+  async create(
+    clienteId: string,
+    createDomicilioDto: CreateDomicilioDto,
+  ): Promise<Domicilio> {
     const existente = await this.findByCliente(clienteId);
     if (existente) {
       Object.assign(existente, createDomicilioDto);
       return this.domicilioRepository.save(existente);
     }
-    
+
     const domicilio = this.domicilioRepository.create({
       ...createDomicilioDto,
       clienteId,
@@ -72,10 +75,15 @@ export class DomiciliosService {
     return this.domicilioRepository.save(domicilio);
   }
 
-  async update(clienteId: string, updateDomicilioDto: Partial<CreateDomicilioDto>): Promise<Domicilio> {
+  async update(
+    clienteId: string,
+    updateDomicilioDto: Partial<CreateDomicilioDto>,
+  ): Promise<Domicilio> {
     const domicilio = await this.findByCliente(clienteId);
     if (!domicilio) {
-      throw new NotFoundException(`Domicilio para cliente ${clienteId} no encontrado`);
+      throw new NotFoundException(
+        `Domicilio para cliente ${clienteId} no encontrado`,
+      );
     }
     Object.assign(domicilio, updateDomicilioDto);
     return this.domicilioRepository.save(domicilio);
@@ -84,7 +92,9 @@ export class DomiciliosService {
   async delete(clienteId: string): Promise<void> {
     const result = await this.domicilioRepository.delete({ clienteId });
     if (result.affected === 0) {
-      throw new NotFoundException(`Domicilio para cliente ${clienteId} no encontrado`);
+      throw new NotFoundException(
+        `Domicilio para cliente ${clienteId} no encontrado`,
+      );
     }
   }
 }

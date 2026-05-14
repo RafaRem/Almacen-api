@@ -13,7 +13,7 @@ export class ConfiguracionesService {
   async getByClave(clave: string): Promise<Configuracion | null> {
     return this.configuracionRepository.findOne({
       select: ['id', 'clave', 'valor'],
-      where: { clave }
+      where: { clave },
     });
   }
 
@@ -24,13 +24,13 @@ export class ConfiguracionesService {
 
   async setValor(clave: string, valor: number): Promise<Configuracion> {
     let config = await this.getByClave(clave);
-    
+
     if (config) {
       config.valor = valor;
     } else {
       config = this.configuracionRepository.create({ clave, valor });
     }
-    
+
     return this.configuracionRepository.save(config);
   }
 

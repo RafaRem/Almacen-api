@@ -33,7 +33,7 @@ export class ReportesService {
       return [];
     }
 
-    const loteIds = lotes.map(l => l.id);
+    const loteIds = lotes.map((l) => l.id);
     return this.productosRepository
       .createQueryBuilder('producto')
       .leftJoinAndSelect('producto.lote', 'lote')
@@ -83,7 +83,7 @@ export class ReportesService {
       return [];
     }
 
-    const loteIds = lotes.map(l => l.id);
+    const loteIds = lotes.map((l) => l.id);
     return this.productosRepository
       .createQueryBuilder('producto')
       .leftJoinAndSelect('producto.lote', 'lote')

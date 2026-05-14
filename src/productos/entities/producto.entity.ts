@@ -51,10 +51,13 @@ export class Producto {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   precio: number;
 
-  @Column({ name: 'precio_venta', type: 'decimal', precision: 10, scale: 2, nullable: true })
-  precioVenta: number | null;
-
-  @Column({ name: 'margen_recomendado', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({
+    name: 'margen_recomendado',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
   margenRecomendado: number | null;
 
   @Column({ nullable: true })

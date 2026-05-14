@@ -1,5 +1,42 @@
-import { IsArray, IsOptional, IsString, ValidateNested, IsNumber } from 'class-validator';
+import {
+  IsArray,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  IsNumber,
+  IsBoolean,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+
+export class LotItemDto {
+  @IsString()
+  @IsOptional()
+  loteId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  numeroLote?: string;
+
+  @IsNumber()
+  @IsOptional()
+  cantidad?: number;
+
+  @IsString()
+  @IsOptional()
+  fechaCaducidad?: string | null;
+
+  @IsNumber()
+  @IsOptional()
+  precioUnitarioLote?: number;
+
+  @IsNumber()
+  @IsOptional()
+  ivaCfdi?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precioVenta?: number;
+}
 
 export class CartItemDto {
   @IsNumber()
@@ -33,6 +70,36 @@ export class CartItemDto {
   @IsNumber()
   @IsOptional()
   ivaTasa?: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LotItemDto)
+  @IsOptional()
+  itemsPorLote?: LotItemDto[];
+
+  @IsNumber()
+  @IsOptional()
+  stock?: number;
+
+  @IsNumber()
+  @IsOptional()
+  stockTotal?: number;
+
+  @IsNumber()
+  @IsOptional()
+  cantidadTotal?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precioUnitarioOriginal?: number;
+
+  @IsString()
+  @IsOptional()
+  numeroLoteDisplay?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  ivaDelProducto?: boolean;
 }
 
 export class SavedCartDto {

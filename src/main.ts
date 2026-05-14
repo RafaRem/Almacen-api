@@ -13,9 +13,10 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
+      whitelist: false,
       forbidNonWhitelisted: false,
       transform: true,
+      skipMissingProperties: true,
     }),
   );
 

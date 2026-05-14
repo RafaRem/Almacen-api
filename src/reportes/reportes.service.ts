@@ -104,7 +104,7 @@ export class ReportesService {
         'venta.createdat AS fecha_venta',
         'cliente.nombre AS cliente_nombre',
         'producto.nombre AS producto_nombre',
-        'lote.numero_lote AS numero_lote',
+        'lote.numeroLote AS numero_lote',
         'detalle.cantidad AS cantidad_venta',
         'detalle.subtotal AS subtotal',
       ])

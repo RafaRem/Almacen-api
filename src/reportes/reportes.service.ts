@@ -149,38 +149,25 @@ export class ReportesService {
       .andWhere('inventario.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
       .getOne();
 
-    const trazabilidadRaw = await this.detallesRepository
+    const detalles = await this.detallesRepository
       .createQueryBuilder('detalle')
-      .leftJoin('detalle.venta', 'venta')
-      .leftJoin('venta.cliente', 'cliente')
-      .leftJoin('detalle.lote', 'lote')
-      .select([
-        'venta.folio AS folio_venta',
-        'venta.createdat AS fecha_venta',
-        'cliente.nombre AS cliente_nombre',
-        'detalle.cantidad AS cantidad',
-        'lote.numeroLote AS numero_lote',
-        'inventario.precioUnitarioLote AS precio_unitario_lote',
-        'inventario.precioVenta AS precio_venta',
-        'detalle.subtotal AS subtotal',
-      ])
-      .leftJoin('inventario_almacen', 'inventario',
-        'inventario.productoid = detalle.productoid AND inventario.loteid = detalle.loteid AND inventario.almacenTipo = :tipo',
-        { tipo: AlmacenTipo.VENTAS })
+      .leftJoinAndSelect('detalle.venta', 'venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
+      .leftJoinAndSelect('detalle.lote', 'lote')
       .where('detalle.productoId = :productoId', { productoId })
       .andWhere('venta.statusId = :statusId', { statusId: 1 })
       .orderBy('venta.createdAt', 'DESC')
-      .getRawMany();
+      .getMany();
 
-    const trazabilidad = trazabilidadRaw.map((v) => ({
-      folioVenta: v.folio_venta,
-      fechaVenta: v.fecha_venta,
-      clienteNombre: v.cliente_nombre || 'Mostrador',
-      numeroLote: v.numero_lote,
-      cantidad: parseInt(v.cantidad, 10),
-      precioUnitarioLote: parseFloat(v.precio_unitario_lote || 0),
-      precioVenta: parseFloat(v.precio_venta || 0),
-      total: parseFloat(v.precio_venta || 0) * parseInt(v.cantidad, 10),
+    const trazabilidad = detalles.map((d) => ({
+      folioVenta: d.venta?.folio,
+      fechaVenta: d.venta?.createdAt,
+      clienteNombre: d.venta?.cliente?.nombre || 'Mostrador',
+      numeroLote: d.lote?.numeroLote,
+      cantidad: d.cantidad,
+      precioUnitarioLote: inventario?.precioUnitarioLote || 0,
+      precioVenta: d.precioUnitario,
+      total: Number(d.precioUnitario) * d.cantidad,
     }));
 
     return {

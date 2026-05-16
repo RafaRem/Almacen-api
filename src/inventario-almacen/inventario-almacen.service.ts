@@ -240,6 +240,14 @@ export class InventarioAlmacenService {
     }[];
     movimientoId?: string;
   }> {
+    if (!cantidad || cantidad <= 0) {
+      return {
+        success: false,
+        message: 'Cantidad inválida para reducir stock',
+        lotsUsed: [],
+      };
+    }
+
     return this.dataSource.transaction(async (manager) => {
       const inventarios = await manager.find(InventarioAlmacen, {
         where: { productoId, almacenTipo: almacenTipoOrigen },

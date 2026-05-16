@@ -31,6 +31,7 @@ import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { EmpresaModule } from './empresa/empresa.module';
 import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
 import { CartSessionModule } from './cart-session/cart-session.module';
+import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { CartSessionModule } from './cart-session/cart-session.module';
     EmpresaModule,
     TicketUploadsModule,
     CartSessionModule,
+    DetalleLoteModule,
   ],
   controllers: [AppController],
   providers: [AppService],

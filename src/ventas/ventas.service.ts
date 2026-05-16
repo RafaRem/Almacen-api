@@ -94,6 +94,12 @@ export class VentasService {
         AlmacenTipo.VENTAS,
       );
 
+      if (!productoVenta.cantidad || productoVenta.cantidad <= 0) {
+        throw new BadRequestException(
+          `Cantidad inválida para ${producto.nombre}. Cantidad: ${productoVenta.cantidad}`,
+        );
+      }
+
       if (stockDisponible < productoVenta.cantidad) {
         throw new BadRequestException(
           `Stock insuficiente para ${producto.nombre}. Disponible: ${stockDisponible}, Solicitado: ${productoVenta.cantidad}`,

@@ -5,6 +5,7 @@ import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
+import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import {
   CfdiPreviewDto,
@@ -22,6 +23,7 @@ export class CfdiService {
     @InjectRepository(Laboratorio)
     private laboratorioRepository: Repository<Laboratorio>,
     private inventarioAlmacenService: InventarioAlmacenService,
+    private detalleLoteService: DetalleLoteService,
   ) {}
 
   async parseXmlToPreview(xmlContent: string): Promise<CfdiPreviewDto> {
@@ -237,8 +239,16 @@ export class CfdiService {
         AlmacenTipo.RECEPCION,
         prodDto.cantidad,
         concepto?.ivaCfdi,
-        producto.precio,
+        concepto?.valorUnitario || 0,
       );
+
+      await this.detalleLoteService.create({
+        productoId: producto.id,
+        loteId: lote.id,
+        cantidad: prodDto.cantidad,
+        precioUnitario: concepto?.valorUnitario || 0,
+        ivaCfdi: concepto?.ivaCfdi || null,
+      });
     }
 
     return { productosCreados, productosExistentes };
@@ -253,8 +263,6 @@ export class CfdiService {
       nombre: concepto?.descripcion || prodDto.productoId,
       codigoBarras: prodDto.productoId,
       descripcion: concepto?.descripcion || '',
-      precio: concepto?.valorUnitario || 0,
-      stock: 0,
       stockMinimo: prodDto.stockMinimo || 10,
       stockMaximo: prodDto.stockMaximo || 100,
       claveProdServ: concepto?.claveProdServ || undefined,

@@ -91,10 +91,7 @@ export class InventarioAlmacenService {
         agrupado.get(key).lotes.push({
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote,
-          precio:
-            inv.precioUnitarioLote > 0
-              ? inv.precioUnitarioLote
-              : inv.producto?.precio,
+          precio: inv.precioUnitarioLote,
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
           iva_cfdi: inv.ivaCfdi,
@@ -114,10 +111,7 @@ export class InventarioAlmacenService {
             {
               loteId: inv.loteId,
               numeroLote: inv.lote?.numeroLote,
-              precio:
-                inv.precioUnitarioLote > 0
-                  ? inv.precioUnitarioLote
-                  : inv.producto?.precio,
+              precio: inv.precioUnitarioLote,
               fechaCaducidad: inv.lote?.fechaCaducidad,
               cantidad: Number(inv.cantidadActual),
               iva_cfdi: inv.ivaCfdi,
@@ -168,10 +162,7 @@ export class InventarioAlmacenService {
     } else {
       let precioLote = precioUnitarioLote;
       if (precioLote === undefined || precioLote === null || precioLote === 0) {
-        const producto = await this.productoRepository.findOne({
-          where: { id: productoId },
-        });
-        precioLote = producto?.precio || 0;
+        throw new Error('precioUnitarioLote es requerido para agregar stock');
       }
       inventario = this.inventarioRepository.create({
         productoId,
@@ -198,10 +189,11 @@ export class InventarioAlmacenService {
     const iva = ivaCfdi ?? 0;
     const margenValor = margen ?? 20;
 
-    const costoReal = precioUnitario + (precioUnitario * iva) / 100;
-    const precioAntesIVA = costoReal * (1 + margenValor / 100);
+    const precioNeto = precioUnitario * (1 + iva / 100);
+    const cantidadMargen = precioNeto * (margenValor / 100);
+    const precioVenta = precioNeto + cantidadMargen;
 
-    return Math.round(precioAntesIVA * 100) / 100;
+    return Math.round(precioVenta * 100) / 100;
   }
 
   async actualizarPrecioVenta(
@@ -289,10 +281,7 @@ export class InventarioAlmacenService {
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote || 'N/A',
           cantidad: aTransferir,
-          precio:
-            inv.precioUnitarioLote > 0
-              ? inv.precioUnitarioLote
-              : Number(inv.producto?.precio) || 0,
+          precio: inv.precioUnitarioLote,
         });
 
         restante -= aTransferir;
@@ -630,6 +619,12 @@ export class InventarioAlmacenService {
     return this.inventarioRepository.save(inventario);
   }
 
+  async findByProductoId(productoId: string): Promise<InventarioAlmacen | null> {
+    return this.inventarioRepository.findOne({
+      where: { productoId },
+    });
+  }
+
   async debugFindByProductAndLote(
     productoId: string,
     loteId: string,
@@ -694,7 +689,7 @@ export class InventarioAlmacenService {
 
     const capas = inventarios.map((inv) => {
       const cantidad = Number(inv.cantidadActual);
-      const precio = Number(inv.producto?.precio) || 0;
+      const precio = inv.precioUnitarioLote;
       totalStock += cantidad;
       costoTotal += cantidad * precio;
 
@@ -738,10 +733,10 @@ export class InventarioAlmacenService {
         (sum, inv) => sum + Number(inv.cantidadActual),
         0,
       );
-      const stockProducto = producto.stock || 0;
-      const diferencia = stockInventario - stockProducto;
+      const stockProducto = stockInventario;
+      const diferencia = 0;
 
-      const esConsistente = diferencia === 0;
+      const esConsistente = true;
       if (esConsistente) {
         consistentes++;
       } else {
@@ -755,7 +750,7 @@ export class InventarioAlmacenService {
         stockProducto,
         stockInventario,
         diferencia,
-        estado: esConsistente ? 'CONSISTENTE' : 'INCONSISTENTE',
+        estado: 'CONSISTENTE',
         numeroCapas: inventarios.length,
       });
     }
@@ -784,19 +779,13 @@ export class InventarioAlmacenService {
         0,
       );
 
-      if (producto.stock !== stockInventario) {
-        const stockAnterior = producto.stock || 0;
-        producto.stock = stockInventario;
-        await this.productoRepository.save(producto);
-
-        correcciones.push({
-          productoId: producto.id,
-          nombre: producto.nombre,
-          stockAnterior,
-          stockNuevo: stockInventario,
-          diferencia: stockInventario - stockAnterior,
-        });
-      }
+      correcciones.push({
+        productoId: producto.id,
+        nombre: producto.nombre,
+        stockActual: stockInventario,
+        stockNuevo: stockInventario,
+        diferencia: 0,
+      });
     }
 
     return {

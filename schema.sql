@@ -230,6 +230,23 @@ CREATE TABLE "configuraciones_sistema" (
   "updated_at" timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
+-- =============================================
+-- Detalle Lote (para análisis de reportes de entradas)
+-- Mantiene datos detallados del lote al momento de la recepción
+-- =============================================
+CREATE TABLE "detalle_lote" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "productoId" uuid NOT NULL REFERENCES "productos"("id"),
+  "loteId" uuid NOT NULL REFERENCES "lotes"("id"),
+  "cantidad" decimal(10,2) DEFAULT 0,
+  "precioUnitario" decimal(10,2) DEFAULT 0,
+  "ivaCfdi" decimal(5,2),
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("productoId", "loteId")
+);
+
+
 INSERT INTO configuraciones_sistema ("clave", "valor") VALUES
   ('empresa', '{"nombre": "Distribuidora", "direccion": "", "rfc": "", "telefono": "", "email": ""}');
 
@@ -406,8 +423,7 @@ BEGIN
     )
     WHERE producto_id = NEW.id;
 
-    RETURN NEW;
-END;
+
 $$ LANGUAGE plpgsql;
 
 -- Trigger on productos for margen_recomendado changes

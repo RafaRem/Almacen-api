@@ -177,7 +177,7 @@ export class ReportesService {
         laboratorio: producto.laboratorio?.nombre || 'N/A',
         stockMinimo: producto.stockMinimo,
         stockMaximo: producto.stockMaximo,
-        stockActual: producto.stock,
+        stockActual: inventario?.cantidadActual || 0,
       },
       precioUnitarioLote: inventario?.precioUnitarioLote || 0,
       precioVenta: inventario?.precioVenta || 0,
@@ -222,14 +222,16 @@ export class ReportesService {
     });
   }
 
-  async getStockMinimo(): Promise<Producto[]> {
-    return this.productosRepository
-      .createQueryBuilder('producto')
+  async getStockMinimo(): Promise<any[]> {
+    return this.inventarioRepository
+      .createQueryBuilder('inventario')
+      .leftJoinAndSelect('inventario.producto', 'producto')
+      .leftJoinAndSelect('inventario.lote', 'lote')
       .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
-      .leftJoinAndSelect('producto.lote', 'lote')
-      .where('producto.stock <= producto.stockMinimo')
+      .where('inventario.cantidadActual <= producto.stockMinimo')
+      .andWhere('inventario.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
       .andWhere('producto.statusId = :statusId', { statusId: 1 })
-      .orderBy('producto.stock', 'ASC')
+      .orderBy('inventario.cantidadActual', 'ASC')
       .getMany();
   }
 

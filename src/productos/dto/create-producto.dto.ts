@@ -42,14 +42,6 @@ export class CreateProductoDto {
 
   @IsOptional()
   @IsNumber()
-  precio?: number;
-
-  @IsOptional()
-  @IsNumber()
-  precioVenta?: number;
-
-  @IsOptional()
-  @IsNumber()
   margenRecomendado?: number;
 
   @IsOptional()

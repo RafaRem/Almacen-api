@@ -36,14 +36,14 @@ export class ProductosService {
 
   async findAll(): Promise<Producto[]> {
     return this.productosRepository.find({
-      relations: ['laboratorio', 'lote'],
+      relations: ['laboratorio'],
     });
   }
 
   async findOne(id: string): Promise<Producto> {
     const producto = await this.productosRepository.findOne({
       where: { id },
-      relations: ['laboratorio', 'lote'],
+      relations: ['laboratorio'],
     });
     if (!producto) {
       throw new NotFoundException(`Producto with ID ${id} not found`);
@@ -54,7 +54,7 @@ export class ProductosService {
   async findByCodigoBarras(codigo: string): Promise<Producto> {
     const producto = await this.productosRepository.findOne({
       where: { codigoBarras: codigo },
-      relations: ['laboratorio', 'lote'],
+      relations: ['laboratorio'],
     });
     if (!producto) {
       throw new NotFoundException(
@@ -67,7 +67,7 @@ export class ProductosService {
   async findByNombre(nombre: string): Promise<Producto[]> {
     return this.productosRepository.find({
       where: { nombre: Like(`%${nombre}%`) },
-      relations: ['laboratorio', 'lote'],
+      relations: ['laboratorio'],
     });
   }
 
@@ -113,9 +113,7 @@ export class ProductosService {
     id: string,
     changeLoteDto: ChangeLoteDto,
   ): Promise<Producto> {
-    const producto = await this.findOne(id);
-    producto.loteId = changeLoteDto.loteId;
-    return this.productosRepository.save(producto);
+    throw new Error('El campo loteId ya no existe en productos. Use inventario_almacen para gestionar lotes.');
   }
 
   async remove(id: string): Promise<void> {
@@ -124,9 +122,7 @@ export class ProductosService {
   }
 
   async updateStock(id: string, newStock: number): Promise<Producto> {
-    const producto = await this.findOne(id);
-    producto.stock = newStock;
-    return this.productosRepository.save(producto);
+    throw new Error('El campo stock ya no existe en productos. Use inventario_almacen para gestionar stock.');
   }
 
   async checkExistence(

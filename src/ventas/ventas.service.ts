@@ -127,7 +127,11 @@ export class VentasService {
         });
       }
 
-      const precioUnitario = Number(producto.precio);
+      const precioUnitario = resultadoFEPU.lotsUsed.length > 0
+        ? resultadoFEPU.lotsUsed[0].precio
+        : 0;
+
+      const precioVenta = productoVenta.precioVenta ?? precioUnitario;
 
       let descuentoLinea = 0;
       try {
@@ -146,20 +150,20 @@ export class VentasService {
             descuentoLinea = mejor.monto;
           } else {
             descuentoLinea =
-              (precioUnitario * productoVenta.cantidad * mejor.porcentaje) /
+              (precioVenta * productoVenta.cantidad * mejor.porcentaje) /
               100;
           }
         }
       } catch {}
 
       const subtotalLinea =
-        precioUnitario * productoVenta.cantidad - descuentoLinea;
+        precioVenta * productoVenta.cantidad - descuentoLinea;
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
       const primerLoteId =
-        resultadoFEPU.lotsUsed[0]?.loteId || producto.loteId || '';
+        resultadoFEPU.lotsUsed[0]?.loteId || '';
 
       detalles.push({
         productoId: productoVenta.productoId,
@@ -473,7 +477,8 @@ export class VentasService {
         continue;
       }
 
-      const precioUnitario = Number(producto.precio);
+      const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(productoVenta.productoId);
+      const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
       const subtotalLinea = precioUnitario * productoVenta.cantidad;
 
       let descuentoLinea = 0;
@@ -499,7 +504,7 @@ export class VentasService {
       }[] = [];
 
       try {
-        const fechaCaducidad = producto.lote?.fechaCaducidad;
+        const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
         const calculo = await this.descuentosService.calcularMejorDescuento(
           productoVenta.productoId,
           productoVenta.cantidad,

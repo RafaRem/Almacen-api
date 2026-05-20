@@ -9,6 +9,7 @@ import {
   IsEnum,
   IsUUID,
   ValidateIf,
+  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MetodoPago } from '../../common/enums/metodo-pago.enum';
@@ -27,6 +28,10 @@ export class ProductoVentaDto {
   @IsInt()
   @Min(1)
   cantidad: number;
+
+  @IsNumber()
+  @IsOptional()
+  precioVenta?: number;
 }
 
 export class CreateVentaDto {

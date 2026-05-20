@@ -154,10 +154,7 @@ export class FacturasService {
         );
       }
 
-      const precioUnitario =
-        prod.precioUnitario !== undefined
-          ? prod.precioUnitario
-          : Number(producto.precio);
+      const precioUnitario = prod.precioUnitario || 0;
 
       const cantidad = prod.cantidad;
       const descuento = prod.descuento || 0;
@@ -180,7 +177,7 @@ export class FacturasService {
 
       detalles.push({
         productoId: prod.productoId,
-        loteId: prod.loteId || producto.loteId || '',
+        loteId: prod.loteId || '',
         claveProdServ: producto.claveProdServ || '01010101',
         claveUnidad: producto.claveUnidad || 'ACT',
         descripcion: producto.nombre,
@@ -306,10 +303,7 @@ export class FacturasService {
         );
       }
 
-      const precioUnitario =
-        prod.precioUnitario !== undefined
-          ? prod.precioUnitario
-          : Number(producto.precio);
+      const precioUnitario = prod.precioUnitario || 0;
 
       const cantidad = prod.cantidad!;
       const descuento = prod.descuento || 0;
@@ -331,7 +325,7 @@ export class FacturasService {
 
       detalles.push({
         productoId: prod.productoId,
-        loteId: prod.loteId || producto.loteId || '',
+        loteId: prod.loteId || '',
         claveProdServ: producto.claveProdServ || '01010101',
         claveUnidad: producto.claveUnidad || 'ACT',
         descripcion: producto.nombre,

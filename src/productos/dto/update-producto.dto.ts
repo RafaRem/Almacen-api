@@ -42,10 +42,6 @@ export class UpdateProductoDto {
 
   @IsOptional()
   @IsNumber()
-  precio?: number;
-
-  @IsOptional()
-  @IsNumber()
   margenRecomendado?: number;
 
   @IsOptional()

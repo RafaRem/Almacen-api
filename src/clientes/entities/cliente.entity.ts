@@ -68,15 +68,15 @@ export class Cliente {
   @UpdateDateColumn({ name: 'updatedat' })
   updatedAt: Date;
 
-  @OneToMany(() => Telefono, telefono => telefono.cliente)
+  @OneToMany(() => Telefono, (telefono) => telefono.cliente)
   telefonos: Telefono[];
 
-  @OneToOne(() => Domicilio, domicilio => domicilio.cliente)
+  @OneToOne(() => Domicilio, (domicilio) => domicilio.cliente)
   domicilio: Domicilio;
 
-  @OneToOne(() => FacturacionCliente, fc => fc.cliente)
+  @OneToOne(() => FacturacionCliente, (fc) => fc.cliente)
   facturacionCliente: FacturacionCliente;
 
-  @OneToOne(() => Credito, credito => credito.cliente)
+  @OneToOne(() => Credito, (credito) => credito.cliente)
   credito: Credito;
 }

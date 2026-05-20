@@ -34,7 +34,10 @@ export class CreditosService {
     });
   }
 
-  async create(clienteId: string, createDto: CreateCreditoDto): Promise<Credito> {
+  async create(
+    clienteId: string,
+    createDto: CreateCreditoDto,
+  ): Promise<Credito> {
     const existente = await this.findByCliente(clienteId);
     if (existente) {
       Object.assign(existente, createDto);
@@ -51,10 +54,15 @@ export class CreditosService {
     return this.creditoRepository.save(credito);
   }
 
-  async update(clienteId: string, updateDto: Partial<CreateCreditoDto>): Promise<Credito> {
+  async update(
+    clienteId: string,
+    updateDto: Partial<CreateCreditoDto>,
+  ): Promise<Credito> {
     const credito = await this.findByCliente(clienteId);
     if (!credito) {
-      throw new NotFoundException(`Crédito para cliente ${clienteId} no encontrado`);
+      throw new NotFoundException(
+        `Crédito para cliente ${clienteId} no encontrado`,
+      );
     }
     Object.assign(credito, updateDto);
     return this.creditoRepository.save(credito);
@@ -63,14 +71,16 @@ export class CreditosService {
   async usarCredito(clienteId: string, monto: number): Promise<Credito> {
     const credito = await this.findByCliente(clienteId);
     if (!credito) {
-      throw new NotFoundException(`Crédito para cliente ${clienteId} no encontrado`);
+      throw new NotFoundException(
+        `Crédito para cliente ${clienteId} no encontrado`,
+      );
     }
-    
+
     const disponible = Number(credito.limite) - Number(credito.saldoActual);
     if (monto > disponible) {
       throw new Error('El monto excede el crédito disponible');
     }
-    
+
     credito.saldoActual = Number(credito.saldoActual) + monto;
     return this.creditoRepository.save(credito);
   }
@@ -84,7 +94,9 @@ export class CreditosService {
   async delete(clienteId: string): Promise<void> {
     const result = await this.creditoRepository.delete({ clienteId });
     if (result.affected === 0) {
-      throw new NotFoundException(`Crédito para cliente ${clienteId} no encontrado`);
+      throw new NotFoundException(
+        `Crédito para cliente ${clienteId} no encontrado`,
+      );
     }
   }
 }

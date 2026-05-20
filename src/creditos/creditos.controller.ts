@@ -15,12 +15,16 @@ export class CreditosController {
   constructor(private readonly creditosService: CreditosService) {}
 
   @Get('cliente/:clienteId')
-  async findByCliente(@Param('clienteId') clienteId: string): Promise<Credito | null> {
+  async findByCliente(
+    @Param('clienteId') clienteId: string,
+  ): Promise<Credito | null> {
     return this.creditosService.findByCliente(clienteId);
   }
 
   @Get('cliente/:clienteId/disponible')
-  async getDisponible(@Param('clienteId') clienteId: string): Promise<{ disponible: number }> {
+  async getDisponible(
+    @Param('clienteId') clienteId: string,
+  ): Promise<{ disponible: number }> {
     const disponible = await this.creditosService.getDisponible(clienteId);
     return { disponible };
   }

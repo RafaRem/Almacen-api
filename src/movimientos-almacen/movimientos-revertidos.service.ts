@@ -1,7 +1,22 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
-import { MovimientoRevertido, TipoReversion, OrigenOperacion } from './entities/movimiento-revertido.entity';
+import {
+  Repository,
+  DataSource,
+  Between,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+} from 'typeorm';
+import {
+  MovimientoRevertido,
+  TipoReversion,
+  OrigenOperacion,
+} from './entities/movimiento-revertido.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { ConfiguracionSistema } from '../configuracion/entities/configuracion-sistema.entity';
@@ -132,20 +147,26 @@ export class MovimientosRevertidosService {
       .createQueryBuilder('mr')
       .leftJoinAndSelect('mr.producto', 'producto')
       .leftJoinAndSelect('mr.lote', 'lote')
-      .where('mr.tipoReversion IN (:...tipos)', { 
-        tipos: [TipoReversion.FAILED_BATCH, TipoReversion.ROLLBACK] 
+      .where('mr.tipoReversion IN (:...tipos)', {
+        tipos: [TipoReversion.FAILED_BATCH, TipoReversion.ROLLBACK],
       });
 
     if (filtros.productoId) {
-      queryBuilder.andWhere('mr.productoId = :productoId', { productoId: filtros.productoId });
+      queryBuilder.andWhere('mr.productoId = :productoId', {
+        productoId: filtros.productoId,
+      });
     }
 
     if (filtros.fechaDesde) {
-      queryBuilder.andWhere('mr.fechaOperacionOriginal >= :fechaDesde', { fechaDesde: filtros.fechaDesde });
+      queryBuilder.andWhere('mr.fechaOperacionOriginal >= :fechaDesde', {
+        fechaDesde: filtros.fechaDesde,
+      });
     }
 
     if (filtros.fechaHasta) {
-      queryBuilder.andWhere('mr.fechaOperacionOriginal <= :fechaHasta', { fechaHasta: filtros.fechaHasta });
+      queryBuilder.andWhere('mr.fechaOperacionOriginal <= :fechaHasta', {
+        fechaHasta: filtros.fechaHasta,
+      });
     }
 
     queryBuilder.orderBy('mr.fechaOperacionOriginal', 'DESC');
@@ -192,24 +213,32 @@ export class MovimientosRevertidosService {
     } else {
       // Por defecto, mostrar todos los tipos excepto FAILED_BATCH y ROLLBACK
       queryBuilder.andWhere('mr.tipoReversion NOT IN (:...tipos)', {
-        tipos: [TipoReversion.FAILED_BATCH, TipoReversion.ROLLBACK]
+        tipos: [TipoReversion.FAILED_BATCH, TipoReversion.ROLLBACK],
       });
     }
 
     if (filtros.productoId) {
-      queryBuilder.andWhere('mr.productoId = :productoId', { productoId: filtros.productoId });
+      queryBuilder.andWhere('mr.productoId = :productoId', {
+        productoId: filtros.productoId,
+      });
     }
 
     if (filtros.userIdRevirtio) {
-      queryBuilder.andWhere('mr.userIdRevirtio = :userId', { userId: filtros.userIdRevirtio });
+      queryBuilder.andWhere('mr.userIdRevirtio = :userId', {
+        userId: filtros.userIdRevirtio,
+      });
     }
 
     if (filtros.fechaDesde) {
-      queryBuilder.andWhere('mr.fechaReversion >= :fechaDesde', { fechaDesde: filtros.fechaDesde });
+      queryBuilder.andWhere('mr.fechaReversion >= :fechaDesde', {
+        fechaDesde: filtros.fechaDesde,
+      });
     }
 
     if (filtros.fechaHasta) {
-      queryBuilder.andWhere('mr.fechaReversion <= :fechaHasta', { fechaHasta: filtros.fechaHasta });
+      queryBuilder.andWhere('mr.fechaReversion <= :fechaHasta', {
+        fechaHasta: filtros.fechaHasta,
+      });
     }
 
     queryBuilder.orderBy('mr.fechaReversion', 'DESC');
@@ -226,7 +255,9 @@ export class MovimientosRevertidosService {
     };
   }
 
-  async getFailedActionsPorProducto(productoId: string): Promise<MovimientoRevertido[]> {
+  async getFailedActionsPorProducto(
+    productoId: string,
+  ): Promise<MovimientoRevertido[]> {
     return this.revertidoRepository.find({
       where: {
         productoId,
@@ -306,8 +337,12 @@ export class MovimientosRevertidosService {
     const stockImpact: any[] = [];
 
     if (movimientoOriginal.almacenDestino) {
-      const stockOrigenAntes = Number(stockInventarioOrigen?.cantidadActual || 0);
-      const stockDestinoAntes = Number(stockInventarioDestino?.cantidadActual || 0);
+      const stockOrigenAntes = Number(
+        stockInventarioOrigen?.cantidadActual || 0,
+      );
+      const stockDestinoAntes = Number(
+        stockInventarioDestino?.cantidadActual || 0,
+      );
       const cantidad = Number(movimientoOriginal.cantidad);
 
       acciones.push({
@@ -345,7 +380,9 @@ export class MovimientosRevertidosService {
         stockDespues: stockDestinoAntes - Number(movimientoOriginal.cantidad),
       });
     } else {
-      const stockOrigenAntes = Number(stockInventarioOrigen?.cantidadActual || 0);
+      const stockOrigenAntes = Number(
+        stockInventarioOrigen?.cantidadActual || 0,
+      );
 
       acciones.push({
         tipo: 'RESTORE_STOCK',
@@ -383,7 +420,9 @@ export class MovimientosRevertidosService {
   }> {
     const configPermitir = await this.getConfig();
     if (!configPermitir.permitirReversiones) {
-      throw new ForbiddenException('Las reversiones manuales están deshabilitadas');
+      throw new ForbiddenException(
+        'Las reversiones manuales están deshabilitadas',
+      );
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -409,7 +448,7 @@ export class MovimientosRevertidosService {
         });
 
         const subsecuentesDespues = subsecuentes.filter(
-          m => m.fecha > movimientoOriginal.fecha && m.id !== movimientoId
+          (m) => m.fecha > movimientoOriginal.fecha && m.id !== movimientoId,
         );
 
         for (const sub of subsecuentesDespues) {
@@ -441,7 +480,9 @@ export class MovimientosRevertidosService {
       });
 
       if (inventarioOrigen) {
-        inventarioOrigen.cantidadActual = Number(inventarioOrigen.cantidadActual) + Number(movimientoOriginal.cantidad);
+        inventarioOrigen.cantidadActual =
+          Number(inventarioOrigen.cantidadActual) +
+          Number(movimientoOriginal.cantidad);
         inventarioOrigen.ultimoMovimientoId = savedInverso.id;
         await manager.save(inventarioOrigen);
       }
@@ -456,7 +497,9 @@ export class MovimientosRevertidosService {
         });
 
         if (inventarioDestino) {
-          inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) - Number(movimientoOriginal.cantidad);
+          inventarioDestino.cantidadActual =
+            Number(inventarioDestino.cantidadActual) -
+            Number(movimientoOriginal.cantidad);
           inventarioDestino.ultimoMovimientoId = savedInverso.id;
           await manager.save(inventarioDestino);
         }
@@ -501,54 +544,84 @@ export class MovimientosRevertidosService {
       where: { activo: true },
     });
 
-    const configMap = new Map(configs.map(c => [c.clave, c.valor]));
+    const configMap = new Map(configs.map((c) => [c.clave, c.valor]));
 
     return {
-      revertirAutomaticoFallos: configMap.get('REVERTIR_AUTOMATICO_FALLOS')?.enabled ?? false,
-      permitirReversiones: configMap.get('PERMITIR_REVERSIONES')?.enabled ?? true,
+      revertirAutomaticoFallos:
+        configMap.get('REVERTIR_AUTOMATICO_FALLOS')?.enabled ?? false,
+      permitirReversiones:
+        configMap.get('PERMITIR_REVERSIONES')?.enabled ?? true,
       diasRetencionFA: configMap.get('DIAS_RETENCION_FA')?.dias ?? 30,
     };
   }
 
-  async updateConfig(config: {
-    revertirAutomaticoFallos?: boolean;
-    permitirReversiones?: boolean;
-    diasRetencionFA?: number;
-  }, userId: string): Promise<void> {
+  async updateConfig(
+    config: {
+      revertirAutomaticoFallos?: boolean;
+      permitirReversiones?: boolean;
+      diasRetencionFA?: number;
+    },
+    userId: string,
+  ): Promise<void> {
     if (config.revertirAutomaticoFallos !== undefined) {
-      await this.configuracionRepository.upsert({
-        clave: 'REVERTIR_AUTOMATICO_FALLOS',
-        valor: { enabled: config.revertirAutomaticoFallos } as any,
-        descripcion: 'Reversión automática en fallos de batch',
-        updatedBy: userId,
-      }, ['clave']);
+      await this.configuracionRepository.upsert(
+        {
+          clave: 'REVERTIR_AUTOMATICO_FALLOS',
+          valor: { enabled: config.revertirAutomaticoFallos } as any,
+          descripcion: 'Reversión automática en fallos de batch',
+          updatedBy: userId,
+        },
+        ['clave'],
+      );
     }
 
     if (config.permitirReversiones !== undefined) {
-      await this.configuracionRepository.upsert({
-        clave: 'PERMITIR_REVERSIONES',
-        valor: { enabled: config.permitirReversiones } as any,
-        descripcion: 'Permitir reversiones manuales',
-        updatedBy: userId,
-      }, ['clave']);
+      await this.configuracionRepository.upsert(
+        {
+          clave: 'PERMITIR_REVERSIONES',
+          valor: { enabled: config.permitirReversiones } as any,
+          descripcion: 'Permitir reversiones manuales',
+          updatedBy: userId,
+        },
+        ['clave'],
+      );
     }
 
     if (config.diasRetencionFA !== undefined) {
-      await this.configuracionRepository.upsert({
-        clave: 'DIAS_RETENCION_FA',
-        valor: { dias: config.diasRetencionFA } as any,
-        descripcion: 'Días de retención para historial FA',
-        updatedBy: userId,
-      }, ['clave']);
+      await this.configuracionRepository.upsert(
+        {
+          clave: 'DIAS_RETENCION_FA',
+          valor: { dias: config.diasRetencionFA } as any,
+          descripcion: 'Días de retención para historial FA',
+          updatedBy: userId,
+        },
+        ['clave'],
+      );
     }
   }
 
   async inicializarConfiguraciones(): Promise<void> {
     const configuraciones = [
-      { clave: 'REVERTIR_AUTOMATICO_FALLOS', valor: { enabled: false }, descripcion: 'Reversión automática en fallos de batch' },
-      { clave: 'USUARIO_SISTEMA_ID', valor: { id: SYSTEM_USER_ID }, descripcion: 'ID del usuario sistema' },
-      { clave: 'DIAS_RETENCION_FA', valor: { dias: 30 }, descripcion: 'Días de retención para historial FA' },
-      { clave: 'PERMITIR_REVERSIONES', valor: { enabled: true }, descripcion: 'Permitir reversiones manuales' },
+      {
+        clave: 'REVERTIR_AUTOMATICO_FALLOS',
+        valor: { enabled: false },
+        descripcion: 'Reversión automática en fallos de batch',
+      },
+      {
+        clave: 'USUARIO_SISTEMA_ID',
+        valor: { id: SYSTEM_USER_ID },
+        descripcion: 'ID del usuario sistema',
+      },
+      {
+        clave: 'DIAS_RETENCION_FA',
+        valor: { dias: 30 },
+        descripcion: 'Días de retención para historial FA',
+      },
+      {
+        clave: 'PERMITIR_REVERSIONES',
+        valor: { enabled: true },
+        descripcion: 'Permitir reversiones manuales',
+      },
     ];
 
     for (const config of configuraciones) {

@@ -42,16 +42,34 @@ export class Venta {
   @OneToMany(() => PagoVenta, (pago) => pago.venta)
   pagos: PagoVenta[];
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'subtotal', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    name: 'subtotal',
+    default: 0,
+  })
   subtotal: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'descuentoaplicado', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    name: 'descuentoaplicado',
+    default: 0,
+  })
   descuentoAplicado: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'iva', default: 0 })
   iva: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'total', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    name: 'total',
+    default: 0,
+  })
   total: number;
 
   @Column({

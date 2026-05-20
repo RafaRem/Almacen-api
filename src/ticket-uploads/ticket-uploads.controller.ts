@@ -20,14 +20,14 @@ export class TicketUploadsController {
 
   @Post('logo')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadLogo(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req,
-  ) {
+  async uploadLogo(@UploadedFile() file: Express.Multer.File, @Request() req) {
     if (!file) {
       return { error: 'No se proporcionó archivo' };
     }
-    return this.ticketUploadsService.saveLogo(file, req.user?.userId || 'SYSTEM');
+    return this.ticketUploadsService.saveLogo(
+      file,
+      req.user?.userId || 'SYSTEM',
+    );
   }
 
   @Get('logo')

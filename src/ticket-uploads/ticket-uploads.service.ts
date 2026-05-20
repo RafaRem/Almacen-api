@@ -27,25 +27,40 @@ export class TicketUploadsService {
     }
   }
 
-  async saveLogo(file: MulterFile, userId: string): Promise<{ logoUrl: string }> {
+  async saveLogo(
+    file: MulterFile,
+    userId: string,
+  ): Promise<{ logoUrl: string }> {
     if (!file) {
       throw new BadRequestException('No se proporcionó archivo');
     }
 
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+    ];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Tipo de archivo no permitido. Solo JPG, PNG, GIF, WEBP');
+      throw new BadRequestException(
+        'Tipo de archivo no permitido. Solo JPG, PNG, GIF, WEBP',
+      );
     }
 
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
-      throw new BadRequestException('El archivo excede el tamaño máximo de 2MB');
+      throw new BadRequestException(
+        'El archivo excede el tamaño máximo de 2MB',
+      );
     }
 
     const previousLogo = await this.getLogoUrl();
     if (previousLogo) {
       try {
-        const oldPath = path.join(process.cwd(), previousLogo.replace(/^\//, ''));
+        const oldPath = path.join(
+          process.cwd(),
+          previousLogo.replace(/^\//, ''),
+        );
         if (fs.existsSync(oldPath)) {
           fs.unlinkSync(oldPath);
         }

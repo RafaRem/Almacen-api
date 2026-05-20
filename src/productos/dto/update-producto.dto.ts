@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsNumber, IsUUID, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsUUID,
+  IsEnum,
+} from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 
 export class UpdateProductoDto {
@@ -33,14 +39,6 @@ export class UpdateProductoDto {
   @IsOptional()
   @IsNumber()
   stockMaximo?: number;
-
-  @IsOptional()
-  @IsNumber()
-  precio?: number;
-
-  @IsOptional()
-  @IsNumber()
-  precioVenta?: number;
 
   @IsOptional()
   @IsNumber()

@@ -39,15 +39,17 @@ export function validateClienteCFDI(
 
 export function validateRFC(rfc: string): boolean {
   if (!rfc) return false;
-  
+
   const rfcClean = rfc.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  
+
   if (rfcClean.length !== 12 && rfcClean.length !== 13) {
     return false;
   }
-  
+
   const personaFisicaPattern = /^[A-Z]{4}\d{6}[A-Z0-9]{3}$/;
   const personaMoralPattern = /^[A-Z]{3}\d{6}[A-Z0-9]{3}$/;
-  
-  return personaFisicaPattern.test(rfcClean) || personaMoralPattern.test(rfcClean);
+
+  return (
+    personaFisicaPattern.test(rfcClean) || personaMoralPattern.test(rfcClean)
+  );
 }

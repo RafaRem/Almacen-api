@@ -29,13 +29,13 @@ export class InventarioAlmacenController {
   @UseGuards(JwtAuthGuard)
   findByAlmacen(@Param('tipo') tipo: string) {
     const tipoMap: Record<string, AlmacenTipo> = {
-      'BODEGA': AlmacenTipo.RECEPCION,
-      'RECEPCION': AlmacenTipo.RECEPCION,
-      'VENTAS': AlmacenTipo.VENTAS,
-      'MERMAS': AlmacenTipo.MERMAS,
-      'CADUCADOS': AlmacenTipo.CADUCADOS,
-      'DONADOS': AlmacenTipo.DONADOS,
-      'DESTRUCCION': AlmacenTipo.DESTRUCCION,
+      BODEGA: AlmacenTipo.RECEPCION,
+      RECEPCION: AlmacenTipo.RECEPCION,
+      VENTAS: AlmacenTipo.VENTAS,
+      MERMAS: AlmacenTipo.MERMAS,
+      CADUCADOS: AlmacenTipo.CADUCADOS,
+      DONADOS: AlmacenTipo.DONADOS,
+      DESTRUCCION: AlmacenTipo.DESTRUCCION,
     };
     const almacenTipo = tipoMap[tipo.toUpperCase()];
     if (almacenTipo === undefined) {
@@ -48,13 +48,13 @@ export class InventarioAlmacenController {
   @UseGuards(JwtAuthGuard)
   getStockPorAlmacen(@Param('tipo') tipo: string) {
     const tipoMap: Record<string, AlmacenTipo> = {
-      'BODEGA': AlmacenTipo.RECEPCION,
-      'RECEPCION': AlmacenTipo.RECEPCION,
-      'VENTAS': AlmacenTipo.VENTAS,
-      'MERMAS': AlmacenTipo.MERMAS,
-      'CADUCADOS': AlmacenTipo.CADUCADOS,
-      'DONADOS': AlmacenTipo.DONADOS,
-      'DESTRUCCION': AlmacenTipo.DESTRUCCION,
+      BODEGA: AlmacenTipo.RECEPCION,
+      RECEPCION: AlmacenTipo.RECEPCION,
+      VENTAS: AlmacenTipo.VENTAS,
+      MERMAS: AlmacenTipo.MERMAS,
+      CADUCADOS: AlmacenTipo.CADUCADOS,
+      DONADOS: AlmacenTipo.DONADOS,
+      DESTRUCCION: AlmacenTipo.DESTRUCCION,
     };
     const almacenTipo = tipoMap[tipo.toUpperCase()];
     if (almacenTipo === undefined) {
@@ -81,7 +81,9 @@ export class InventarioAlmacenController {
     @Param('productoId') productoId: string,
     @Query('almacen') almacen?: string,
   ) {
-    const almacenTipo = almacen ? parseInt(almacen) as AlmacenTipo : undefined;
+    const almacenTipo = almacen
+      ? (parseInt(almacen) as AlmacenTipo)
+      : undefined;
     return this.inventarioService.getStockTotal(productoId, almacenTipo);
   }
 
@@ -108,14 +110,16 @@ export class InventarioAlmacenController {
     @Req() req: any,
   ) {
     const userId = req.user?.id || req.user?.sub || 'SYSTEM';
-    const metadata = body.metadata ? {
-      turno: body.metadata.turno,
-      caja: body.metadata.caja,
-      terminalId: body.metadata.terminalId,
-      sessionId: body.metadata.sessionId,
-      origenOperacion: body.metadata.origenOperacion as any,
-      referenciaExterna: body.metadata.referenciaExterna,
-    } : undefined;
+    const metadata = body.metadata
+      ? {
+          turno: body.metadata.turno,
+          caja: body.metadata.caja,
+          terminalId: body.metadata.terminalId,
+          sessionId: body.metadata.sessionId,
+          origenOperacion: body.metadata.origenOperacion as any,
+          referenciaExterna: body.metadata.referenciaExterna,
+        }
+      : undefined;
     return this.inventarioService.moverStock(
       body.productoId,
       body.loteId,
@@ -152,11 +156,13 @@ export class InventarioAlmacenController {
     @Req() req: any,
   ) {
     const userId = req.user?.id || req.user?.sub || 'SYSTEM';
-    const metadata = body.metadata ? {
-      ...body.metadata,
-      origenOperacion: body.metadata.origenOperacion as any,
-    } : undefined;
-    
+    const metadata = body.metadata
+      ? {
+          ...body.metadata,
+          origenOperacion: body.metadata.origenOperacion as any,
+        }
+      : undefined;
+
     return this.inventarioService.moverStockBatch(
       body.items,
       body.almacenOrigen as AlmacenTipo,
@@ -174,7 +180,11 @@ export class InventarioAlmacenController {
     @Param('almacenTipo') almacenTipo: string,
   ) {
     console.log('[debug] Buscando:', { productoId, loteId, almacenTipo });
-    return this.inventarioService.debugFindByProductAndLote(productoId, loteId, parseInt(almacenTipo) as AlmacenTipo);
+    return this.inventarioService.debugFindByProductAndLote(
+      productoId,
+      loteId,
+      parseInt(almacenTipo) as AlmacenTipo,
+    );
   }
 
   @Get('capas/:productoId')
@@ -202,7 +212,9 @@ export class InventarioAlmacenController {
     @Query('almacenTipo') almacenTipo?: string,
   ) {
     const diasNum = dias ? parseInt(dias, 10) : 60;
-    const almacenTipoNum = almacenTipo ? parseInt(almacenTipo, 10) as AlmacenTipo : undefined;
+    const almacenTipoNum = almacenTipo
+      ? (parseInt(almacenTipo, 10) as AlmacenTipo)
+      : undefined;
     return this.inventarioService.getProximosAVencer(diasNum, almacenTipoNum);
   }
 
@@ -215,6 +227,7 @@ export class InventarioAlmacenController {
       loteId: string;
       almacenTipo: number;
       cantidad: number;
+      precioUnitarioLote?: number;
     },
   ) {
     return this.inventarioService.agregarStock(
@@ -222,6 +235,8 @@ export class InventarioAlmacenController {
       body.loteId,
       body.almacenTipo as AlmacenTipo,
       body.cantidad,
+      undefined,
+      body.precioUnitarioLote,
     );
   }
 
@@ -234,6 +249,9 @@ export class InventarioAlmacenController {
     if (updateDto.ivaPersonalizado === undefined) {
       throw new BadRequestException('ivaPersonalizado es requerido');
     }
-    return this.inventarioService.updateIvaPersonalizado(id, updateDto.ivaPersonalizado);
+    return this.inventarioService.updateIvaPersonalizado(
+      id,
+      updateDto.ivaPersonalizado,
+    );
   }
 }

@@ -19,7 +19,7 @@ export class Telefono {
   @Column({ type: 'uuid', name: 'cliente_id' })
   clienteId: string;
 
-  @ManyToOne(() => Cliente, cliente => cliente.telefonos)
+  @ManyToOne(() => Cliente, (cliente) => cliente.telefonos)
   @JoinColumn({ name: 'cliente_id' })
   cliente: Cliente;
 

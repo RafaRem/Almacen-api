@@ -1,4 +1,10 @@
-import { IsString, IsUUID, IsDateString, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsUUID,
+  IsDateString,
+  IsOptional,
+  IsEnum,
+} from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 
 export class UpdateLoteDto {

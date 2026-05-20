@@ -16,7 +16,9 @@ export class LaboratoriosService {
     private laboratoriosRepository: Repository<Laboratorio>,
   ) {}
 
-  async create(createLaboratorioDto: CreateLaboratorioDto): Promise<Laboratorio> {
+  async create(
+    createLaboratorioDto: CreateLaboratorioDto,
+  ): Promise<Laboratorio> {
     const existingLaboratorio = await this.laboratoriosRepository.findOne({
       where: { nombre: createLaboratorioDto.nombre },
     });
@@ -25,7 +27,8 @@ export class LaboratoriosService {
       throw new ConflictException('Laboratorio with this name already exists');
     }
 
-    const laboratorio = this.laboratoriosRepository.create(createLaboratorioDto);
+    const laboratorio =
+      this.laboratoriosRepository.create(createLaboratorioDto);
     return this.laboratoriosRepository.save(laboratorio);
   }
 
@@ -34,14 +37,19 @@ export class LaboratoriosService {
   }
 
   async findOne(id: string): Promise<Laboratorio> {
-    const laboratorio = await this.laboratoriosRepository.findOne({ where: { id } });
+    const laboratorio = await this.laboratoriosRepository.findOne({
+      where: { id },
+    });
     if (!laboratorio) {
       throw new NotFoundException(`Laboratorio with ID ${id} not found`);
     }
     return laboratorio;
   }
 
-  async update(id: string, updateLaboratorioDto: UpdateLaboratorioDto): Promise<Laboratorio> {
+  async update(
+    id: string,
+    updateLaboratorioDto: UpdateLaboratorioDto,
+  ): Promise<Laboratorio> {
     const laboratorio = await this.findOne(id);
     Object.assign(laboratorio, updateLaboratorioDto);
     return this.laboratoriosRepository.save(laboratorio);

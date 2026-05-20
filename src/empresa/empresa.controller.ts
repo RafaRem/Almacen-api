@@ -13,17 +13,20 @@ export class EmpresaController {
   }
 
   @Put()
-  async updateDatosEmpresa(@Body() data: Partial<{
-    nombre: string;
-    rfc: string;
-    direccion: string;
-    telefono: string;
-    email: string;
-    regimenFiscal: string;
-    cp: string;
-    ciudad: string;
-    estado: string;
-  }>) {
+  async updateDatosEmpresa(
+    @Body()
+    data: Partial<{
+      nombre: string;
+      rfc: string;
+      direccion: string;
+      telefono: string;
+      email: string;
+      regimenFiscal: string;
+      cp: string;
+      ciudad: string;
+      estado: string;
+    }>,
+  ) {
     return this.empresaService.updateDatosEmpresa(data);
   }
 }

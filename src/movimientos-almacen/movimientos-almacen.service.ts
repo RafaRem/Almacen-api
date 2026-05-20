@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MovimientoAlmacen } from './entities/movimiento-almacen.entity';
@@ -14,7 +11,10 @@ export class MovimientosAlmacenService {
     private movimientosRepository: Repository<MovimientoAlmacen>,
   ) {}
 
-  async create(createMovimientoDto: CreateMovimientoAlmacenDto, userId: string): Promise<MovimientoAlmacen> {
+  async create(
+    createMovimientoDto: CreateMovimientoAlmacenDto,
+    userId: string,
+  ): Promise<MovimientoAlmacen> {
     const movimiento = this.movimientosRepository.create({
       ...createMovimientoDto,
       userId,
@@ -64,12 +64,14 @@ export class MovimientosAlmacenService {
     });
 
     if (movimientos.length === 0) {
-      throw new NotFoundException(`No se encontraron movimientos para el lote ${loteId}`);
+      throw new NotFoundException(
+        `No se encontraron movimientos para el lote ${loteId}`,
+      );
     }
 
     const numeroLote = movimientos[0].lote?.numeroLote;
 
-    const historial = movimientos.map(m => ({
+    const historial = movimientos.map((m) => ({
       fecha: m.fecha,
       tipo: this.determinarTipo(m),
       almacenOrigen: m.almacenOrigen,
@@ -77,11 +79,13 @@ export class MovimientosAlmacenService {
       cantidad: m.cantidad,
       observaciones: m.observaciones,
       usuario: m.usuario?.name || m.usuario?.email || 'Sistema',
-      producto: m.producto ? {
-        id: m.producto.id,
-        nombre: m.producto.nombre,
-        codigoBarras: m.producto.codigoBarras,
-      } : null,
+      producto: m.producto
+        ? {
+            id: m.producto.id,
+            nombre: m.producto.nombre,
+            codigoBarras: m.producto.codigoBarras,
+          }
+        : null,
     }));
 
     return {

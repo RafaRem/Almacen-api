@@ -60,7 +60,9 @@ export class FacturasService {
         where: { id: clienteId },
       });
       if (!cliente) {
-        throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado`);
+        throw new NotFoundException(
+          `Cliente con ID ${clienteId} no encontrado`,
+        );
       }
     }
 
@@ -87,7 +89,11 @@ export class FacturasService {
       if (d.impuestos) {
         return (
           sum +
-          d.impuestos.reduce((impSum: number, imp: ImpuestosLinea) => impSum + Number(imp.importe), 0)
+          d.impuestos.reduce(
+            (impSum: number, imp: ImpuestosLinea) =>
+              impSum + Number(imp.importe),
+            0,
+          )
         );
       }
       return sum;
@@ -148,10 +154,7 @@ export class FacturasService {
         );
       }
 
-      const precioUnitario =
-        prod.precioUnitario !== undefined
-          ? prod.precioUnitario
-          : Number(producto.precio);
+      const precioUnitario = prod.precioUnitario || 0;
 
       const cantidad = prod.cantidad;
       const descuento = prod.descuento || 0;
@@ -174,7 +177,7 @@ export class FacturasService {
 
       detalles.push({
         productoId: prod.productoId,
-        loteId: prod.loteId || producto.loteId || '',
+        loteId: prod.loteId || '',
         claveProdServ: producto.claveProdServ || '01010101',
         claveUnidad: producto.claveUnidad || 'ACT',
         descripcion: producto.nombre,
@@ -190,7 +193,10 @@ export class FacturasService {
     return detalles;
   }
 
-  async findAll(page = 1, limit = 10): Promise<{ data: Factura[]; total: number }> {
+  async findAll(
+    page = 1,
+    limit = 10,
+  ): Promise<{ data: Factura[]; total: number }> {
     const [data, total] = await this.facturaRepository.findAndCount({
       relations: ['cliente', 'detalles', 'detalles.producto'],
       order: { createdAt: 'DESC' },
@@ -204,7 +210,13 @@ export class FacturasService {
   async findOne(id: string): Promise<Factura> {
     const factura = await this.facturaRepository.findOne({
       where: { id },
-      relations: ['cliente', 'usuario', 'detalles', 'detalles.producto', 'detalles.lote'],
+      relations: [
+        'cliente',
+        'usuario',
+        'detalles',
+        'detalles.producto',
+        'detalles.lote',
+      ],
     });
 
     if (!factura) {
@@ -214,7 +226,10 @@ export class FacturasService {
     return factura;
   }
 
-  async update(id: string, updateFacturaDto: UpdateFacturaDto): Promise<Factura> {
+  async update(
+    id: string,
+    updateFacturaDto: UpdateFacturaDto,
+  ): Promise<Factura> {
     const factura = await this.findOne(id);
 
     if (factura.statusId !== FacturaStatus.BORRADOR) {
@@ -244,10 +259,7 @@ export class FacturasService {
         where: { facturaId: id },
       });
 
-      const subtotal = detalles.reduce(
-        (sum, d) => sum + Number(d.importe),
-        0,
-      );
+      const subtotal = detalles.reduce((sum, d) => sum + Number(d.importe), 0);
       const descuentoTotal = detalles.reduce(
         (sum, d) => sum + Number(d.descuento),
         0,
@@ -256,7 +268,11 @@ export class FacturasService {
         if (d.impuestos) {
           return (
             sum +
-            (d.impuestos as ImpuestosLinea[]).reduce((impSum: number, imp: ImpuestosLinea) => impSum + Number(imp.importe), 0)
+            (d.impuestos as ImpuestosLinea[]).reduce(
+              (impSum: number, imp: ImpuestosLinea) =>
+                impSum + Number(imp.importe),
+              0,
+            )
           );
         }
         return sum;
@@ -287,10 +303,7 @@ export class FacturasService {
         );
       }
 
-      const precioUnitario =
-        prod.precioUnitario !== undefined
-          ? prod.precioUnitario
-          : Number(producto.precio);
+      const precioUnitario = prod.precioUnitario || 0;
 
       const cantidad = prod.cantidad!;
       const descuento = prod.descuento || 0;
@@ -312,7 +325,7 @@ export class FacturasService {
 
       detalles.push({
         productoId: prod.productoId,
-        loteId: prod.loteId || producto.loteId || '',
+        loteId: prod.loteId || '',
         claveProdServ: producto.claveProdServ || '01010101',
         claveUnidad: producto.claveUnidad || 'ACT',
         descripcion: producto.nombre,
@@ -368,10 +381,7 @@ export class FacturasService {
   }> {
     const detalles = await this.calcularDetalles(productos);
 
-    const subtotal = detalles.reduce(
-      (sum, d) => sum + Number(d.importe),
-      0,
-    );
+    const subtotal = detalles.reduce((sum, d) => sum + Number(d.importe), 0);
     const descuentoTotal = detalles.reduce(
       (sum, d) => sum + Number(d.descuento),
       0,

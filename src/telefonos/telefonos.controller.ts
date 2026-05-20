@@ -15,7 +15,9 @@ export class TelefonosController {
   constructor(private readonly telefonosService: TelefonosService) {}
 
   @Get('cliente/:clienteId')
-  async findByCliente(@Param('clienteId') clienteId: string): Promise<Telefono[]> {
+  async findByCliente(
+    @Param('clienteId') clienteId: string,
+  ): Promise<Telefono[]> {
     return this.telefonosService.findByCliente(clienteId);
   }
 

@@ -74,9 +74,33 @@ CREATE TABLE "productos" (
   "loteId" uuid REFERENCES "lotes"("id"),
   "stock" integer DEFAULT 0,
   "stockMinimo" integer DEFAULT 10,
+  "stockMaximo" integer DEFAULT 100,
+  "precio" decimal(10,2) DEFAULT 0,
+  "margen_recomendado" decimal(5,2),
+  "claveProdServ" varchar,
+  "claveUnidad" varchar,
   "statusId" integer DEFAULT 1,
   "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =============================================
+-- Inventario Almacen
+-- =============================================
+CREATE TABLE "inventario_almacen" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "productoId" uuid NOT NULL REFERENCES "productos"("id"),
+  "loteId" uuid NOT NULL REFERENCES "lotes"("id"),
+  "almacenTipo" varchar(50) NOT NULL,
+  "cantidadActual" decimal(10,2) DEFAULT 0,
+  "ivaPersonalizado" decimal(5,2),
+  "ivaCfdi" decimal(5,2),
+  "precioUnitarioLote" decimal(10,2) DEFAULT 0,
+  "precioVenta" decimal(10,2) DEFAULT 0,
+  "ultimoMovimientoId" uuid,
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("productoId", "loteId", "almacenTipo")
 );
 
 -- =============================================
@@ -206,6 +230,23 @@ CREATE TABLE "configuraciones_sistema" (
   "updated_at" timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
+-- =============================================
+-- Detalle Lote (para análisis de reportes de entradas)
+-- Mantiene datos detallados del lote al momento de la recepción
+-- =============================================
+CREATE TABLE "detalle_lote" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "productoId" uuid NOT NULL REFERENCES "productos"("id"),
+  "loteId" uuid NOT NULL REFERENCES "lotes"("id"),
+  "cantidad" decimal(10,2) DEFAULT 0,
+  "precioUnitario" decimal(10,2) DEFAULT 0,
+  "ivaCfdi" decimal(5,2),
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("productoId", "loteId")
+);
+
+
 INSERT INTO configuraciones_sistema ("clave", "valor") VALUES
   ('empresa', '{"nombre": "Distribuidora", "direccion": "", "rfc": "", "telefono": "", "email": ""}');
 
@@ -297,3 +338,99 @@ UNION ALL
 SELECT 'CADUCIDAD', '{"diasPrevios": 30}', 15.00, NULL, NULL, NULL, 1, 0
 UNION ALL
 SELECT 'CATEGORIA', '{"minCantidad": 1}', 8.00, NULL, (SELECT id FROM categorias_cliente WHERE nombre = 'Categoría 3'), NULL, 1, 1;
+
+-- =============================================
+-- FUNCTIONS AND TRIGGERS FOR PRECIO VENTA CALCULATION
+-- Formula: precioVenta = (precioUnitarioLote + (precioUnitarioLote * ivaCfdi / 100)) * (1 + margen / 100)
+-- =============================================
+
+-- Function to calculate precioVenta
+CREATE OR REPLACE FUNCTION fn_calcular_precio_venta(
+    p_precio_unitario decimal,
+    p_iva_cfdi decimal,
+    p_margen decimal
+) RETURNS decimal AS $$
+DECLARE
+    v_margen numeric;
+    v_iva numeric;
+BEGIN
+    v_margen := COALESCE(p_margen, 20);
+    v_iva := COALESCE(p_iva_cfdi, 0);
+
+    IF p_precio_unitario IS NULL OR p_precio_unitario <= 0 THEN
+        RETURN 0;
+    END IF;
+
+    RETURN ROUND(
+        (p_precio_unitario + (p_precio_unitario * v_iva / 100)) * (1 + v_margen / 100)
+    , 2)::decimal;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Trigger function for inventario_almacen updates/inserts
+CREATE OR REPLACE FUNCTION fn_actualizar_precio_venta_inventario()
+RETURNS TRIGGER AS $$
+DECLARE
+    margen_prod decimal;
+BEGIN
+    SELECT COALESCE(margen_recomendado, 20)
+    INTO margen_prod
+    FROM productos
+    WHERE id = NEW.producto_id;
+
+    NEW.precio_venta := fn_calcular_precio_venta(
+        NEW.precio_unitario_lote,
+        NEW.iva_cfdi,
+        margen_prod
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger on inventario_almacen for UPDATE
+DROP TRIGGER IF EXISTS trg_inventario_precio_change ON inventario_almacen;
+CREATE TRIGGER trg_inventario_precio_change
+    BEFORE UPDATE OF precio_unitario_lote, iva_cfdi
+    ON inventario_almacen
+    FOR EACH ROW
+    WHEN (
+        OLD.precio_unitario_lote IS DISTINCT FROM NEW.precio_unitario_lote OR
+        OLD.iva_cfdi IS DISTINCT FROM NEW.iva_cfdi
+    )
+    EXECUTE FUNCTION fn_actualizar_precio_venta_inventario();
+
+-- Trigger on inventario_almacen for INSERT
+DROP TRIGGER IF EXISTS trg_inventario_precio_insert ON inventario_almacen;
+CREATE TRIGGER trg_inventario_precio_insert
+    BEFORE INSERT ON inventario_almacen
+    FOR EACH ROW
+    EXECUTE FUNCTION fn_actualizar_precio_venta_inventario();
+
+-- Trigger function for productos margen_recomendado updates
+CREATE OR REPLACE FUNCTION fn_actualizar_precios_producto()
+RETURNS TRIGGER AS $$
+DECLARE
+    margen numeric;
+BEGIN
+    margen := COALESCE(NEW.margen_recomendado, 20);
+
+    UPDATE inventario_almacen
+    SET precio_venta = fn_calcular_precio_venta(
+        precio_unitario_lote,
+        iva_cfdi,
+        margen
+    )
+    WHERE producto_id = NEW.id;
+
+
+$$ LANGUAGE plpgsql;
+
+-- Trigger on productos for margen_recomendado changes
+DROP TRIGGER IF EXISTS trg_producto_margen_change ON productos;
+CREATE TRIGGER trg_producto_margen_change
+    AFTER UPDATE OF margen_recomendado
+    ON productos
+    FOR EACH ROW
+    WHEN (OLD.margen_recomendado IS DISTINCT FROM NEW.margen_recomendado)
+    EXECUTE FUNCTION fn_actualizar_precios_producto();

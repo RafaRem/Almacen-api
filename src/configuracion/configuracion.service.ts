@@ -15,7 +15,8 @@ export class ConfiguracionService {
       {
         clave: 'reversion_automatica',
         valor: { enabled: false, maxIntentos: 3 },
-        descripcion: 'Configuración global de reversión automática para movimientos fallidos',
+        descripcion:
+          'Configuración global de reversión automática para movimientos fallidos',
       },
       {
         clave: 'parametros_stock',
@@ -25,12 +26,14 @@ export class ConfiguracionService {
       {
         clave: 'descuentos',
         valor: { permiteCAE: false },
-        descripcion: 'Configuración de descuentos. permiteCAE: muestra campo de Código de Autorización de Descuento',
+        descripcion:
+          'Configuración de descuentos. permiteCAE: muestra campo de Código de Autorización de Descuento',
       },
       {
         clave: 'ticket',
         valor: { mensaje: '¡Gracias por su preferencia!' },
-        descripcion: 'Configuración de impresión de tickets. mensaje: texto mostrado al final del ticket',
+        descripcion:
+          'Configuración de impresión de tickets. mensaje: texto mostrado al final del ticket',
       },
     ];
 
@@ -45,7 +48,9 @@ export class ConfiguracionService {
   }
 
   async getConfiguracion(clave: string): Promise<ConfiguracionSistema | null> {
-    return this.configuracionRepository.findOne({ where: { clave, activo: true } });
+    return this.configuracionRepository.findOne({
+      where: { clave, activo: true },
+    });
   }
 
   async getConfiguracionValor<T>(clave: string): Promise<T | null> {
@@ -58,7 +63,9 @@ export class ConfiguracionService {
     valor: Record<string, any>,
     userId: string,
   ): Promise<ConfiguracionSistema | null> {
-    const config = await this.configuracionRepository.findOne({ where: { clave } });
+    const config = await this.configuracionRepository.findOne({
+      where: { clave },
+    });
     if (!config) return null;
 
     config.valor = valor;

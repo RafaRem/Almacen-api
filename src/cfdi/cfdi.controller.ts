@@ -1,13 +1,10 @@
-import {
-  Controller,
-  Post,
-  Body,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CfdiService } from './cfdi.service';
-import { CfdiPreviewDto, RecepcionConfirmadaDto } from './dto/procesar-recepcion.dto';
+import {
+  CfdiPreviewDto,
+  RecepcionConfirmadaDto,
+} from './dto/procesar-recepcion.dto';
 
 @Controller('cfdi')
 export class CfdiController {

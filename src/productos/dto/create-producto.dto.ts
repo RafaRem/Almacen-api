@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsUUID, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  IsUUID,
+  IsInt,
+} from 'class-validator';
 
 export class CreateProductoDto {
   @IsString()
@@ -32,14 +39,6 @@ export class CreateProductoDto {
   @IsOptional()
   @IsNumber()
   stockMaximo?: number;
-
-  @IsOptional()
-  @IsNumber()
-  precio?: number;
-
-  @IsOptional()
-  @IsNumber()
-  precioVenta?: number;
 
   @IsOptional()
   @IsNumber()

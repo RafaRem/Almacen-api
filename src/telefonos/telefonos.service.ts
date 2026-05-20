@@ -33,7 +33,10 @@ export class TelefonosService {
     });
   }
 
-  async create(clienteId: string, createTelefonoDto: CreateTelefonoDto): Promise<Telefono> {
+  async create(
+    clienteId: string,
+    createTelefonoDto: CreateTelefonoDto,
+  ): Promise<Telefono> {
     const telefono = this.telefonoRepository.create({
       ...createTelefonoDto,
       clienteId,
@@ -41,15 +44,23 @@ export class TelefonosService {
     return this.telefonoRepository.save(telefono);
   }
 
-  async createMany(clienteId: string, telefonos: CreateTelefonoDto[]): Promise<Telefono[]> {
-    const created = telefonos.map(tel => this.telefonoRepository.create({
-      ...tel,
-      clienteId,
-    }));
+  async createMany(
+    clienteId: string,
+    telefonos: CreateTelefonoDto[],
+  ): Promise<Telefono[]> {
+    const created = telefonos.map((tel) =>
+      this.telefonoRepository.create({
+        ...tel,
+        clienteId,
+      }),
+    );
     return this.telefonoRepository.save(created);
   }
 
-  async update(id: string, updateTelefonoDto: Partial<CreateTelefonoDto>): Promise<Telefono> {
+  async update(
+    id: string,
+    updateTelefonoDto: Partial<CreateTelefonoDto>,
+  ): Promise<Telefono> {
     const telefono = await this.telefonoRepository.findOne({ where: { id } });
     if (!telefono) {
       throw new NotFoundException(`Teléfono con ID ${id} no encontrado`);

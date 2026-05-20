@@ -23,6 +23,7 @@ import { ConfiguracionSistema } from '../configuracion/entities/configuracion-si
 import { MovimientoRevertido } from '../movimientos-almacen/entities/movimiento-revertido.entity';
 import { UserPermission } from '../users/entities/user-permission.entity';
 import { DatosEmpresa } from '../empresa/entities/datos-empresa.entity';
+import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 
 export const getDatabaseConfig = (
   configService: ConfigService,
@@ -55,8 +56,10 @@ export const getDatabaseConfig = (
     InventarioAlmacen,
     Configuracion,
     ConfiguracionSistema,
-    MovimientoRevertido,
+MovimientoRevertido,
+    UserPermission,
     DatosEmpresa,
+    DetalleLote,
   ],
   synchronize: false,
 });

@@ -57,7 +57,10 @@ export class ProductosController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(@Param('id') id: string, @Body() updateProductoDto: UpdateProductoDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateProductoDto: UpdateProductoDto,
+  ) {
     return this.productosService.update(id, updateProductoDto);
   }
 

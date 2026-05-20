@@ -17,7 +17,9 @@ import { TipoReversion } from './entities/movimiento-revertido.entity';
 @Controller('movimientos-revertidos')
 @UseGuards(JwtAuthGuard)
 export class MovimientosRevertidosController {
-  constructor(private readonly revertidosService: MovimientosRevertidosService) {}
+  constructor(
+    private readonly revertidosService: MovimientosRevertidosService,
+  ) {}
 
   @Get('historial-fa')
   async obtenerHistorialFA(

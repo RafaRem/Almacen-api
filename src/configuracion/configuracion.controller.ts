@@ -1,4 +1,13 @@
-import { Controller, Post, Get, Put, Body, Param, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Body,
+  Param,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { ConfiguracionService } from './configuracion.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FormaPagoNombres } from '../common/enums/forma-pago.enum';

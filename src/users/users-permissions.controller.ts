@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Param,
-  Body,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Put, Param, Body, UseGuards } from '@nestjs/common';
 import { UsersPermissionsService } from './users-permissions.service';
 import { UpdateUserPermissionsDto } from './dto/update-user-permissions.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';

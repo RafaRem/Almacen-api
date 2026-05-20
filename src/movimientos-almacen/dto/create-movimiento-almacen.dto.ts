@@ -1,4 +1,11 @@
-import { IsUUID, IsNumber, IsEnum, IsOptional, IsString, ValidateIf } from 'class-validator';
+import {
+  IsUUID,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 import { AlmacenTipo } from '../../common/enums/almacen-tipo.enum';
 
 export class CreateMovimientoAlmacenDto {

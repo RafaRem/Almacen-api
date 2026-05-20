@@ -36,7 +36,13 @@ export class VentasController {
   ) {
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
-    return this.ventasService.findAll(skipNum, takeNum, { fechaFrom, fechaTo, clienteId, statusId, usuarioId });
+    return this.ventasService.findAll(skipNum, takeNum, {
+      fechaFrom,
+      fechaTo,
+      clienteId,
+      statusId,
+      usuarioId,
+    });
   }
 
   @Get('preview-descuento')
@@ -47,6 +53,28 @@ export class VentasController {
   ) {
     const productos = JSON.parse(productosJson);
     return this.ventasService.previewDescuento(productos, clienteId);
+  }
+
+  @Get('folio/:folio')
+  @UseGuards(JwtAuthGuard)
+  findByFolio(@Param('folio') folio: string) {
+    return this.ventasService.findByFolio(parseInt(folio, 10));
+  }
+
+  @Get('folio/:folio/user/:userId')
+  @UseGuards(JwtAuthGuard)
+  findByFolioAndUserId(
+    @Param('folio') folio: string,
+    @Param('userId') userId: string,
+    @Query('fechaFrom') fechaFrom?: string,
+    @Query('fechaTo') fechaTo?: string,
+  ) {
+    return this.ventasService.findByFolioAndUserId(
+      parseInt(folio, 10),
+      userId,
+      fechaFrom,
+      fechaTo,
+    );
   }
 
   @Get(':id')

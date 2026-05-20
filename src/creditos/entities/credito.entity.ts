@@ -17,14 +17,20 @@ export class Credito {
   @Column({ type: 'uuid', name: 'cliente_id', unique: true })
   clienteId: string;
 
-  @OneToOne(() => Cliente, cliente => cliente.credito)
+  @OneToOne(() => Cliente, (cliente) => cliente.credito)
   @JoinColumn({ name: 'cliente_id' })
   cliente: Cliente;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   limite: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'saldo_actual', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    name: 'saldo_actual',
+    default: 0,
+  })
   saldoActual: number;
 
   @Column({ type: 'int', name: 'id_status', default: 1 })

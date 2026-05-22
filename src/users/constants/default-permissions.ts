@@ -8,7 +8,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<UserTipo, UserModule[]> = {
     UserModule.PUNTO_VENTA,
     UserModule.REPORTS,
   ],
-  [UserTipo.OPERATOR]: [
+  [UserTipo.CAJA]: [
+    UserModule.PUNTO_VENTA,
     UserModule.INVENTORY,
     UserModule.SUPPLIERS,
     UserModule.BATCHES,

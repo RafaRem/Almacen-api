@@ -8,8 +8,8 @@ import {
 
 export enum UserTipo {
   ADMIN = 'admin',
-  USER = 'user',
-  OPERATOR = 'operator',
+  USER = 'usuario',
+  CAJA = 'caja',
 }
 
 export enum UserStatusId {

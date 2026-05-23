@@ -566,7 +566,7 @@ export class VentasService {
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
-      const motivos = [];
+      const motivos: string[] = [];
       if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
         motivos.push(mejorDescuentoInfo.motivo);
       }

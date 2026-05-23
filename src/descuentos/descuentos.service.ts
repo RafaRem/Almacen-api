@@ -109,9 +109,12 @@ export class DescuentosService {
       where: { statusId: 1 },
     });
 
+    console.log('[calcularDescuentosAcumulables] Todos los descuentos encontrados:', todosDescuentos.map(d => ({ tipo: d.tipo, porcentaje: d.porcentaje, prioridad: d.prioridad, condiciones: d.condiciones })));
+
     for (const d of todosDescuentos) {
       if (d.tipo === DescuentoTipo.VOLUMEN && d.condiciones) {
         const { minCantidad, maxCantidad } = d.condiciones;
+        console.log('[calcularDescuentosAcumulables] VOLUMEN check:', { minCantidad, cantidadRecibida: cantidad, cantidadSuficiente: cantidad >= minCantidad });
         if (
           minCantidad &&
           cantidad >= minCantidad &&
@@ -212,14 +215,19 @@ export class DescuentosService {
 
     if (descuentosProducto.length > 0) {
       descuentosProducto.sort((a, b) => {
+        if (a.prioridad !== b.prioridad) {
+          return a.prioridad - b.prioridad;
+        }
         if (b.porcentaje !== a.porcentaje) {
           return b.porcentaje - a.porcentaje;
         }
         if ((b.monto || 0) !== (a.monto || 0)) {
           return (b.monto || 0) - (a.monto || 0);
         }
-        return b.prioridad - a.prioridad;
+        return 0;
       });
+
+      console.log('[calcularDescuentosAcumulables] Descuentos producto ordenados:', descuentosProducto.map(d => ({ tipo: d.tipo, porcentaje: d.porcentaje, prioridad: d.prioridad })));
 
       const mejor = descuentosProducto[0];
       const montoDescuento = calcularMontoDescuento(

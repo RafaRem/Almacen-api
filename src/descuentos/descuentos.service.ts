@@ -61,7 +61,7 @@ export class DescuentosService {
   async calcularDescuentosAcumulables(
     productoId: string,
     cantidad: number,
-    precioUnitario: number,
+    precioVenta: number,
     laboratorioId: string,
     categoriaClienteId?: string,
     fechaCaducidad?: Date,
@@ -84,7 +84,7 @@ export class DescuentosService {
     precioFinal: number;
     excedeLimite: boolean;
   }> {
-    const precioOriginal = precioUnitario * cantidad;
+    const precioOriginal = precioVenta * cantidad;
     const maximoDescuento = precioOriginal * 0.30;
 
     const descuentosProducto: {

@@ -501,7 +501,12 @@ export class VentasService {
 
       const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(productoVenta.productoId);
       const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
-      const subtotalLinea = precioUnitario * productoVenta.cantidad;
+      const iva = inventarioProducto?.ivaCfdi || 0;
+      const margen = producto?.margenRecomendado || 20;
+      const precioNeto = precioUnitario * (1 + iva / 100);
+      const cantidadMargen = precioUnitario * (margen / 100);
+      const precioVenta = precioNeto + cantidadMargen;
+      const subtotalLinea = precioVenta * productoVenta.cantidad;
 
       let descuentoLinea = 0;
       let descuentoProductoMonto = 0;
@@ -538,7 +543,7 @@ export class VentasService {
         const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,
-          precioUnitario,
+          precioVenta,
           producto.laboratorioId,
           categoriaClienteId,
           fechaCaducidad,

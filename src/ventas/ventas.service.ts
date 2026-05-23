@@ -570,7 +570,9 @@ export class VentasService {
         }
 
         descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
-      } catch {}
+      } catch (error) {
+        console.error('[previewDescuento] ERROR in calcularDescuentosAcumulables:', error);
+      }
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;

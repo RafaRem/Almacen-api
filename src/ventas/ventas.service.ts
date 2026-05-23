@@ -540,6 +540,14 @@ export class VentasService {
 
       try {
         const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
+        console.log('[previewDescuento] calling calcularDescuentosAcumulables', {
+          productoId: productoVenta.productoId,
+          cantidad: productoVenta.cantidad,
+          precioVenta,
+          laboratorioId: producto.laboratorioId,
+          categoriaClienteId,
+          fechaCaducidad,
+        });
         const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,
@@ -548,6 +556,7 @@ export class VentasService {
           categoriaClienteId,
           fechaCaducidad,
         );
+        console.log('[previewDescuento] calculo result:', JSON.stringify(calculo, null, 2));
 
         if (calculo.descuentoProducto) {
           descuentoProductoMonto = subtotalLinea - calculo.descuentoProducto.precioConDescuento;

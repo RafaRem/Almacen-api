@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt } from 'class-validator';
 
 export class CreateLaboratorioDto {
   @IsString()
@@ -8,4 +8,12 @@ export class CreateLaboratorioDto {
   @IsOptional()
   @IsString()
   descripcion?: string;
+
+  @IsOptional()
+  @IsString()
+  rfc?: string;
+
+  @IsOptional()
+  @IsInt()
+  statusId?: number;
 }

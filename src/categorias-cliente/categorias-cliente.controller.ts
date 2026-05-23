@@ -9,7 +9,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CategoriasClienteService } from './categorias-cliente.service';
-import { CreateCategoriaClienteDto, UpdateCategoriaClienteDto } from './dto/create-categoria-cliente.dto';
+import {
+  CreateCategoriaClienteDto,
+  UpdateCategoriaClienteDto,
+} from './dto/create-categoria-cliente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('categorias-cliente')
@@ -35,7 +38,10 @@ export class CategoriasClienteController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(@Param('id') id: string, @Body() updateDto: UpdateCategoriaClienteDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateCategoriaClienteDto,
+  ) {
     return this.categoriasService.update(id, updateDto);
   }
 

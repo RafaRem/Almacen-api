@@ -25,6 +25,9 @@ export class Descuento {
   @Column({ type: 'decimal', precision: 5, scale: 2 })
   porcentaje: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  monto: number;
+
   @Column({ nullable: true })
   laboratorioId: string;
 

@@ -1,4 +1,11 @@
-import { IsUUID, IsNumber, IsEnum, IsOptional, IsString } from 'class-validator';
+import {
+  IsUUID,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 import { AlmacenTipo } from '../../common/enums/almacen-tipo.enum';
 
 export class CreateMovimientoAlmacenDto {
@@ -11,8 +18,9 @@ export class CreateMovimientoAlmacenDto {
   @IsEnum(AlmacenTipo)
   almacenOrigen: AlmacenTipo;
 
+  @ValidateIf((o) => o.almacenDestino !== null)
   @IsEnum(AlmacenTipo)
-  almacenDestino: AlmacenTipo;
+  almacenDestino: AlmacenTipo | null;
 
   @IsNumber()
   cantidad: number;

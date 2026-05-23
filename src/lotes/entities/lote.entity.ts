@@ -18,9 +18,6 @@ export class Lote {
   @Column({ unique: true })
   numeroLote: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  precio: number;
-
   @Column({ type: 'date' })
   fechaCaducidad: Date;
 

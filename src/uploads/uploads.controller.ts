@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -15,12 +16,16 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
 import { CreateDocumentoClienteDto } from './dto/create-documento-cliente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtService } from '@nestjs/jwt';
 import { StreamableFile } from '@nestjs/common';
 import * as fs from 'fs';
 
 @Controller('uploads')
 export class UploadsController {
-  constructor(private readonly uploadsService: UploadsService) {}
+  constructor(
+    private readonly uploadsService: UploadsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -55,6 +60,38 @@ export class UploadsController {
 
     const file = fs.createReadStream(filePath);
     return new StreamableFile(file);
+  }
+
+  @Get(':id/ver')
+  async ver(@Param('id') id: string, @Res() res: any, @Query('token') token: string): Promise<any> {
+    if (!token) {
+      return res.status(401).json({ error: 'Token requerido' });
+    }
+
+    try {
+      const decoded = this.jwtService.verify(token);
+    } catch (error) {
+      console.error('[UploadsController.ver] Token verification failed:', error.message);
+      return res.status(401).json({ error: 'Token inválido', details: error.message });
+    }
+
+    const filePath = await this.uploadsService.getFilePath(id);
+    const documento = await this.uploadsService.findOne(id);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Archivo no encontrado' });
+    }
+
+    res.setHeader('Content-Type', documento.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${documento.nombreArchivo}"`);
+
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+
+    return new Promise<void>((resolve, reject) => {
+      fileStream.on('end', () => resolve());
+      fileStream.on('error', (err) => reject(err));
+    });
   }
 
   @Patch(':id/vigencia')

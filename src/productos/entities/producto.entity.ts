@@ -9,7 +9,6 @@ import {
 } from 'typeorm';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { Laboratorio } from '../../laboratorios/entities/laboratorio.entity';
-import { Lote } from '../../lotes/entities/lote.entity';
 
 @Entity('productos')
 export class Producto {
@@ -32,18 +31,26 @@ export class Producto {
   @JoinColumn({ name: 'laboratorioId' })
   laboratorio: Laboratorio;
 
-  @Column()
-  loteId: string;
-
-  @ManyToOne(() => Lote)
-  @JoinColumn({ name: 'loteId' })
-  lote: Lote;
-
-  @Column({ default: 0 })
-  stock: number;
-
   @Column({ default: 10 })
   stockMinimo: number;
+
+  @Column({ default: 100 })
+  stockMaximo: number;
+
+  @Column({
+    name: 'margen_recomendado',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
+  margenRecomendado: number | null;
+
+  @Column({ nullable: true })
+  claveProdServ: string;
+
+  @Column({ nullable: true })
+  claveUnidad: string;
 
   @Column({
     type: 'enum',

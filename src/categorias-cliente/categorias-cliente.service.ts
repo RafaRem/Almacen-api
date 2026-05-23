@@ -6,7 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CategoriaCliente } from './entities/categoria-cliente.entity';
-import { CreateCategoriaClienteDto, UpdateCategoriaClienteDto } from './dto/create-categoria-cliente.dto';
+import {
+  CreateCategoriaClienteDto,
+  UpdateCategoriaClienteDto,
+} from './dto/create-categoria-cliente.dto';
 
 @Injectable()
 export class CategoriasClienteService {
@@ -15,7 +18,9 @@ export class CategoriasClienteService {
     private categoriasRepository: Repository<CategoriaCliente>,
   ) {}
 
-  async create(createDto: CreateCategoriaClienteDto): Promise<CategoriaCliente> {
+  async create(
+    createDto: CreateCategoriaClienteDto,
+  ): Promise<CategoriaCliente> {
     const existing = await this.categoriasRepository.findOne({
       where: { nombre: createDto.nombre },
     });
@@ -33,14 +38,19 @@ export class CategoriasClienteService {
   }
 
   async findOne(id: string): Promise<CategoriaCliente> {
-    const categoria = await this.categoriasRepository.findOne({ where: { id } });
+    const categoria = await this.categoriasRepository.findOne({
+      where: { id },
+    });
     if (!categoria) {
       throw new NotFoundException(`CategoriaCliente with ID ${id} not found`);
     }
     return categoria;
   }
 
-  async update(id: string, updateDto: UpdateCategoriaClienteDto): Promise<CategoriaCliente> {
+  async update(
+    id: string,
+    updateDto: UpdateCategoriaClienteDto,
+  ): Promise<CategoriaCliente> {
     const categoria = await this.findOne(id);
     Object.assign(categoria, updateDto);
     return this.categoriasRepository.save(categoria);

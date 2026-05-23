@@ -10,7 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DescuentosService } from './descuentos.service';
-import { CreateDescuentoDto, UpdateDescuentoDto } from './dto/create-descuento.dto';
+import {
+  CreateDescuentoDto,
+  UpdateDescuentoDto,
+} from './dto/create-descuento.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('descuentos')

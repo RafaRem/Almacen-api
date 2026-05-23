@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { getDatabaseConfig } from './config/database.config';
@@ -14,11 +16,31 @@ import { CategoriasClienteModule } from './categorias-cliente/categorias-cliente
 import { DescuentosModule } from './descuentos/descuentos.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { ClientesModule } from './clientes/clientes.module';
+import { VentasModule } from './ventas/ventas.module';
+import { FacturasModule } from './facturas/facturas.module';
+import { RegimenFiscalModule } from './regimen-fiscal/regimen-fiscal.module';
+import { TelefonosModule } from './telefonos/telefonos.module';
+import { DomiciliosModule } from './domicilios/domicilios.module';
+import { FacturacionClienteModule } from './facturacion-cliente/facturacion-cliente.module';
+import { CreditosModule } from './creditos/creditos.module';
+import { CfdiModule } from './cfdi/cfdi.module';
+import { InventarioAlmacenModule } from './inventario-almacen/inventario-almacen.module';
+import { ConfiguracionesModule } from './configuraciones/configuraciones.module';
+import { ConfiguracionModule } from './configuracion/configuracion.module';
+import { EmpresaModule } from './empresa/empresa.module';
+import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
+import { CartSessionModule } from './cart-session/cart-session.module';
+import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -30,11 +52,27 @@ import { ReportesModule } from './reportes/reportes.module';
     LaboratoriosModule,
     LotesModule,
     ProductosModule,
+    ConfiguracionModule,
     MovimientosAlmacenModule,
     CategoriasClienteModule,
     DescuentosModule,
     UploadsModule,
     ReportesModule,
+    ClientesModule,
+    VentasModule,
+    FacturasModule,
+    RegimenFiscalModule,
+    TelefonosModule,
+    DomiciliosModule,
+    FacturacionClienteModule,
+    CreditosModule,
+    CfdiModule,
+    InventarioAlmacenModule,
+    ConfiguracionesModule,
+    EmpresaModule,
+    TicketUploadsModule,
+    CartSessionModule,
+    DetalleLoteModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -43,6 +43,9 @@ export class CreateDescuentoDto {
   prioridad?: number;
 
   @IsOptional()
+  acumulable?: boolean;
+
+  @IsOptional()
   @IsInt()
   statusId?: number;
 }
@@ -80,8 +83,15 @@ export class UpdateDescuentoDto {
   @IsEnum(StatusId)
   statusId?: StatusId;
 
-  @IsOptional()
+@IsOptional()
   prioridad?: number;
+
+  @IsOptional()
+  acumulable?: boolean;
+
+  @IsOptional()
+  @IsEnum(StatusId)
+  statusId?: StatusId;
 }
 
 export class CalcularDescuentoDto {

@@ -190,7 +190,7 @@ export class InventarioAlmacenService {
     const margenValor = margen ?? 20;
 
     const precioNeto = precioUnitario * (1 + iva / 100);
-    const cantidadMargen = precioNeto * (margenValor / 100);
+    const cantidadMargen = precioUnitario * (margenValor / 100);
     const precioVenta = precioNeto + cantidadMargen;
 
     return Math.round(precioVenta * 100) / 100;

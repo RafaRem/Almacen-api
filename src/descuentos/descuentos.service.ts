@@ -482,4 +482,69 @@ export class DescuentosService {
       preciosAlternativos: alternativas,
     };
   }
+
+  async previewProductDiscount(
+    productoId: string,
+    cantidad: number,
+    precioUnitario: number,
+    iva: number,
+    margen: number,
+    laboratorioId: string,
+    categoriaClienteId?: string,
+  ): Promise<{
+    tieneDescuento: boolean;
+    precioOriginal: number;
+    precioConDescuento: number;
+    descuento: number;
+    descuentoProducto: {
+      tipo: string;
+      porcentaje: number;
+      monto: number | null;
+    } | null;
+    descuentoCategoria: {
+      tipo: string;
+      porcentaje: number;
+      monto: number | null;
+    } | null;
+  } | null> {
+    const precioNeto = precioUnitario * (1 + iva / 100);
+    const cantidadMargen = precioUnitario * (margen / 100);
+    const precioVenta = precioNeto + cantidadMargen;
+
+    const calculo = await this.calcularDescuentosAcumulables(
+      productoId,
+      cantidad,
+      precioVenta,
+      laboratorioId,
+      categoriaClienteId,
+    );
+
+    if (!calculo.descuentoProducto && !calculo.descuentoCategoria) {
+      return null;
+    }
+
+    const precioOriginal = precioVenta * cantidad;
+    const descuentoTotal = calculo.precioOriginal - calculo.precioFinal;
+
+    return {
+      tieneDescuento: true,
+      precioOriginal: Math.round(precioOriginal * 100) / 100,
+      precioConDescuento: Math.round(calculo.precioFinal * 100) / 100,
+      descuento: Math.round(descuentoTotal * 100) / 100,
+      descuentoProducto: calculo.descuentoProducto
+        ? {
+            tipo: calculo.descuentoProducto.tipo,
+            porcentaje: calculo.descuentoProducto.porcentaje,
+            monto: calculo.descuentoProducto.monto,
+          }
+        : null,
+      descuentoCategoria: calculo.descuentoCategoria
+        ? {
+            tipo: calculo.descuentoCategoria.tipo,
+            porcentaje: calculo.descuentoCategoria.porcentaje,
+            monto: calculo.descuentoCategoria.monto,
+          }
+        : null,
+    };
+  }
 }

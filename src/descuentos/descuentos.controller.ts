@@ -52,6 +52,30 @@ export class DescuentosController {
     );
   }
 
+  @Post('preview-product')
+  @UseGuards(JwtAuthGuard)
+  previewProductDiscount(
+    @Body() body: {
+      productoId: string;
+      cantidad: number;
+      precioUnitario: number;
+      iva: number;
+      margen: number;
+      laboratorioId: string;
+      clienteId?: string;
+    },
+  ) {
+    return this.descuentosService.previewProductDiscount(
+      body.productoId,
+      body.cantidad,
+      body.precioUnitario,
+      body.iva,
+      body.margen,
+      body.laboratorioId,
+      body.clienteId,
+    );
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {

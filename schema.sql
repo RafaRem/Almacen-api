@@ -166,6 +166,7 @@ CREATE TABLE "descuentos" (
   "fechaFin" date,
   "statusId" integer DEFAULT 1,
   "prioridad" integer DEFAULT 0,
+  "acumulable" boolean NOT NULL DEFAULT FALSE,
   "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
 );

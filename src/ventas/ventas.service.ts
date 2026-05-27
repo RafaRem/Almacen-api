@@ -390,6 +390,8 @@ export class VentasService {
     descuentoPorProducto: {
       productoId: string;
       descuento: number;
+      descuentoProducto: number;
+      descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
         tipo: string;
@@ -398,6 +400,12 @@ export class VentasService {
         precioConDescuento: number;
         motivo: string;
       };
+      descuentoCategoriaInfo: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        motivo: string;
+      } | null;
       preciosAlternativos: {
         tipo: string;
         porcentaje: number;
@@ -412,6 +420,8 @@ export class VentasService {
     const descuentoPorProducto: {
       productoId: string;
       descuento: number;
+      descuentoProducto: number;
+      descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
         tipo: string;
@@ -420,6 +430,12 @@ export class VentasService {
         precioConDescuento: number;
         motivo: string;
       };
+      descuentoCategoriaInfo: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        motivo: string;
+      } | null;
       preciosAlternativos: {
         tipo: string;
         porcentaje: number;
@@ -430,11 +446,16 @@ export class VentasService {
     }[] = [];
 
     let categoriaClienteId: string | undefined;
+    console.log('[previewDescuento] Received clienteId:', clienteId);
     if (clienteId) {
       try {
         const cliente = await this.clientesService.findOne(clienteId);
+        console.log('[previewDescuento] Cliente found:', cliente);
         categoriaClienteId = cliente?.categoriaClienteId;
-      } catch {}
+        console.log('[previewDescuento] categoriaClienteId:', categoriaClienteId);
+      } catch {
+        console.error('[previewDescuento] Error fetching cliente');
+      }
     }
 
     for (const productoVenta of productos) {
@@ -448,6 +469,8 @@ export class VentasService {
           descuentoPorProducto.push({
             productoId: productoVenta.productoId,
             descuento: 0,
+            descuentoProducto: 0,
+            descuentoCategoria: 0,
             motivo: 'Producto no encontrado',
             mejorDescuento: {
               tipo: 'NINGUNO',
@@ -456,6 +479,7 @@ export class VentasService {
               precioConDescuento: 0,
               motivo: 'No encontrado',
             },
+            descuentoCategoriaInfo: null,
             preciosAlternativos: [],
           });
           continue;
@@ -464,6 +488,8 @@ export class VentasService {
         descuentoPorProducto.push({
           productoId: productoVenta.productoId,
           descuento: 0,
+          descuentoProducto: 0,
+          descuentoCategoria: 0,
           motivo: 'Producto no encontrado',
           mejorDescuento: {
             tipo: 'NINGUNO',
@@ -472,6 +498,7 @@ export class VentasService {
             precioConDescuento: 0,
             motivo: 'No encontrado',
           },
+          descuentoCategoriaInfo: null,
           preciosAlternativos: [],
         });
         continue;
@@ -479,9 +506,16 @@ export class VentasService {
 
       const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(productoVenta.productoId);
       const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
-      const subtotalLinea = precioUnitario * productoVenta.cantidad;
+      const iva = inventarioProducto?.ivaCfdi || 0;
+      const margen = producto?.margenRecomendado || 20;
+      const precioNeto = precioUnitario * (1 + iva / 100);
+      const cantidadMargen = precioUnitario * (margen / 100);
+      const precioVenta = precioNeto + cantidadMargen;
+      const subtotalLinea = precioVenta * productoVenta.cantidad;
 
       let descuentoLinea = 0;
+      let descuentoProductoMonto = 0;
+      let descuentoCategoriaMonto = 0;
       let mejorDescuentoInfo: {
         tipo: string;
         porcentaje: number;
@@ -495,6 +529,12 @@ export class VentasService {
         precioConDescuento: subtotalLinea,
         motivo: 'Sin descuento',
       };
+      let descuentoCategoriaInfo: {
+        tipo: string;
+        porcentaje: number;
+        monto: number | null;
+        motivo: string;
+      } | null = null;
       let preciosAlternativos: {
         tipo: string;
         porcentaje: number;
@@ -505,44 +545,59 @@ export class VentasService {
 
       try {
         const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
-        const calculo = await this.descuentosService.calcularMejorDescuento(
+        console.log('[previewDescuento] calling calcularDescuentosAcumulables', {
+          productoId: productoVenta.productoId,
+          cantidad: productoVenta.cantidad,
+          precioVenta,
+          laboratorioId: producto.laboratorioId,
+          categoriaClienteId,
+          fechaCaducidad,
+        });
+        const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,
+          precioVenta,
           producto.laboratorioId,
           categoriaClienteId,
           fechaCaducidad,
-          subtotalLinea,
         );
+        console.log('[previewDescuento] calculo result:', JSON.stringify(calculo, null, 2));
 
-        if (
-          calculo?.mejorDescuento &&
-          calculo.mejorDescuento.tipo !== 'NINGUNO'
-        ) {
-          const mejor = calculo.mejorDescuento;
-          if (mejor.monto && mejor.monto > 0) {
-            descuentoLinea = mejor.monto;
-          } else {
-            descuentoLinea = (subtotalLinea * mejor.porcentaje) / 100;
-          }
-          mejorDescuentoInfo = {
-            tipo: mejor.tipo,
-            porcentaje: mejor.porcentaje,
-            monto: mejor.monto,
-            precioConDescuento: mejor.precioConDescuento,
-            motivo: mejor.motivo,
-          };
-          preciosAlternativos = calculo.preciosAlternativos;
+        if (calculo.descuentoProducto) {
+          descuentoProductoMonto = subtotalLinea - calculo.descuentoProducto.precioConDescuento;
+          mejorDescuentoInfo = calculo.descuentoProducto;
         }
-      } catch {}
+
+        if (calculo.descuentoCategoria) {
+          descuentoCategoriaInfo = calculo.descuentoCategoria;
+          const baseParaCategoria = subtotalLinea - descuentoProductoMonto;
+          descuentoCategoriaMonto = (baseParaCategoria * calculo.descuentoCategoria.porcentaje) / 100;
+        }
+
+        descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
+      } catch (error) {
+        console.error('[previewDescuento] ERROR in calcularDescuentosAcumulables:', error);
+      }
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
+      const motivos: string[] = [];
+      if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
+        motivos.push(mejorDescuentoInfo.motivo);
+      }
+      if (descuentoCategoriaInfo) {
+        motivos.push(descuentoCategoriaInfo.motivo);
+      }
+
       descuentoPorProducto.push({
         productoId: productoVenta.productoId,
         descuento: descuentoLinea,
-        motivo: mejorDescuentoInfo.motivo,
+        descuentoProducto: descuentoProductoMonto,
+        descuentoCategoria: descuentoCategoriaMonto,
+        motivo: motivos.length > 0 ? motivos.join(' + ') : 'Sin descuento',
         mejorDescuento: mejorDescuentoInfo,
+        descuentoCategoriaInfo,
         preciosAlternativos,
       });
     }

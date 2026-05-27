@@ -84,6 +84,14 @@ export class DescuentosService {
     precioFinal: number;
     excedeLimite: boolean;
   }> {
+    console.log('[calcularDescuentosAcumulables] Input params:', {
+      productoId,
+      cantidad,
+      precioVenta,
+      laboratorioId,
+      categoriaClienteId,
+      fechaCaducidad,
+    });
     const precioOriginal = precioVenta * cantidad;
     const maximoDescuento = precioOriginal * 0.30;
 
@@ -157,6 +165,7 @@ export class DescuentosService {
         d.tipo === DescuentoTipo.CATEGORIA &&
         d.categoriaClienteId === categoriaClienteId
       ) {
+        console.log('[calcularDescuentosAcumulables] CATEGORIA match! descuento:', d, 'categoriaClienteId received:', categoriaClienteId);
         descuentosCategoria.push({
           porcentaje: Number(d.porcentaje),
           monto: d.monto ? Number(d.monto) : null,

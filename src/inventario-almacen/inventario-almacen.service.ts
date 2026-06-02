@@ -81,7 +81,6 @@ export class InventarioAlmacenService {
     const agrupado = new Map<string, any>();
 
     for (const inv of inventarios) {
-      console.log('[getStockPorAlmacen] inv debug - productoId:', inv.productoId, 'ivaCfdi:', inv.ivaCfdi, 'precioVenta:', inv.precioVenta, 'loteId:', inv.loteId);
       const key = inv.productoId;
       if (agrupado.has(key)) {
         agrupado.get(key).cantidadActual += Number(inv.cantidadActual);
@@ -716,29 +715,14 @@ export class InventarioAlmacenService {
     loteId: string,
     almacenTipo: AlmacenTipo,
   ): Promise<any> {
-    console.log('[debug] Query directa a BD:', {
-      productoId,
-      loteId,
-      almacenTipo,
-    });
-    console.log(
-      '[debug] almacenTipo es numero?',
-      typeof almacenTipo,
-      almacenTipo,
-    );
-
     const inventarios = await this.inventarioRepository.find({
       where: { productoId },
       relations: ['producto', 'lote'],
     });
 
-    console.log('[debug] Todos los inventarios para productoId:', inventarios);
-
     const filtrado = inventarios.filter(
       (inv) => inv.loteId === loteId && inv.almacenTipo === almacenTipo,
     );
-
-    console.log('[debug] Filtrado por loteId y almacenTipo:', filtrado);
 
     return {
       productoId,

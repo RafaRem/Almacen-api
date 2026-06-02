@@ -214,6 +214,44 @@ export class InventarioAlmacenService {
     return this.inventarioRepository.save(inventario);
   }
 
+  private async queryLotesPorFIFO(
+    manager: EntityManager,
+    productoId: string,
+    cantidad: number,
+    almacenTipo: AlmacenTipo,
+  ): Promise<{
+    inventarios: InventarioAlmacen[];
+    totalDisponible: number;
+    lotsSelected: {
+      inventario: InventarioAlmacen;
+      cantidad: number;
+    }[];
+  }> {
+    const inventarios = await manager.find(InventarioAlmacen, {
+      where: { productoId, almacenTipo },
+      relations: ['lote'],
+      order: { lote: { fechaCaducidad: 'ASC' } },
+    });
+
+    let totalDisponible = 0;
+    for (const inv of inventarios) {
+      totalDisponible += Number(inv.cantidadActual);
+    }
+
+    const lotsSelected: { inventario: InventarioAlmacen; cantidad: number }[] = [];
+    let restante = cantidad;
+
+    for (const inv of inventarios) {
+      if (restante <= 0) break;
+      const disponible = Number(inv.cantidadActual);
+      const aTransferir = Math.min(disponible, restante);
+      lotsSelected.push({ inventario: inv, cantidad: aTransferir });
+      restante -= aTransferir;
+    }
+
+    return { inventarios, totalDisponible, lotsSelected };
+  }
+
   async reducirStockFIFO(
     productoId: string,
     cantidad: number,
@@ -241,16 +279,8 @@ export class InventarioAlmacenService {
     }
 
     const executeReduce = async (manager: EntityManager) => {
-      const inventarios = await manager.find(InventarioAlmacen, {
-        where: { productoId, almacenTipo: almacenTipoOrigen },
-        relations: ['lote'],
-        order: { lote: { fechaCaducidad: 'ASC' } },
-      });
-
-      let totalDisponible = 0;
-      for (const inv of inventarios) {
-        totalDisponible += Number(inv.cantidadActual);
-      }
+      const { inventarios, totalDisponible, lotsSelected } =
+        await this.queryLotesPorFIFO(manager, productoId, cantidad, almacenTipoOrigen);
 
       if (totalDisponible < cantidad) {
         return {
@@ -266,25 +296,17 @@ export class InventarioAlmacenService {
         cantidad: number;
         precio: number;
       }[] = [];
-      let restante = cantidad;
 
-      for (const inv of inventarios) {
-        if (restante <= 0) break;
-
-        const disponible = Number(inv.cantidadActual);
-        const aTransferir = Math.min(disponible, restante);
-
-        inv.cantidadActual -= aTransferir;
-        await manager.save(inv);
+      for (const { inventario, cantidad: cant } of lotsSelected) {
+        inventario.cantidadActual -= cant;
+        await manager.save(inventario);
 
         lotsUsed.push({
-          loteId: inv.loteId,
-          numeroLote: inv.lote?.numeroLote || 'N/A',
-          cantidad: aTransferir,
-          precio: inv.precioVenta || inv.precioUnitarioLote,
+          loteId: inventario.loteId,
+          numeroLote: inventario.lote?.numeroLote || 'N/A',
+          cantidad: cant,
+          precio: inventario.precioVenta || inventario.precioUnitarioLote,
         });
-
-        restante -= aTransferir;
       }
 
       const movimiento = manager.create(MovimientoAlmacen, {
@@ -314,6 +336,64 @@ export class InventarioAlmacenService {
     } else {
       return this.dataSource.transaction(executeReduce);
     }
+  }
+
+  async consultarLotesFIFO(
+    productoId: string,
+    cantidad: number,
+    almacenTipo: AlmacenTipo = AlmacenTipo.VENTAS,
+  ): Promise<{
+    success: boolean;
+    lotsUsed: {
+      loteId: string;
+      numeroLote: string;
+      cantidad: number;
+      precio: number;
+      ivaCfdi: number;
+      fechaCaducidad?: Date;
+    }[];
+    precioPromedio: number;
+    precioVentaTotal: number;
+  }> {
+    return this.dataSource.transaction(async (manager) => {
+      const { inventarios, totalDisponible, lotsSelected } =
+        await this.queryLotesPorFIFO(manager, productoId, cantidad, almacenTipo);
+
+      if (totalDisponible < cantidad) {
+        return { success: false, lotsUsed: [], precioPromedio: 0, precioVentaTotal: 0 };
+      }
+
+      const lotsUsed: {
+        loteId: string;
+        numeroLote: string;
+        cantidad: number;
+        precio: number;
+        ivaCfdi: number;
+        fechaCaducidad?: Date;
+      }[] = [];
+
+      for (const { inventario, cantidad: cant } of lotsSelected) {
+        lotsUsed.push({
+          loteId: inventario.loteId,
+          numeroLote: inventario.lote?.numeroLote || 'N/A',
+          cantidad: cant,
+          precio: inventario.precioVenta || inventario.precioUnitarioLote,
+          ivaCfdi: inventario.ivaCfdi || 0,
+          fechaCaducidad: inventario.lote?.fechaCaducidad,
+        });
+      }
+
+      const totalPrecio = lotsUsed.reduce((sum, l) => sum + l.precio * l.cantidad, 0);
+      const totalCantidad = lotsUsed.reduce((sum, l) => sum + l.cantidad, 0);
+      const precioPromedio = totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
+
+      return {
+        success: true,
+        lotsUsed,
+        precioPromedio: Math.round(precioPromedio * 100) / 100,
+        precioVentaTotal: Math.round(totalPrecio * 100) / 100,
+      };
+    });
   }
 
   private determinarTipoMovimiento(

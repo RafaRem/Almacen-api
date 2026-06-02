@@ -140,11 +140,6 @@ export class VentasService {
         );
       }
 
-      console.log('[create] Producto:', productoVenta.productoId, {
-        cantidadSolicitada: productoVenta.cantidad,
-        stockDisponible,
-      });
-
       const resultadoFEPU =
         await this.inventarioAlmacenService.reducirStockFIFO(
           productoVenta.productoId,
@@ -248,13 +243,6 @@ export class VentasService {
     const iva = (subtotal - descuentoTotal) * ivaRate;
     const total = subtotal - descuentoTotal + iva;
 
-    console.log('[create] Validation check:', {
-      descuentoTotal,
-      previewDescuento: createVentaDto.descuentoPreview?.descuentoAplicado,
-      total,
-      previewTotal: createVentaDto.descuentoPreview?.total,
-    });
-
     let pagosData: {
       formaPago: FormaPago;
       monto: number;
@@ -341,7 +329,7 @@ export class VentasService {
       }
     }
 
-    return { ...savedVenta, detalles: savedDetalles, pagos: pagosData };
+    return { ...savedVenta, detalles: savedDetalles, pagos: pagosData, descuentos: descuentosInfo };
     });
   }
 
@@ -597,18 +585,8 @@ export class VentasService {
       }
 
       const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(productoVenta.productoId);
+      const precioVenta = inventarioProducto?.precioVenta || 0;
       const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
-      const iva = inventarioProducto?.ivaCfdi || 0;
-      const margen = producto?.margenRecomendado || 20;
-      console.log('[previewDescuento] Producto:', productoVenta.productoId, {
-        precioUnitarioFromFindByProductoId: precioUnitario,
-        ivaCfdi: iva,
-        margen,
-        inventarioExists: !!inventarioProducto,
-      });
-      const precioNeto = precioUnitario * (1 + iva / 100);
-      const cantidadMargen = precioUnitario * (margen / 100);
-      const precioVenta = precioNeto + cantidadMargen;
       const subtotalLinea = precioVenta * productoVenta.cantidad;
 
       let descuentoLinea = 0;
@@ -645,7 +623,12 @@ export class VentasService {
       }[] = [];
 
       try {
-        const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
+        const fechaRaw = inventarioProducto?.lote?.fechaCaducidad;
+        const fechaCaducidad = (fechaRaw instanceof Date)
+          ? fechaRaw
+          : (typeof fechaRaw === 'string' || typeof fechaRaw === 'number')
+            ? new Date(fechaRaw)
+            : undefined;
         const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,

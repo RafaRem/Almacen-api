@@ -69,6 +69,8 @@ export class VentasService {
     }
 
     return this.dataSource.transaction(async (manager) => {
+    console.log('[create] DTO recibido:', JSON.stringify(createVentaDto, null, 2));
+    
     const seenProductos = new Set<string>();
 
     let subtotal = 0;

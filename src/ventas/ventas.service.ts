@@ -409,8 +409,13 @@ export class VentasService {
       descuentos = await this.descuentosVentaDetalleRepository.find({
         where: { detalleVentaId: In(detalleIds) },
       });
+      console.log('[findOne] Descuentos encontrados para venta:', id, {
+        count: descuentos.length,
+        sample: descuentos.slice(0, 3),
+      });
     }
 
+    console.log('[findOne] Retornando venta:', { folio: venta.folio, total: venta.total, descuentosCount: descuentos.length });
     return { ...venta, detalles, pagos, descuentos };
   }
 

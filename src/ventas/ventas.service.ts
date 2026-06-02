@@ -190,7 +190,10 @@ export class VentasService {
           calculo.descuentoProducto &&
           calculo.descuentoProducto.tipo !== 'NINGUNO'
         ) {
-          montoProductoLinea = Number((precioVenta * productoVenta.cantidad - calculo.descuentoProducto.precioConDescuento * productoVenta.cantidad).toFixed(2));
+          const montoDescuentoUnitario = calculo.descuentoProducto.precioConDescuento > 0
+            ? precioVenta - calculo.descuentoProducto.precioConDescuento
+            : 0;
+          montoProductoLinea = Number((montoDescuentoUnitario * productoVenta.cantidad).toFixed(2));
           if (calculo.descuentoProducto.descuentoId) {
             descuentosInfo.push({
               productoId: productoVenta.productoId,

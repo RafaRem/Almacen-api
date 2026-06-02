@@ -297,6 +297,11 @@ export class InventarioAlmacenService {
       }[] = [];
 
       for (const { inventario, cantidad: cant } of lotsSelected) {
+        if (inventario.precioVenta == null) {
+          throw new Error(
+            `Precio de venta no asignado para producto ${productoId} (lote: ${inventario.lote?.numeroLote || inventario.loteId}). Configure precioVenta en Inventario.`,
+          );
+        }
         inventario.cantidadActual -= cant;
         await manager.save(inventario);
 
@@ -304,7 +309,7 @@ export class InventarioAlmacenService {
           loteId: inventario.loteId,
           numeroLote: inventario.lote?.numeroLote || 'N/A',
           cantidad: cant,
-          precio: inventario.precioVenta || inventario.precioUnitarioLote,
+          precio: inventario.precioVenta,
         });
       }
 

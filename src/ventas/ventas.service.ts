@@ -394,6 +394,8 @@ export class VentasService {
       throw new NotFoundException(`Venta with ID ${id} not found`);
     }
 
+    console.log('[findOne] VentaDB:', JSON.stringify({ id: venta.id, folio: venta.folio, total: venta.total }))
+
     const detalles = await this.detallesRepository.find({
       where: { ventaId: id },
       relations: ['producto', 'lote'],
@@ -411,6 +413,7 @@ export class VentasService {
       });
     }
 
+    console.log('[findOne] Retornando:', JSON.stringify({ folio: venta.folio, total: venta.total, descuentosCount: descuentos.length }))
     return { ...venta, detalles, pagos, descuentos };
   }
 

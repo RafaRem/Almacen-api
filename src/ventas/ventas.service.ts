@@ -394,8 +394,6 @@ export class VentasService {
       throw new NotFoundException(`Venta with ID ${id} not found`);
     }
 
-    console.log('[findOne] VentaDB:', JSON.stringify({ id: venta.id, folio: venta.folio, total: venta.total }))
-
     const detalles = await this.detallesRepository.find({
       where: { ventaId: id },
       relations: ['producto', 'lote'],
@@ -414,7 +412,36 @@ export class VentasService {
     }
 
     console.log('[findOne] Retornando:', JSON.stringify({ folio: venta.folio, total: venta.total, descuentosCount: descuentos.length }))
-    return { ...venta, detalles, pagos, descuentos };
+    
+    const detallesConvertidos = detalles.map(d => ({
+      ...d,
+      cantidad: Number(d.cantidad) || 0,
+      precioUnitario: Number(d.precioUnitario) || 0,
+      descuentoLinea: Number(d.descuentoLinea) || 0,
+      subtotal: Number(d.subtotal) || 0,
+    }))
+
+    const pagosConvertidos = pagos.map(p => ({
+      ...p,
+      monto: Number(p.monto) || 0,
+    }))
+
+    const descuentosConvertidos = descuentos.map(d => ({
+      ...d,
+      monto: Number(d.monto) || 0,
+      porcentaje: Number(d.porcentaje) || 0,
+    }))
+
+    return { 
+      ...venta, 
+      subtotal: Number(venta.subtotal) || 0,
+      descuentoAplicado: Number(venta.descuentoAplicado) || 0,
+      iva: Number(venta.iva) || 0,
+      total: Number(venta.total) || 0,
+      detalles: detallesConvertidos, 
+      pagos: pagosConvertidos, 
+      descuentos: descuentosConvertidos 
+    };
   }
 
   async findByFolio(folio: number): Promise<Venta | null> {

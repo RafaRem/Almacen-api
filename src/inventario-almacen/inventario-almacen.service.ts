@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
@@ -133,7 +133,6 @@ export class InventarioAlmacenService {
       }
     }
 
-    console.log('[getStockPorAlmacen] Returning resultado with lots:', JSON.stringify(resultado.map(r => ({ productoId: r.productoId, lotes: r.lotes })), null, 2));
     return resultado;
   }
 
@@ -221,6 +220,7 @@ export class InventarioAlmacenService {
     almacenTipoOrigen: AlmacenTipo,
     userId: string = SYSTEM_USER_ID,
     metadata?: MovimientoMetadata,
+    managerArg?: EntityManager,
   ): Promise<{
     success: boolean;
     message: string;
@@ -240,7 +240,7 @@ export class InventarioAlmacenService {
       };
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const executeReduce = async (manager: EntityManager) => {
       const inventarios = await manager.find(InventarioAlmacen, {
         where: { productoId, almacenTipo: almacenTipoOrigen },
         relations: ['lote'],
@@ -281,7 +281,7 @@ export class InventarioAlmacenService {
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote || 'N/A',
           cantidad: aTransferir,
-          precio: inv.precioUnitarioLote,
+          precio: inv.precioVenta || inv.precioUnitarioLote,
         });
 
         restante -= aTransferir;
@@ -307,7 +307,13 @@ export class InventarioAlmacenService {
         lotsUsed,
         movimientoId: savedMovimiento.id,
       };
-    });
+    };
+
+    if (managerArg) {
+      return executeReduce(managerArg);
+    } else {
+      return this.dataSource.transaction(executeReduce);
+    }
   }
 
   private determinarTipoMovimiento(

@@ -4,10 +4,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In, DataSource, EntityManager } from 'typeorm';
 import { Venta } from './entities/venta.entity';
 import { DetalleVenta } from './entities/detalle-venta.entity';
 import { PagoVenta } from './entities/pago-venta.entity';
+import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { ProductosService } from '../productos/productos.service';
 import { LotesService } from '../lotes/lotes.service';
@@ -29,6 +30,8 @@ export class VentasService {
     private detallesRepository: Repository<DetalleVenta>,
     @InjectRepository(PagoVenta)
     private pagosRepository: Repository<PagoVenta>,
+    @InjectRepository(DescuentoVentaDetalle)
+    private descuentosVentaDetalleRepository: Repository<DescuentoVentaDetalle>,
     private productosService: ProductosService,
     private lotesService: LotesService,
     private descuentosService: DescuentosService,
@@ -36,6 +39,7 @@ export class VentasService {
     private movimientosAlmacenService: MovimientosAlmacenService,
     private configuracionesService: ConfiguracionesService,
     private clientesService: ClientesService,
+    private dataSource: DataSource,
   ) {}
 
   private async getIvaRate(): Promise<number> {
@@ -53,10 +57,19 @@ export class VentasService {
   async create(
     createVentaDto: CreateVentaDto,
     usuarioId: string,
-  ): Promise<Venta> {
+  ): Promise<any> {
     if (!createVentaDto.productos || createVentaDto.productos.length === 0) {
-      throw new BadRequestException('La venta debe tener al menos un producto');
+      throw new Error('La venta debe tener al menos un producto');
     }
+
+    const productoIds = createVentaDto.productos.map((p) => p.productoId);
+    const uniqueProductoIds = new Set(productoIds);
+    if (uniqueProductoIds.size !== productoIds.length) {
+      throw new Error('No puede haber productos duplicados en la venta');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+    const seenProductos = new Set<string>();
 
     let subtotal = 0;
     let descuentoTotal = 0;
@@ -66,6 +79,14 @@ export class VentasService {
       loteId: string;
       numeroLote: string;
       cantidad: number;
+    }[] = [];
+    const descuentosInfo: {
+      productoId: string;
+      descuentoId: string | null;
+      tipo: string;
+      porcentaje: number;
+      monto: number;
+      motivo: string;
     }[] = [];
 
     let categoriaClienteId: string | undefined;
@@ -79,6 +100,19 @@ export class VentasService {
     }
 
     for (const productoVenta of createVentaDto.productos) {
+      if (seenProductos.has(productoVenta.productoId)) {
+        throw new BadRequestException(
+          `Producto ${productoVenta.productoId} duplicado en la misma venta`,
+        );
+      }
+      seenProductos.add(productoVenta.productoId);
+
+      if (productoVenta.cantidad == null || productoVenta.cantidad <= 0) {
+        throw new BadRequestException(
+          `Cantidad debe ser mayor a 0 para producto ${productoVenta.productoId}`,
+        );
+      }
+
       const producto = await this.productosService.findOne(
         productoVenta.productoId,
       );
@@ -106,12 +140,19 @@ export class VentasService {
         );
       }
 
+      console.log('[create] Producto:', productoVenta.productoId, {
+        cantidadSolicitada: productoVenta.cantidad,
+        stockDisponible,
+      });
+
       const resultadoFEPU =
         await this.inventarioAlmacenService.reducirStockFIFO(
           productoVenta.productoId,
           productoVenta.cantidad,
           AlmacenTipo.VENTAS,
           usuarioId,
+          undefined,
+          manager,
         );
 
       if (!resultadoFEPU.success) {
@@ -127,39 +168,67 @@ export class VentasService {
         });
       }
 
-      const precioUnitario = resultadoFEPU.lotsUsed.length > 0
-        ? resultadoFEPU.lotsUsed[0].precio
-        : 0;
+      const totalPrecio = resultadoFEPU.lotsUsed.reduce(
+        (sum, l) => sum + l.precio * l.cantidad, 0,
+      );
+      const totalCantidad = resultadoFEPU.lotsUsed.reduce(
+        (sum, l) => sum + l.cantidad, 0,
+      );
+      const precioUnitario = totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
 
       const precioVenta = productoVenta.precioVenta ?? precioUnitario;
 
       let descuentoLinea = 0;
+      let montoProductoLinea = 0;
       try {
-        const calculo = await this.descuentosService.calcularMejorDescuento(
+        const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,
+          precioVenta,
           producto.laboratorioId,
           categoriaClienteId,
         );
+
+        descuentoLinea = calculo.descuentoTotal;
+
         if (
-          calculo?.mejorDescuento &&
-          calculo.mejorDescuento.tipo !== 'NINGUNO'
+          calculo.descuentoProducto &&
+          calculo.descuentoProducto.tipo !== 'NINGUNO'
         ) {
-          const mejor = calculo.mejorDescuento;
-          if (mejor.monto && mejor.monto > 0) {
-            descuentoLinea = mejor.monto;
-          } else {
-            descuentoLinea =
-              (precioVenta * productoVenta.cantidad * mejor.porcentaje) /
-              100;
+          montoProductoLinea = Number((precioVenta * productoVenta.cantidad - calculo.descuentoProducto.precioConDescuento * productoVenta.cantidad).toFixed(2));
+          if (calculo.descuentoProducto.descuentoId) {
+            descuentosInfo.push({
+              productoId: productoVenta.productoId,
+              descuentoId: calculo.descuentoProducto.descuentoId,
+              tipo: calculo.descuentoProducto.tipo,
+              porcentaje: calculo.descuentoProducto.porcentaje,
+              monto: montoProductoLinea,
+              motivo: calculo.descuentoProducto.motivo,
+            });
           }
         }
-      } catch {}
+        if (
+          calculo.descuentoCategoria &&
+          calculo.descuentoCategoria.descuentoId
+        ) {
+          const montoCategoria = Number(calculo.descuentoCategoria.monto || 0);
+          descuentosInfo.push({
+            productoId: productoVenta.productoId,
+            descuentoId: calculo.descuentoCategoria.descuentoId,
+            tipo: calculo.descuentoCategoria.tipo,
+            porcentaje: calculo.descuentoCategoria.porcentaje,
+            monto: montoCategoria,
+            motivo: calculo.descuentoCategoria.motivo,
+          });
+        }
+      } catch (e) {
+        console.error('[create] Error calculando descuentos acumulables para producto', productoVenta.productoId, ':', e.message);
+      }
 
       const subtotalLinea =
         precioVenta * productoVenta.cantidad - descuentoLinea;
 
-      subtotal += subtotalLinea;
+      subtotal += precioVenta * productoVenta.cantidad;
       descuentoTotal += descuentoLinea;
 
       const primerLoteId =
@@ -179,17 +248,12 @@ export class VentasService {
     const iva = (subtotal - descuentoTotal) * ivaRate;
     const total = subtotal - descuentoTotal + iva;
 
-    if (createVentaDto.descuentoPreview) {
-      const diffDescuento = Math.abs(
-        descuentoTotal - createVentaDto.descuentoPreview.descuentoAplicado,
-      );
-      const diffTotal = Math.abs(total - createVentaDto.descuentoPreview.total);
-      if (diffDescuento > 0.1 || diffTotal > 0.1) {
-        throw new BadRequestException(
-          `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${createVentaDto.descuentoPreview.descuentoAplicado.toFixed(2)}, total=${createVentaDto.descuentoPreview.total.toFixed(2)}. Posible manipulacion.`,
-        );
-      }
-    }
+    console.log('[create] Validation check:', {
+      descuentoTotal,
+      previewDescuento: createVentaDto.descuentoPreview?.descuentoAplicado,
+      total,
+      previewTotal: createVentaDto.descuentoPreview?.total,
+    });
 
     let pagosData: {
       formaPago: FormaPago;
@@ -242,12 +306,12 @@ export class VentasService {
       observaciones: createVentaDto.observaciones,
     });
 
-    const savedVenta = await this.ventasRepository.save(venta);
+    const savedVenta = await manager.save(Venta, venta);
 
     for (const detalle of detalles) {
       detalle.ventaId = savedVenta.id;
     }
-    await this.detallesRepository.save(detalles);
+    const savedDetalles = await manager.save(DetalleVenta, detalles);
 
     for (const pago of pagosData) {
       const pagoVenta = this.pagosRepository.create({
@@ -256,10 +320,29 @@ export class VentasService {
         monto: pago.monto,
         referencia: pago.referencia,
       });
-      await this.pagosRepository.save(pagoVenta);
+      await manager.save(PagoVenta, pagoVenta);
     }
 
-    return this.findOne(savedVenta.id);
+    for (const descuentoInfo of descuentosInfo) {
+      const detalle = savedDetalles.find(
+        (d) => d.productoId === descuentoInfo.productoId,
+      );
+      if (detalle && descuentoInfo.descuentoId) {
+        const descuentoVentaDetalle = this.descuentosVentaDetalleRepository.create({
+          detalleVentaId: detalle.id,
+          descuentoId: descuentoInfo.descuentoId,
+          productoId: descuentoInfo.productoId,
+          tipo: descuentoInfo.tipo as any,
+          porcentaje: descuentoInfo.porcentaje,
+          monto: descuentoInfo.monto,
+          motivoGenerado: descuentoInfo.motivo,
+        });
+        await manager.save(DescuentoVentaDetalle, descuentoVentaDetalle);
+      }
+    }
+
+    return { ...savedVenta, detalles: savedDetalles, pagos: pagosData };
+    });
   }
 
   async findAll(
@@ -313,7 +396,7 @@ export class VentasService {
 
   async findOne(
     id: string,
-  ): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[] }> {
+  ): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[]; descuentos: any[] }> {
     const venta = await this.ventasRepository.findOne({
       where: { id },
       relations: ['cliente', 'usuario'],
@@ -332,7 +415,15 @@ export class VentasService {
       where: { ventaId: id },
     });
 
-    return { ...venta, detalles, pagos };
+    const detalleIds = detalles.map(d => d.id);
+    let descuentos: any[] = [];
+    if (detalleIds.length > 0) {
+      descuentos = await this.descuentosVentaDetalleRepository.find({
+        where: { detalleVentaId: In(detalleIds) },
+      });
+    }
+
+    return { ...venta, detalles, pagos, descuentos };
   }
 
   async findByFolio(folio: number): Promise<Venta | null> {
@@ -394,6 +485,7 @@ export class VentasService {
       descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
+        descuentoId: string;
         tipo: string;
         porcentaje: number;
         monto: number | null;
@@ -401,6 +493,7 @@ export class VentasService {
         motivo: string;
       };
       descuentoCategoriaInfo: {
+        descuentoId: string;
         tipo: string;
         porcentaje: number;
         monto: number | null;
@@ -424,6 +517,7 @@ export class VentasService {
       descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
+        descuentoId: string;
         tipo: string;
         porcentaje: number;
         monto: number | null;
@@ -431,6 +525,7 @@ export class VentasService {
         motivo: string;
       };
       descuentoCategoriaInfo: {
+        descuentoId: string;
         tipo: string;
         porcentaje: number;
         monto: number | null;
@@ -446,16 +541,11 @@ export class VentasService {
     }[] = [];
 
     let categoriaClienteId: string | undefined;
-    console.log('[previewDescuento] Received clienteId:', clienteId);
     if (clienteId) {
       try {
         const cliente = await this.clientesService.findOne(clienteId);
-        console.log('[previewDescuento] Cliente found:', cliente);
         categoriaClienteId = cliente?.categoriaClienteId;
-        console.log('[previewDescuento] categoriaClienteId:', categoriaClienteId);
-      } catch {
-        console.error('[previewDescuento] Error fetching cliente');
-      }
+      } catch {}
     }
 
     for (const productoVenta of productos) {
@@ -473,6 +563,7 @@ export class VentasService {
             descuentoCategoria: 0,
             motivo: 'Producto no encontrado',
             mejorDescuento: {
+              descuentoId: '',
               tipo: 'NINGUNO',
               porcentaje: 0,
               monto: null,
@@ -492,6 +583,7 @@ export class VentasService {
           descuentoCategoria: 0,
           motivo: 'Producto no encontrado',
           mejorDescuento: {
+            descuentoId: '',
             tipo: 'NINGUNO',
             porcentaje: 0,
             monto: null,
@@ -508,6 +600,12 @@ export class VentasService {
       const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
       const iva = inventarioProducto?.ivaCfdi || 0;
       const margen = producto?.margenRecomendado || 20;
+      console.log('[previewDescuento] Producto:', productoVenta.productoId, {
+        precioUnitarioFromFindByProductoId: precioUnitario,
+        ivaCfdi: iva,
+        margen,
+        inventarioExists: !!inventarioProducto,
+      });
       const precioNeto = precioUnitario * (1 + iva / 100);
       const cantidadMargen = precioUnitario * (margen / 100);
       const precioVenta = precioNeto + cantidadMargen;
@@ -517,12 +615,14 @@ export class VentasService {
       let descuentoProductoMonto = 0;
       let descuentoCategoriaMonto = 0;
       let mejorDescuentoInfo: {
+        descuentoId: string;
         tipo: string;
         porcentaje: number;
         monto: number | null;
         precioConDescuento: number;
         motivo: string;
       } = {
+        descuentoId: '',
         tipo: 'NINGUNO',
         porcentaje: 0,
         monto: null,
@@ -530,6 +630,7 @@ export class VentasService {
         motivo: 'Sin descuento',
       };
       let descuentoCategoriaInfo: {
+        descuentoId: string;
         tipo: string;
         porcentaje: number;
         monto: number | null;
@@ -545,14 +646,6 @@ export class VentasService {
 
       try {
         const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
-        console.log('[previewDescuento] calling calcularDescuentosAcumulables', {
-          productoId: productoVenta.productoId,
-          cantidad: productoVenta.cantidad,
-          precioVenta,
-          laboratorioId: producto.laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
-        });
         const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,
@@ -561,7 +654,6 @@ export class VentasService {
           categoriaClienteId,
           fechaCaducidad,
         );
-        console.log('[previewDescuento] calculo result:', JSON.stringify(calculo, null, 2));
 
         if (calculo.descuentoProducto) {
           descuentoProductoMonto = subtotalLinea - calculo.descuentoProducto.precioConDescuento;
@@ -570,8 +662,11 @@ export class VentasService {
 
         if (calculo.descuentoCategoria) {
           descuentoCategoriaInfo = calculo.descuentoCategoria;
-          const baseParaCategoria = subtotalLinea - descuentoProductoMonto;
-          descuentoCategoriaMonto = (baseParaCategoria * calculo.descuentoCategoria.porcentaje) / 100;
+          const baseCategoria = subtotalLinea;
+          const montoCat = calculo.descuentoCategoria.monto
+            ? Math.min(calculo.descuentoCategoria.monto, baseCategoria)
+            : (baseCategoria * calculo.descuentoCategoria.porcentaje / 100);
+          descuentoCategoriaMonto = Number(montoCat.toFixed(2));
         }
 
         descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;

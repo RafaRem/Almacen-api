@@ -156,6 +156,8 @@ CREATE TABLE "clientes" (
 -- =============================================
 CREATE TABLE "descuentos" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "nombre" varchar(255),
+  "descripcion" text,
   "tipo" "descuento_tipo" NOT NULL,
   "condiciones" jsonb,
   "porcentaje" decimal(5,2) NOT NULL,
@@ -246,6 +248,26 @@ CREATE TABLE "detalle_lote" (
   "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP,
   UNIQUE("productoId", "loteId")
 );
+
+-- =============================================
+-- Descuentos Venta Detalle
+-- Tracking de descuentos aplicados a cada línea de venta
+-- =============================================
+CREATE TABLE "descuentos_venta_detalle" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "detalleVentaId" uuid NOT NULL REFERENCES "detalle_venta"("id") ON DELETE CASCADE,
+  "descuentoId" uuid REFERENCES "descuentos"("id") ON DELETE SET NULL,
+  "productoId" uuid NOT NULL REFERENCES "productos"("id"),
+  "tipo" "descuento_tipo" NOT NULL,
+  "porcentaje" decimal(5,2) NOT NULL,
+  "monto" decimal(10,2) NOT NULL,
+  "motivoGenerado" text,
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_dvd_detalle ON descuentos_venta_detalle(detalleVentaId);
+CREATE INDEX idx_dvd_descuento ON descuentos_venta_detalle(descuentoId);
+CREATE INDEX idx_dvd_producto ON descuentos_venta_detalle(productoId);
 
 
 INSERT INTO configuraciones_sistema ("clave", "valor") VALUES

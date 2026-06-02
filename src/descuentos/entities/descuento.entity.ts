@@ -13,6 +13,12 @@ export class Descuento {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ length: 255, nullable: true })
+  nombre: string;
+
+  @Column({ type: 'text', nullable: true })
+  descripcion: string;
+
   @Column({
     type: 'enum',
     enum: DescuentoTipo,

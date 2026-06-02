@@ -67,6 +67,7 @@ export class DescuentosService {
     fechaCaducidad?: Date,
   ): Promise<{
     descuentoProducto: {
+      descuentoId: string;
       tipo: string;
       porcentaje: number;
       monto: number | null;
@@ -74,6 +75,7 @@ export class DescuentosService {
       precioConDescuento: number;
     } | null;
     descuentoCategoria: {
+      descuentoId: string;
       tipo: string;
       porcentaje: number;
       monto: number | null;
@@ -84,18 +86,11 @@ export class DescuentosService {
     precioFinal: number;
     excedeLimite: boolean;
   }> {
-    console.log('[calcularDescuentosAcumulables] Input params:', {
-      productoId,
-      cantidad,
-      precioVenta,
-      laboratorioId,
-      categoriaClienteId,
-      fechaCaducidad,
-    });
     const precioOriginal = precioVenta * cantidad;
     const maximoDescuento = precioOriginal * 0.30;
 
     const descuentosProducto: {
+      descuentoId: string;
       porcentaje: number;
       monto: number | null;
       tipo: DescuentoTipo;
@@ -105,6 +100,7 @@ export class DescuentosService {
     }[] = [];
 
     const descuentosCategoria: {
+      descuentoId: string;
       porcentaje: number;
       monto: number | null;
       tipo: DescuentoTipo;
@@ -117,18 +113,16 @@ export class DescuentosService {
       where: { statusId: 1 },
     });
 
-    console.log('[calcularDescuentosAcumulables] Todos los descuentos encontrados:', todosDescuentos.map(d => ({ tipo: d.tipo, porcentaje: d.porcentaje, prioridad: d.prioridad, condiciones: d.condiciones })));
-
     for (const d of todosDescuentos) {
       if (d.tipo === DescuentoTipo.VOLUMEN && d.condiciones) {
         const { minCantidad, maxCantidad } = d.condiciones;
-        console.log('[calcularDescuentosAcumulables] VOLUMEN check:', { minCantidad, cantidadRecibida: cantidad, cantidadSuficiente: cantidad >= minCantidad });
         if (
           minCantidad &&
           cantidad >= minCantidad &&
           (!maxCantidad || cantidad <= maxCantidad)
         ) {
           descuentosProducto.push({
+            descuentoId: d.id,
             porcentaje: Number(d.porcentaje),
             monto: d.monto ? Number(d.monto) : null,
             tipo: d.tipo,
@@ -151,6 +145,7 @@ export class DescuentosService {
             d.fechaFin >= new Date());
         if (dentroRangoFechas) {
           descuentosProducto.push({
+            descuentoId: d.id,
             porcentaje: Number(d.porcentaje),
             monto: d.monto ? Number(d.monto) : null,
             tipo: d.tipo,
@@ -165,14 +160,14 @@ export class DescuentosService {
         d.tipo === DescuentoTipo.CATEGORIA &&
         d.categoriaClienteId === categoriaClienteId
       ) {
-        console.log('[calcularDescuentosAcumulables] CATEGORIA match! descuento:', d, 'categoriaClienteId received:', categoriaClienteId);
         descuentosCategoria.push({
+          descuentoId: d.id,
           porcentaje: Number(d.porcentaje),
           monto: d.monto ? Number(d.monto) : null,
           tipo: d.tipo,
           motivo: `Descuento por categoría de cliente`,
           prioridad: d.prioridad,
-          acumulable: true,
+          acumulable: d.acumulable || false,
         });
       }
 
@@ -192,6 +187,7 @@ export class DescuentosService {
           diasHastaCaducidad >= 0
         ) {
           descuentosProducto.push({
+            descuentoId: d.id,
             porcentaje: Number(d.porcentaje),
             monto: d.monto ? Number(d.monto) : null,
             tipo: d.tipo,
@@ -215,6 +211,7 @@ export class DescuentosService {
     };
 
     let descuentoProducto: {
+      descuentoId: string;
       tipo: string;
       porcentaje: number;
       monto: number | null;
@@ -236,8 +233,6 @@ export class DescuentosService {
         return 0;
       });
 
-      console.log('[calcularDescuentosAcumulables] Descuentos producto ordenados:', descuentosProducto.map(d => ({ tipo: d.tipo, porcentaje: d.porcentaje, prioridad: d.prioridad })));
-
       const mejor = descuentosProducto[0];
       const montoDescuento = calcularMontoDescuento(
         mejor.porcentaje,
@@ -247,6 +242,7 @@ export class DescuentosService {
       const precioConDescuento = precioOriginal - montoDescuento;
 
       descuentoProducto = {
+        descuentoId: mejor.descuentoId,
         tipo: mejor.tipo,
         porcentaje: mejor.porcentaje,
         monto: mejor.monto,
@@ -256,6 +252,7 @@ export class DescuentosService {
     }
 
     let descuentoCategoria: {
+      descuentoId: string;
       tipo: string;
       porcentaje: number;
       monto: number | null;
@@ -275,6 +272,7 @@ export class DescuentosService {
 
       const mejor = descuentosCategoria[0];
       descuentoCategoria = {
+        descuentoId: mejor.descuentoId,
         tipo: mejor.tipo,
         porcentaje: mejor.porcentaje,
         monto: mejor.monto,
@@ -294,7 +292,7 @@ export class DescuentosService {
       const montoCategoria = calcularMontoDescuento(
         descuentoCategoria.porcentaje,
         descuentoCategoria.monto,
-        precioOriginal - descuentoTotal,
+        precioOriginal,
       );
       descuentoTotal += montoCategoria;
     }
@@ -339,6 +337,8 @@ export class DescuentosService {
       motivo: string;
     }[];
   }> {
+    const precioOriginal = subtotalLinea ?? 0;
+
     const descuentos: {
       porcentaje: number;
       monto: number | null;
@@ -468,8 +468,8 @@ export class DescuentosService {
       tipo: d.tipo,
       porcentaje: d.porcentaje,
       monto: d.monto,
-      precioConDescuento: subtotalLinea
-        ? calcularPrecioConDescuento(d.porcentaje, d.monto, subtotalLinea)
+      precioConDescuento: precioOriginal
+        ? calcularPrecioConDescuento(d.porcentaje, d.monto, precioOriginal)
         : 0,
       motivo: d.motivo,
     }));
@@ -480,11 +480,11 @@ export class DescuentosService {
         porcentaje: mejor.porcentaje,
         monto: mejor.monto,
         motivo: mejor.motivo,
-        precioConDescuento: subtotalLinea
+        precioConDescuento: precioOriginal
           ? calcularPrecioConDescuento(
               mejor.porcentaje,
               mejor.monto,
-              subtotalLinea,
+              precioOriginal,
             )
           : 0,
       },

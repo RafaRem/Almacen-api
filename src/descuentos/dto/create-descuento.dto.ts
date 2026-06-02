@@ -13,6 +13,14 @@ import { StatusId } from '../../common/enums/status-id.enum';
 import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
 export class CreateDescuentoDto {
+  @IsOptional()
+  @IsString()
+  nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
+
   @IsEnum(DescuentoTipo)
   tipo: DescuentoTipo;
 
@@ -51,6 +59,14 @@ export class CreateDescuentoDto {
 }
 
 export class UpdateDescuentoDto {
+  @IsOptional()
+  @IsString()
+  nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
+
   @IsOptional()
   @IsEnum(DescuentoTipo)
   tipo?: DescuentoTipo;

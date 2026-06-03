@@ -40,7 +40,7 @@ interface CalculoLineaVenta {
 
 @Injectable()
 export class VentasService {
-  private static readonly TOLERANCIA_PREVIEW = 0.1;
+  private static readonly TOLERANCIA_PREVIEW = 5.0;
 
   constructor(
     @InjectRepository(Venta)
@@ -212,18 +212,26 @@ export class VentasService {
     const total = subtotal - descuentoTotal + iva;
 
     if (createVentaDto.descuentosPreview) {
-      const diffDescuento = Math.abs(
-        descuentoTotal - createVentaDto.descuentosPreview.descuentoAplicado,
-      );
-      const diffTotal = Math.abs(total - createVentaDto.descuentosPreview.total);
-      if (
-        diffDescuento > VentasService.TOLERANCIA_PREVIEW ||
-        diffTotal > VentasService.TOLERANCIA_PREVIEW
-      ) {
+      const previewDesc = createVentaDto.descuentosPreview.descuentoAplicado;
+      const previewTotal = createVentaDto.descuentosPreview.total;
+      const diffDescuento = Math.abs(descuentoTotal - previewDesc);
+      const diffTotal = Math.abs(total - previewTotal);
+      const tol = VentasService.TOLERANCIA_PREVIEW;
+      const prodIds = createVentaDto.productos
+        .map(p => p.productoId.slice(0, 8))
+        .join(',');
+
+      console.log(`[VALIDATION] productos=[${prodIds}] clienteId=${createVentaDto.clienteId || 'null'}`);
+      console.log(`  Calc descuento:  ${descuentoTotal.toFixed(2)} | Preview: ${previewDesc.toFixed(2)} | diff: ${diffDescuento.toFixed(2)} | tol: ${tol}`);
+      console.log(`  Calc total:      ${total.toFixed(2)} | Preview: ${previewTotal.toFixed(2)} | diff: ${diffTotal.toFixed(2)} | tol: ${tol}`);
+
+      if (diffDescuento > tol || diffTotal > tol) {
+        console.log(`  RESULTADO: 400 Bad Request - discrepancia excede tolerancia`);
         throw new BadRequestException(
-          `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${createVentaDto.descuentosPreview.descuentoAplicado.toFixed(2)}, total=${createVentaDto.descuentosPreview.total.toFixed(2)}. Posible manipulacion.`,
+          `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${previewDesc.toFixed(2)}, total=${previewTotal.toFixed(2)}. Posible manipulacion.`,
         );
       }
+      console.log(`  RESULTADO: 201 Created - dentro de tolerancia`);
     }
 
     let pagosData: {

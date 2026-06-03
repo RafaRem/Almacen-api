@@ -16,25 +16,25 @@ export class DescuentoVentaDetalle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', name: 'detalleventaid' })
+  @Column({ type: 'uuid', name: 'detalleVentaId' })
   detalleVentaId: string;
 
   @ManyToOne(() => DetalleVenta, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'detalleventaid' })
+  @JoinColumn({ name: 'detalleVentaId' })
   detalleVenta: DetalleVenta;
 
-  @Column({ type: 'uuid', name: 'descuentoid' })
+  @Column({ type: 'uuid', name: 'descuentoId' })
   descuentoId: string;
 
   @ManyToOne(() => Descuento)
-  @JoinColumn({ name: 'descuentoid' })
+  @JoinColumn({ name: 'descuentoId' })
   descuento: Descuento;
 
-  @Column({ type: 'uuid', name: 'productoid' })
+  @Column({ type: 'uuid', name: 'productoId' })
   productoId: string;
 
   @ManyToOne(() => Producto)
-  @JoinColumn({ name: 'productoid' })
+  @JoinColumn({ name: 'productoId' })
   producto: Producto;
 
   @Column({ type: 'enum', enum: DescuentoTipo, name: 'tipo' })
@@ -46,9 +46,9 @@ export class DescuentoVentaDetalle {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'monto' })
   monto: number;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'motivogenerado' })
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'motivoGenerado' })
   motivoGenerado: string;
 
-  @CreateDateColumn({ name: 'createdat' })
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 }

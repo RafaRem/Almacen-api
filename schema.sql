@@ -166,6 +166,7 @@ CREATE TABLE "descuentos" (
   "fechaFin" date,
   "statusId" integer DEFAULT 1,
   "prioridad" integer DEFAULT 0,
+  "acumulable" boolean DEFAULT FALSE,
   "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
 );
@@ -218,6 +219,25 @@ CREATE TABLE "detalle_venta" (
   "descuentolinea" decimal(10,2) DEFAULT 0,
   "subtotal" decimal(10,2) NOT NULL
 );
+
+-- =============================================
+-- Descuento Venta Detalle (Trazabilidad de descuentos por línea de venta)
+-- Guarda el desglose por tipo (VOLUMEN, LABORATORIO, CADUCIDAD, CATEGORIA)
+-- para que la auditoría pueda reconstruir el descuento aplicado.
+-- =============================================
+CREATE TABLE "descuentos_venta_detalle" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "detalleVentaId" uuid NOT NULL REFERENCES "detalle_venta"("id") ON DELETE CASCADE,
+  "descuentoId" uuid NOT NULL REFERENCES "descuentos"("id"),
+  "productoId" uuid NOT NULL REFERENCES "productos"("id"),
+  "tipo" "descuento_tipo" NOT NULL,
+  "porcentaje" decimal(5,2) NOT NULL,
+  "monto" decimal(10,2) NOT NULL,
+  "motivoGenerado" varchar(255),
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX "idx_dvd_detalle" ON "descuentos_venta_detalle" ("detalleVentaId");
+CREATE INDEX "idx_dvd_descuento" ON "descuentos_venta_detalle" ("descuentoId");
 
 -- =============================================
 -- Configuraciones Sistema

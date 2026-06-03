@@ -8,6 +8,7 @@ import {
   IsDateString,
   Min,
   IsInt,
+  IsBoolean,
 } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
@@ -41,6 +42,10 @@ export class CreateDescuentoDto {
 
   @IsOptional()
   prioridad?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  acumulable?: boolean;
 
   @IsOptional()
   @IsInt()
@@ -82,6 +87,10 @@ export class UpdateDescuentoDto {
 
   @IsOptional()
   prioridad?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  acumulable?: boolean;
 }
 
 export class CalcularDescuentoDto {

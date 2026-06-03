@@ -150,11 +150,18 @@ export class VentasService {
         });
       }
 
-      const precioUnitario = resultadoFEPU.lotsUsed.length > 0
+      const inventarioProducto =
+        await this.inventarioAlmacenService.findByProductoId(
+          productoVenta.productoId,
+        );
+      const precioCostoLote = resultadoFEPU.lotsUsed.length > 0
         ? resultadoFEPU.lotsUsed[0].precio
         : 0;
 
-      const precioVenta = productoVenta.precioVenta ?? precioUnitario;
+      const precioVenta =
+        Number(productoVenta.precioVenta) ||
+        Number(inventarioProducto?.precioVenta) ||
+        precioCostoLote;
 
       if (!precioVenta || precioVenta <= 0) {
         throw new BadRequestException(
@@ -162,10 +169,6 @@ export class VentasService {
         );
       }
 
-      const inventarioProducto =
-        await this.inventarioAlmacenService.findByProductoId(
-          productoVenta.productoId,
-        );
       const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
 
       const calculo = await this.descuentosService.calcularDescuentosAcumulables(
@@ -187,7 +190,7 @@ export class VentasService {
         resultadoFEPU.lotsUsed[0]?.loteId || '';
 
       calculosLinea.push({
-        precioUnitario,
+        precioUnitario: precioVenta,
         precioVenta,
         descuentoLinea,
         subtotalLinea: subtotalLinea - descuentoLinea,
@@ -198,7 +201,7 @@ export class VentasService {
         productoId: productoVenta.productoId,
         loteId: primerLoteId,
         cantidad: productoVenta.cantidad,
-        precioUnitario,
+        precioUnitario: precioVenta,
         descuentoLinea,
         subtotal: subtotalLinea - descuentoLinea,
       });
@@ -437,7 +440,7 @@ export class VentasService {
   }
 
   async previewDescuento(
-    productos: { productoId: string; cantidad: number }[],
+    productos: { productoId: string; cantidad: number; precioVenta?: number }[],
     clienteId?: string,
   ): Promise<{
     subtotal: number;
@@ -522,7 +525,11 @@ export class VentasService {
         await this.inventarioAlmacenService.findByProductoId(
           productoVenta.productoId,
         );
-      const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
+      const precioUnitario =
+        Number(productoVenta.precioVenta) ||
+        Number(inventarioProducto?.precioVenta) ||
+        Number(inventarioProducto?.precioUnitarioLote) ||
+        0;
       const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
       const subtotalLinea = precioUnitario * productoVenta.cantidad;
 

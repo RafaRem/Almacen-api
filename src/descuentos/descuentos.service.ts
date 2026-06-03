@@ -280,11 +280,9 @@ export class DescuentosService {
       motivo: string;
     } | null = null;
     if (descuentoCategoria) {
-      const baseParaCategoria =
-        descuentoProductoInfo?.precioConDescuento ?? subtotalLinea;
       const montoCategoria = calcularMonto(
         descuentoCategoria,
-        baseParaCategoria,
+        subtotalLinea,
       );
       descuentoCategoriaInfo = {
         descuentoId: descuentoCategoria.descuentoId,

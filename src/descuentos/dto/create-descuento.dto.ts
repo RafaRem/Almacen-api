@@ -99,9 +99,6 @@ export class UpdateDescuentoDto {
   prioridad?: number;
 
   @IsOptional()
-  prioridad?: number;
-
-  @IsOptional()
   acumulable?: boolean;
 
   @IsOptional()

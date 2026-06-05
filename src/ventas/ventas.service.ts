@@ -805,14 +805,6 @@ export class VentasService {
         motivos.push(descuentoCategoriaInfo.motivo);
       }
 
-      const motivos: string[] = [];
-      if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
-        motivos.push(mejorDescuentoInfo.motivo);
-      }
-      if (descuentoCategoriaInfo) {
-        motivos.push(descuentoCategoriaInfo.motivo);
-      }
-
       descuentoPorProducto.push({
         productoId: productoVenta.productoId,
         descuento: descuentoLinea,

@@ -659,11 +659,16 @@ export class VentasService {
     }[] = [];
 
     let categoriaClienteId: string | undefined;
+    console.log('[previewDescuento] Received clienteId:', clienteId);
     if (clienteId) {
       try {
         const cliente = await this.clientesService.findOne(clienteId);
+        console.log('[previewDescuento] Cliente found:', cliente);
         categoriaClienteId = cliente?.categoriaClienteId;
-      } catch {}
+        console.log('[previewDescuento] categoriaClienteId:', categoriaClienteId);
+      } catch {
+        console.error('[previewDescuento] Error fetching cliente');
+      }
     }
 
     for (const productoVenta of productos) {
@@ -791,6 +796,14 @@ export class VentasService {
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
+
+      const motivos: string[] = [];
+      if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
+        motivos.push(mejorDescuentoInfo.motivo);
+      }
+      if (descuentoCategoriaInfo) {
+        motivos.push(descuentoCategoriaInfo.motivo);
+      }
 
       const motivos: string[] = [];
       if (mejorDescuentoInfo.tipo !== 'NINGUNO') {

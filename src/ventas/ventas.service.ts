@@ -29,7 +29,7 @@ interface CalculoLineaVenta {
   subtotalLinea: number;
   detalleVentaId?: string;
   descuentosAplicados: {
-    descuentoId: string;
+    descuentoId: string | null;
     tipo: DescuentoTipo;
     porcentaje: number;
     monto: number;
@@ -462,7 +462,7 @@ export class VentasService {
       descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
-        descuentoId: string;
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
         monto: number;
@@ -470,7 +470,7 @@ export class VentasService {
         motivo: string;
       } | null;
       descuentoCategoriaInfo: {
-        descuentoId: string;
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
         monto: number;
@@ -487,7 +487,7 @@ export class VentasService {
       descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
-        descuentoId: string;
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
         monto: number;
@@ -495,7 +495,7 @@ export class VentasService {
         motivo: string;
       } | null;
       descuentoCategoriaInfo: {
-        descuentoId: string;
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
         monto: number;

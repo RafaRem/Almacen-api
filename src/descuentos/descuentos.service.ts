@@ -7,12 +7,16 @@ import {
   UpdateDescuentoDto,
 } from './dto/create-descuento.dto';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
+import { StatusId } from '../common/enums/status-id.enum';
+import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
 
 @Injectable()
 export class DescuentosService {
   constructor(
     @InjectRepository(Descuento)
     private descuentosRepository: Repository<Descuento>,
+    @InjectRepository(CategoriaCliente)
+    private categoriaClienteRepository: Repository<CategoriaCliente>,
   ) {}
 
   async create(createDto: CreateDescuentoDto): Promise<Descuento> {
@@ -119,21 +123,6 @@ export class DescuentosService {
     }
 
     if (
-      d.tipo === DescuentoTipo.CATEGORIA &&
-      d.categoriaClienteId === categoriaClienteId
-    ) {
-      return {
-        porcentaje: Number(d.porcentaje),
-        monto: d.monto ? Number(d.monto) : null,
-        tipo: d.tipo,
-        motivo: `Descuento por categoría de cliente`,
-        prioridad: d.prioridad,
-        descuentoId: d.id,
-        acumulable: d.acumulable,
-      };
-    }
-
-    if (
       d.tipo === DescuentoTipo.CADUCIDAD &&
       d.condiciones &&
       fechaCaducidad
@@ -171,7 +160,7 @@ export class DescuentosService {
     precioVentaUnitario?: number,
   ): Promise<{
     descuentosAplicables: {
-      descuentoId: string;
+      descuentoId: string | null;
       tipo: DescuentoTipo;
       porcentaje: number;
       monto: number;
@@ -179,7 +168,7 @@ export class DescuentosService {
       esProducto: boolean;
     }[];
     descuentoProducto: {
-      descuentoId: string;
+      descuentoId: string | null;
       tipo: DescuentoTipo;
       porcentaje: number;
       monto: number;
@@ -187,7 +176,7 @@ export class DescuentosService {
       motivo: string;
     } | null;
     descuentoCategoria: {
-      descuentoId: string;
+      descuentoId: string | null;
       tipo: DescuentoTipo;
       porcentaje: number;
       monto: number;
@@ -220,9 +209,6 @@ export class DescuentosService {
     const descuentosProducto = descuentosEvaluados.filter(
       (d) => d.tipo !== DescuentoTipo.CATEGORIA,
     );
-    const descuentosCategoria = descuentosEvaluados.filter(
-      (d) => d.tipo === DescuentoTipo.CATEGORIA,
-    );
 
     const ordenarPorBeneficio = (
       a: typeof descuentosProducto[0],
@@ -239,7 +225,6 @@ export class DescuentosService {
       return beneficioB - beneficioA;
     };
     descuentosProducto.sort(ordenarPorBeneficio);
-    descuentosCategoria.sort(ordenarPorBeneficio);
 
     const calcularMonto = (
       d: { porcentaje: number; monto: number | null },
@@ -250,10 +235,36 @@ export class DescuentosService {
     };
 
     const mejorProducto = descuentosProducto[0] || null;
-    const descuentoCategoria = descuentosCategoria[0] || null;
+
+    // Category discount from categorias_cliente table
+    let descuentoCategoria: {
+      porcentaje: number;
+      monto: number | null;
+      tipo: DescuentoTipo;
+      motivo: string;
+      prioridad: number;
+      descuentoId: string | null;
+      acumulable: boolean;
+    } | null = null;
+    if (categoriaClienteId) {
+      const categoria = await this.categoriaClienteRepository.findOne({
+        where: { id: categoriaClienteId, statusId: StatusId.ACTIVE },
+      });
+      if (categoria && Number(categoria.descuento) > 0) {
+        descuentoCategoria = {
+          porcentaje: Number(categoria.descuento),
+          monto: null,
+          tipo: DescuentoTipo.CATEGORIA,
+          motivo: `Descuento por categoría de cliente: ${categoria.nombre}`,
+          prioridad: 0,
+          descuentoId: categoria.id,
+          acumulable: true,
+        };
+      }
+    }
 
     let descuentoProductoInfo: {
-      descuentoId: string;
+      descuentoId: string | null;
       tipo: DescuentoTipo;
       porcentaje: number;
       monto: number;
@@ -273,7 +284,7 @@ export class DescuentosService {
     }
 
     let descuentoCategoriaInfo: {
-      descuentoId: string;
+      descuentoId: string | null;
       tipo: DescuentoTipo;
       porcentaje: number;
       monto: number;
@@ -317,7 +328,7 @@ export class DescuentosService {
     const precioFinal = Number((subtotalLinea - descuentoTotal).toFixed(2));
 
     const descuentosAplicables: {
-      descuentoId: string;
+      descuentoId: string | null;
       tipo: DescuentoTipo;
       porcentaje: number;
       monto: number;
@@ -336,7 +347,7 @@ export class DescuentosService {
     }
     if (descuentoCategoriaInfo) {
       descuentosAplicables.push({
-        descuentoId: descuentoCategoriaInfo.descuentoId,
+        descuentoId: null,
         tipo: descuentoCategoriaInfo.tipo,
         porcentaje: descuentoCategoriaInfo.porcentaje,
         monto: descuentoCategoriaInfo.monto,

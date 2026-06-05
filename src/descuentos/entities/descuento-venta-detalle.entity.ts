@@ -23,12 +23,12 @@ export class DescuentoVentaDetalle {
   @JoinColumn({ name: 'detalleVentaId' })
   detalleVenta: DetalleVenta;
 
-  @Column({ type: 'uuid', name: 'descuentoId' })
-  descuentoId: string;
+  @Column({ type: 'uuid', name: 'descuentoId', nullable: true })
+  descuentoId: string | null;
 
-  @ManyToOne(() => Descuento)
+  @ManyToOne(() => Descuento, { nullable: true })
   @JoinColumn({ name: 'descuentoId' })
-  descuento: Descuento;
+  descuento: Descuento | null;
 
   @Column({ type: 'uuid', name: 'productoId' })
   productoId: string;

@@ -81,7 +81,6 @@ export class InventarioAlmacenService {
     const agrupado = new Map<string, any>();
 
     for (const inv of inventarios) {
-      console.log('[getStockPorAlmacen] inv debug - productoId:', inv.productoId, 'ivaCfdi:', inv.ivaCfdi, 'precioVenta:', inv.precioVenta, 'loteId:', inv.loteId);
       const key = inv.productoId;
       if (agrupado.has(key)) {
         agrupado.get(key).cantidadActual += Number(inv.cantidadActual);
@@ -133,7 +132,6 @@ export class InventarioAlmacenService {
       }
     }
 
-    console.log('[getStockPorAlmacen] Returning resultado with lots:', JSON.stringify(resultado.map(r => ({ productoId: r.productoId, lotes: r.lotes })), null, 2));
     return resultado;
   }
 

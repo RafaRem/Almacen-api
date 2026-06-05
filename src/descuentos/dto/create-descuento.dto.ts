@@ -82,8 +82,7 @@ export class UpdateDescuentoDto {
   fechaFin?: string;
 
   @IsOptional()
-  @IsEnum(StatusId)
-  statusId?: StatusId;
+  prioridad?: number;
 
   @IsOptional()
   prioridad?: number;

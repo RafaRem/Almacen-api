@@ -257,7 +257,7 @@ export class DescuentosService {
           tipo: DescuentoTipo.CATEGORIA,
           motivo: `Descuento por categoría de cliente: ${categoria.nombre}`,
           prioridad: 0,
-          descuentoId: categoria.id,
+          descuentoId: null,
           acumulable: true,
         };
       }

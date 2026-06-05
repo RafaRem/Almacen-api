@@ -14,7 +14,6 @@ import {
 import { Type } from 'class-transformer';
 import { MetodoPago } from '../../common/enums/metodo-pago.enum';
 import { PagoDetalleDto } from './pago-detalle.dto';
-import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
 export class ProductoVentaDto {
   @IsUUID()
@@ -35,18 +34,55 @@ export class ProductoVentaDto {
   precioVenta?: number;
 }
 
-export class DescuentoInfoDto {
-  @IsUUID()
-  descuentoId: string;
+export class DescuentosPreviewDto {
+  @IsNumber()
+  descuentoAplicado: number;
 
-  @IsEnum(DescuentoTipo)
-  tipo: DescuentoTipo;
+  @IsNumber()
+  total: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DescuentoPorProductoDto)
+  descuentoPorProducto: DescuentoPorProductoDto[];
+}
+
+export class MejorDescuentoDto {
+  @IsUUID()
+  @IsOptional()
+  descuentoId?: string;
+
+  @IsString()
+  tipo: string;
 
   @IsNumber()
   porcentaje: number;
 
   @IsNumber()
-  monto: number;
+  @IsOptional()
+  monto?: number | null;
+
+  @IsNumber()
+  precioConDescuento: number;
+
+  @IsString()
+  motivo: string;
+}
+
+export class DescuentoCategoriaInfoDto {
+  @IsUUID()
+  @IsOptional()
+  descuentoId?: string;
+
+  @IsString()
+  tipo: string;
+
+  @IsNumber()
+  porcentaje: number;
+
+  @IsNumber()
+  @IsOptional()
+  monto?: number | null;
 
   @IsString()
   motivo: string;
@@ -54,6 +90,7 @@ export class DescuentoInfoDto {
 
 export class DescuentoPorProductoDto {
   @IsUUID()
+  @IsNotEmpty()
   productoId: string;
 
   @IsNumber()
@@ -70,26 +107,13 @@ export class DescuentoPorProductoDto {
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => DescuentoInfoDto)
-  mejorDescuento?: DescuentoInfoDto | null;
+  @Type(() => MejorDescuentoDto)
+  mejorDescuento?: MejorDescuentoDto;
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => DescuentoInfoDto)
-  descuentoCategoriaInfo?: DescuentoInfoDto | null;
-}
-
-export class DescuentosPreviewDto {
-  @IsNumber()
-  descuentoAplicado: number;
-
-  @IsNumber()
-  total: number;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DescuentoPorProductoDto)
-  descuentoPorProducto: DescuentoPorProductoDto[];
+  @Type(() => DescuentoCategoriaInfoDto)
+  descuentoCategoriaInfo?: DescuentoCategoriaInfoDto;
 }
 
 export class CreateVentaDto {
@@ -117,8 +141,6 @@ export class CreateVentaDto {
   productos: ProductoVentaDto[];
 
   @IsOptional()
-  @ValidateNested()
-  @Type(() => DescuentosPreviewDto)
   descuentosPreview?: DescuentosPreviewDto;
 }
 

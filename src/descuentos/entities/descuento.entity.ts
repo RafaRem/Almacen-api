@@ -13,6 +13,12 @@ export class Descuento {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ length: 255, nullable: true })
+  nombre: string;
+
+  @Column({ type: 'text', nullable: true })
+  descripcion: string;
+
   @Column({
     type: 'enum',
     enum: DescuentoTipo,
@@ -50,7 +56,7 @@ export class Descuento {
   @Column({ default: 0 })
   prioridad: number;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ default: false })
   acumulable: boolean;
 
   @CreateDateColumn()

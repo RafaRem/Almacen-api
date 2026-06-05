@@ -14,6 +14,7 @@ import {
 import { Type } from 'class-transformer';
 import { MetodoPago } from '../../common/enums/metodo-pago.enum';
 import { PagoDetalleDto } from './pago-detalle.dto';
+import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
 export class ProductoVentaDto {
   @IsUUID()
@@ -32,6 +33,63 @@ export class ProductoVentaDto {
   @IsNumber()
   @IsOptional()
   precioVenta?: number;
+}
+
+export class DescuentoInfoDto {
+  @IsUUID()
+  descuentoId: string;
+
+  @IsEnum(DescuentoTipo)
+  tipo: DescuentoTipo;
+
+  @IsNumber()
+  porcentaje: number;
+
+  @IsNumber()
+  monto: number;
+
+  @IsString()
+  motivo: string;
+}
+
+export class DescuentoPorProductoDto {
+  @IsUUID()
+  productoId: string;
+
+  @IsNumber()
+  descuento: number;
+
+  @IsNumber()
+  descuentoProducto: number;
+
+  @IsNumber()
+  descuentoCategoria: number;
+
+  @IsString()
+  motivo: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DescuentoInfoDto)
+  mejorDescuento?: DescuentoInfoDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DescuentoInfoDto)
+  descuentoCategoriaInfo?: DescuentoInfoDto | null;
+}
+
+export class DescuentosPreviewDto {
+  @IsNumber()
+  descuentoAplicado: number;
+
+  @IsNumber()
+  total: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DescuentoPorProductoDto)
+  descuentoPorProducto: DescuentoPorProductoDto[];
 }
 
 export class CreateVentaDto {
@@ -59,10 +117,9 @@ export class CreateVentaDto {
   productos: ProductoVentaDto[];
 
   @IsOptional()
-  descuentoPreview?: {
-    descuentoAplicado: number;
-    total: number;
-  };
+  @ValidateNested()
+  @Type(() => DescuentosPreviewDto)
+  descuentosPreview?: DescuentosPreviewDto;
 }
 
 export class UpdateVentaDto {

@@ -50,7 +50,7 @@ export class Descuento {
   @Column({ default: 0 })
   prioridad: number;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   acumulable: boolean;
 
   @CreateDateColumn()

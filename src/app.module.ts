@@ -37,6 +37,7 @@ import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env', '.env.dev'],
     }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),

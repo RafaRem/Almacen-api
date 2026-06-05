@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Venta } from './entities/venta.entity';
 import { DetalleVenta } from './entities/detalle-venta.entity';
 import { PagoVenta } from './entities/pago-venta.entity';
+import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { ProductosService } from '../productos/productos.service';
 import { LotesService } from '../lotes/lotes.service';
@@ -19,9 +20,28 @@ import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { FormaPago } from '../common/enums/forma-pago.enum';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { ClientesService } from '../clientes/clientes.service';
+import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
+
+interface CalculoLineaVenta {
+  precioUnitario: number;
+  precioVenta: number;
+  descuentoLinea: number;
+  subtotalLinea: number;
+  detalleVentaId?: string;
+  descuentosAplicados: {
+    descuentoId: string | null;
+    tipo: DescuentoTipo;
+    porcentaje: number;
+    monto: number;
+    motivo: string;
+    esProducto: boolean;
+  }[];
+}
 
 @Injectable()
 export class VentasService {
+  private static readonly TOLERANCIA_PREVIEW = 5.0;
+
   constructor(
     @InjectRepository(Venta)
     private ventasRepository: Repository<Venta>,
@@ -29,6 +49,8 @@ export class VentasService {
     private detallesRepository: Repository<DetalleVenta>,
     @InjectRepository(PagoVenta)
     private pagosRepository: Repository<PagoVenta>,
+    @InjectRepository(DescuentoVentaDetalle)
+    private descuentosDetalleRepository: Repository<DescuentoVentaDetalle>,
     private productosService: ProductosService,
     private lotesService: LotesService,
     private descuentosService: DescuentosService,
@@ -53,13 +75,14 @@ export class VentasService {
   async create(
     createVentaDto: CreateVentaDto,
     usuarioId: string,
-  ): Promise<Venta> {
+  ): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[] }> {
     if (!createVentaDto.productos || createVentaDto.productos.length === 0) {
       throw new BadRequestException('La venta debe tener al menos un producto');
     }
 
     let subtotal = 0;
     let descuentoTotal = 0;
+    const calculosLinea: CalculoLineaVenta[] = [];
     const detalles: Partial<DetalleVenta>[] = [];
     const movimientosLotes: {
       productoId: string;
@@ -127,37 +150,38 @@ export class VentasService {
         });
       }
 
-      const precioUnitario = resultadoFEPU.lotsUsed.length > 0
+      const inventarioProducto =
+        await this.inventarioAlmacenService.findByProductoId(
+          productoVenta.productoId,
+        );
+      const precioCostoLote = resultadoFEPU.lotsUsed.length > 0
         ? resultadoFEPU.lotsUsed[0].precio
         : 0;
 
-      const precioVenta = productoVenta.precioVenta ?? precioUnitario;
+      const precioVenta =
+        Number(productoVenta.precioVenta) ||
+        Number(inventarioProducto?.precioVenta) ||
+        precioCostoLote;
 
-      let descuentoLinea = 0;
-      try {
-        const calculo = await this.descuentosService.calcularMejorDescuento(
-          productoVenta.productoId,
-          productoVenta.cantidad,
-          producto.laboratorioId,
-          categoriaClienteId,
+      if (!precioVenta || precioVenta <= 0) {
+        throw new BadRequestException(
+          `Precio de venta no disponible para ${producto.nombre}. Verifica el inventario del producto.`,
         );
-        if (
-          calculo?.mejorDescuento &&
-          calculo.mejorDescuento.tipo !== 'NINGUNO'
-        ) {
-          const mejor = calculo.mejorDescuento;
-          if (mejor.monto && mejor.monto > 0) {
-            descuentoLinea = mejor.monto;
-          } else {
-            descuentoLinea =
-              (precioVenta * productoVenta.cantidad * mejor.porcentaje) /
-              100;
-          }
-        }
-      } catch {}
+      }
 
-      const subtotalLinea =
-        precioVenta * productoVenta.cantidad - descuentoLinea;
+      const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
+
+      const calculo = await this.descuentosService.calcularDescuentosAcumulables(
+        productoVenta.productoId,
+        productoVenta.cantidad,
+        producto.laboratorioId,
+        categoriaClienteId,
+        fechaCaducidad,
+        precioVenta,
+      );
+
+      const subtotalLinea = precioVenta * productoVenta.cantidad;
+      const descuentoLinea = calculo.descuentoTotal;
 
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
@@ -165,13 +189,21 @@ export class VentasService {
       const primerLoteId =
         resultadoFEPU.lotsUsed[0]?.loteId || '';
 
+      calculosLinea.push({
+        precioUnitario: precioVenta,
+        precioVenta,
+        descuentoLinea,
+        subtotalLinea: subtotalLinea - descuentoLinea,
+        descuentosAplicados: calculo.descuentosAplicables,
+      });
+
       detalles.push({
         productoId: productoVenta.productoId,
         loteId: primerLoteId,
         cantidad: productoVenta.cantidad,
-        precioUnitario,
+        precioUnitario: precioVenta,
         descuentoLinea,
-        subtotal: subtotalLinea,
+        subtotal: subtotalLinea - descuentoLinea,
       });
     }
 
@@ -179,16 +211,27 @@ export class VentasService {
     const iva = (subtotal - descuentoTotal) * ivaRate;
     const total = subtotal - descuentoTotal + iva;
 
-    if (createVentaDto.descuentoPreview) {
-      const diffDescuento = Math.abs(
-        descuentoTotal - createVentaDto.descuentoPreview.descuentoAplicado,
-      );
-      const diffTotal = Math.abs(total - createVentaDto.descuentoPreview.total);
-      if (diffDescuento > 0.1 || diffTotal > 0.1) {
+    if (createVentaDto.descuentosPreview) {
+      const previewDesc = createVentaDto.descuentosPreview.descuentoAplicado;
+      const previewTotal = createVentaDto.descuentosPreview.total;
+      const diffDescuento = Math.abs(descuentoTotal - previewDesc);
+      const diffTotal = Math.abs(total - previewTotal);
+      const tol = VentasService.TOLERANCIA_PREVIEW;
+      const prodIds = createVentaDto.productos
+        .map(p => p.productoId.slice(0, 8))
+        .join(',');
+
+      console.log(`[VALIDATION] productos=[${prodIds}] clienteId=${createVentaDto.clienteId || 'null'}`);
+      console.log(`  Calc descuento:  ${descuentoTotal.toFixed(2)} | Preview: ${previewDesc.toFixed(2)} | diff: ${diffDescuento.toFixed(2)} | tol: ${tol}`);
+      console.log(`  Calc total:      ${total.toFixed(2)} | Preview: ${previewTotal.toFixed(2)} | diff: ${diffTotal.toFixed(2)} | tol: ${tol}`);
+
+      if (diffDescuento > tol || diffTotal > tol) {
+        console.log(`  RESULTADO: 400 Bad Request - discrepancia excede tolerancia`);
         throw new BadRequestException(
-          `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${createVentaDto.descuentoPreview.descuentoAplicado.toFixed(2)}, total=${createVentaDto.descuentoPreview.total.toFixed(2)}. Posible manipulacion.`,
+          `Discrepancia en descuentos detectada. Calc: desc=${descuentoTotal.toFixed(2)}, total=${total.toFixed(2)} vs Preview: desc=${previewDesc.toFixed(2)}, total=${previewTotal.toFixed(2)}. Posible manipulacion.`,
         );
       }
+      console.log(`  RESULTADO: 201 Created - dentro de tolerancia`);
     }
 
     let pagosData: {
@@ -244,10 +287,35 @@ export class VentasService {
 
     const savedVenta = await this.ventasRepository.save(venta);
 
-    for (const detalle of detalles) {
-      detalle.ventaId = savedVenta.id;
+    for (let i = 0; i < detalles.length; i++) {
+      detalles[i].ventaId = savedVenta.id;
     }
-    await this.detallesRepository.save(detalles);
+    const savedDetalles = await this.detallesRepository.save(detalles);
+
+    for (let i = 0; i < savedDetalles.length; i++) {
+      calculosLinea[i].detalleVentaId = savedDetalles[i].id;
+    }
+
+    const descuentosDetalleAInsertar: Partial<DescuentoVentaDetalle>[] = [];
+    for (let i = 0; i < savedDetalles.length; i++) {
+      const calc = calculosLinea[i];
+      const det = savedDetalles[i];
+      if (!calc || !det) continue;
+      for (const d of calc.descuentosAplicados) {
+        descuentosDetalleAInsertar.push({
+          detalleVentaId: det.id,
+          descuentoId: d.descuentoId,
+          productoId: det.productoId,
+          tipo: d.tipo,
+          porcentaje: d.porcentaje,
+          monto: d.monto,
+          motivoGenerado: d.motivo,
+        });
+      }
+    }
+    if (descuentosDetalleAInsertar.length > 0) {
+      await this.descuentosDetalleRepository.save(descuentosDetalleAInsertar);
+    }
 
     for (const pago of pagosData) {
       const pagoVenta = this.pagosRepository.create({
@@ -325,7 +393,7 @@ export class VentasService {
 
     const detalles = await this.detallesRepository.find({
       where: { ventaId: id },
-      relations: ['producto', 'lote'],
+      relations: ['producto', 'lote', 'descuentos', 'descuentos.descuento'],
     });
 
     const pagos = await this.pagosRepository.find({
@@ -380,7 +448,7 @@ export class VentasService {
   }
 
   async previewDescuento(
-    productos: { productoId: string; cantidad: number }[],
+    productos: { productoId: string; cantidad: number; precioVenta?: number }[],
     clienteId?: string,
   ): Promise<{
     subtotal: number;
@@ -394,25 +462,20 @@ export class VentasService {
       descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
-        monto: number | null;
+        monto: number;
         precioConDescuento: number;
-        motivo: string;
-      };
-      descuentoCategoriaInfo: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
         motivo: string;
       } | null;
-      preciosAlternativos: {
+      descuentoCategoriaInfo: {
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
+        monto: number;
         motivo: string;
-      }[];
+      } | null;
     }[];
   }> {
     let subtotal = 0;
@@ -424,25 +487,20 @@ export class VentasService {
       descuentoCategoria: number;
       motivo: string;
       mejorDescuento: {
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
-        monto: number | null;
+        monto: number;
         precioConDescuento: number;
-        motivo: string;
-      };
-      descuentoCategoriaInfo: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
         motivo: string;
       } | null;
-      preciosAlternativos: {
+      descuentoCategoriaInfo: {
+        descuentoId: string | null;
         tipo: string;
         porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
+        monto: number;
         motivo: string;
-      }[];
+      } | null;
     }[] = [];
 
     let categoriaClienteId: string | undefined;
@@ -459,128 +517,71 @@ export class VentasService {
     }
 
     for (const productoVenta of productos) {
-      let producto;
+      const producto = await this.productosService.findOne(
+        productoVenta.productoId,
+      );
 
-      try {
-        producto = await this.productosService.findOne(
-          productoVenta.productoId,
-        );
-        if (!producto) {
-          descuentoPorProducto.push({
-            productoId: productoVenta.productoId,
-            descuento: 0,
-            descuentoProducto: 0,
-            descuentoCategoria: 0,
-            motivo: 'Producto no encontrado',
-            mejorDescuento: {
-              tipo: 'NINGUNO',
-              porcentaje: 0,
-              monto: null,
-              precioConDescuento: 0,
-              motivo: 'No encontrado',
-            },
-            descuentoCategoriaInfo: null,
-            preciosAlternativos: [],
-          });
-          continue;
-        }
-      } catch (error) {
+      if (!producto) {
         descuentoPorProducto.push({
           productoId: productoVenta.productoId,
           descuento: 0,
           descuentoProducto: 0,
           descuentoCategoria: 0,
           motivo: 'Producto no encontrado',
-          mejorDescuento: {
-            tipo: 'NINGUNO',
-            porcentaje: 0,
-            monto: null,
-            precioConDescuento: 0,
-            motivo: 'No encontrado',
-          },
+          mejorDescuento: null,
           descuentoCategoriaInfo: null,
-          preciosAlternativos: [],
         });
         continue;
       }
 
-      const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(productoVenta.productoId);
-      const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
-      const iva = inventarioProducto?.ivaCfdi || 0;
-      const margen = producto?.margenRecomendado || 20;
-      const precioNeto = precioUnitario * (1 + iva / 100);
-      const cantidadMargen = precioUnitario * (margen / 100);
-      const precioVenta = precioNeto + cantidadMargen;
-      const subtotalLinea = precioVenta * productoVenta.cantidad;
-
-      let descuentoLinea = 0;
-      let descuentoProductoMonto = 0;
-      let descuentoCategoriaMonto = 0;
-      let mejorDescuentoInfo: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
-        motivo: string;
-      } = {
-        tipo: 'NINGUNO',
-        porcentaje: 0,
-        monto: null,
-        precioConDescuento: subtotalLinea,
-        motivo: 'Sin descuento',
-      };
-      let descuentoCategoriaInfo: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        motivo: string;
-      } | null = null;
-      let preciosAlternativos: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
-        motivo: string;
-      }[] = [];
-
-      try {
-        const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
-        console.log('[previewDescuento] calling calcularDescuentosAcumulables', {
-          productoId: productoVenta.productoId,
-          cantidad: productoVenta.cantidad,
-          precioVenta,
-          laboratorioId: producto.laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
-        });
-        const calculo = await this.descuentosService.calcularDescuentosAcumulables(
+      const inventarioProducto =
+        await this.inventarioAlmacenService.findByProductoId(
           productoVenta.productoId,
-          productoVenta.cantidad,
-          precioVenta,
-          producto.laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
         );
-        console.log('[previewDescuento] calculo result:', JSON.stringify(calculo, null, 2));
+      const precioUnitario =
+        Number(productoVenta.precioVenta) ||
+        Number(inventarioProducto?.precioVenta) ||
+        Number(inventarioProducto?.precioUnitarioLote) ||
+        0;
+      const fechaCaducidad = inventarioProducto?.lote?.fechaCaducidad;
+      const subtotalLinea = precioUnitario * productoVenta.cantidad;
 
-        if (calculo.descuentoProducto) {
-          descuentoProductoMonto = subtotalLinea - calculo.descuentoProducto.precioConDescuento;
-          mejorDescuentoInfo = calculo.descuentoProducto;
-        }
-
-        if (calculo.descuentoCategoria) {
-          descuentoCategoriaInfo = calculo.descuentoCategoria;
-          const baseParaCategoria = subtotalLinea - descuentoProductoMonto;
-          descuentoCategoriaMonto = (baseParaCategoria * calculo.descuentoCategoria.porcentaje) / 100;
-        }
-
-        descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
-      } catch (error) {
-        console.error('[previewDescuento] ERROR in calcularDescuentosAcumulables:', error);
+      if (!precioUnitario || precioUnitario <= 0) {
+        descuentoPorProducto.push({
+          productoId: productoVenta.productoId,
+          descuento: 0,
+          descuentoProducto: 0,
+          descuentoCategoria: 0,
+          motivo: 'Sin precio de venta disponible',
+          mejorDescuento: null,
+          descuentoCategoriaInfo: null,
+        });
+        continue;
       }
 
+      const calculo = await this.descuentosService.calcularDescuentosAcumulables(
+        productoVenta.productoId,
+        productoVenta.cantidad,
+        producto.laboratorioId,
+        categoriaClienteId,
+        fechaCaducidad,
+        precioUnitario,
+      );
+
       subtotal += subtotalLinea;
-      descuentoTotal += descuentoLinea;
+      descuentoTotal += calculo.descuentoTotal;
+
+      const motivos: string[] = [];
+      if (calculo.descuentoProducto) {
+        motivos.push(calculo.descuentoProducto.motivo);
+      }
+      if (calculo.descuentoCategoria) {
+        motivos.push(calculo.descuentoCategoria.motivo);
+      }
+      const motivo =
+        motivos.length > 0
+          ? motivos.join(' + ')
+          : 'Sin descuento';
 
       const motivos: string[] = [];
       if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
@@ -592,13 +593,29 @@ export class VentasService {
 
       descuentoPorProducto.push({
         productoId: productoVenta.productoId,
-        descuento: descuentoLinea,
-        descuentoProducto: descuentoProductoMonto,
-        descuentoCategoria: descuentoCategoriaMonto,
-        motivo: motivos.length > 0 ? motivos.join(' + ') : 'Sin descuento',
-        mejorDescuento: mejorDescuentoInfo,
-        descuentoCategoriaInfo,
-        preciosAlternativos,
+        descuento: calculo.descuentoTotal,
+        descuentoProducto: calculo.descuentoProducto?.monto || 0,
+        descuentoCategoria: calculo.descuentoCategoria?.monto || 0,
+        motivo,
+        mejorDescuento: calculo.descuentoProducto
+          ? {
+              descuentoId: calculo.descuentoProducto.descuentoId,
+              tipo: calculo.descuentoProducto.tipo,
+              porcentaje: calculo.descuentoProducto.porcentaje,
+              monto: calculo.descuentoProducto.monto,
+              precioConDescuento: calculo.descuentoProducto.precioConDescuento,
+              motivo: calculo.descuentoProducto.motivo,
+            }
+          : null,
+        descuentoCategoriaInfo: calculo.descuentoCategoria
+          ? {
+              descuentoId: calculo.descuentoCategoria.descuentoId,
+              tipo: calculo.descuentoCategoria.tipo,
+              porcentaje: calculo.descuentoCategoria.porcentaje,
+              monto: calculo.descuentoCategoria.monto,
+              motivo: calculo.descuentoCategoria.motivo,
+            }
+          : null,
       });
     }
 

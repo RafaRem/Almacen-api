@@ -85,7 +85,7 @@ export class VentasController {
 
   @Patch(':id/cancelar')
   @UseGuards(JwtAuthGuard)
-  cancel(@Param('id') id: string) {
-    return this.ventasService.cancel(id);
+  cancel(@Param('id') id: string, @Request() req) {
+    return this.ventasService.cancel(id, req.user?.id, 'Cancelación manual');
   }
 }

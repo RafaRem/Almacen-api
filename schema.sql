@@ -10,6 +10,15 @@ CREATE TYPE "tipo_documento" AS ENUM ('AVISO_FUNCIONAMIENTO', 'LICENCIA_SANITARI
 CREATE TYPE "metodo_pago" AS ENUM ('EFECTIVO', 'TARJETA', 'TRANSFERENCIA');
 
 -- =============================================
+-- Sequences for folios (thread-safe, concurrencia)
+-- =============================================
+CREATE SEQUENCE IF NOT EXISTS ventas_folio_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS facturas_folio_seq START 1;
+
+SELECT setval('ventas_folio_seq', COALESCE((SELECT MAX(folio) FROM ventas), 0) + 1);
+SELECT setval('facturas_folio_seq', COALESCE((SELECT MAX(folio) FROM facturas), 0) + 1);
+
+-- =============================================
 -- Users
 -- =============================================
 CREATE TABLE "users" (
@@ -219,7 +228,8 @@ CREATE TABLE "detalle_venta" (
   "cantidad" integer NOT NULL,
   "preciounitario" decimal(10,2) NOT NULL,
   "descuentolinea" decimal(10,2) DEFAULT 0,
-  "subtotal" decimal(10,2) NOT NULL
+  "subtotal" decimal(10,2) NOT NULL,
+  "importebruto" decimal(10,2) NOT NULL DEFAULT 0
 );
 
 );

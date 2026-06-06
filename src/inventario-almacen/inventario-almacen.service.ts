@@ -142,8 +142,11 @@ export class InventarioAlmacenService {
     cantidad: number,
     ivaCfdi?: number | null,
     precioUnitarioLote?: number | null,
+    managerArg?: EntityManager,
   ): Promise<InventarioAlmacen> {
-    let inventario = await this.inventarioRepository.findOne({
+    const repo = managerArg ? managerArg.getRepository(InventarioAlmacen) : this.inventarioRepository;
+
+    let inventario = await repo.findOne({
       where: { productoId, loteId, almacenTipo },
     });
 
@@ -155,14 +158,13 @@ export class InventarioAlmacenService {
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
       }
-      const saved = await this.inventarioRepository.save(inventario);
-      return this.actualizarPrecioVenta(saved);
+      return repo.save(inventario);
     } else {
       let precioLote = precioUnitarioLote;
       if (precioLote === undefined || precioLote === null || precioLote === 0) {
         throw new Error('precioUnitarioLote es requerido para agregar stock');
       }
-      inventario = this.inventarioRepository.create({
+      inventario = repo.create({
         productoId,
         loteId,
         almacenTipo,
@@ -172,8 +174,7 @@ export class InventarioAlmacenService {
       });
     }
 
-    const saved = await this.inventarioRepository.save(inventario);
-    return this.actualizarPrecioVenta(saved);
+    return repo.save(inventario);
   }
 
   calcularPrecioVenta(
@@ -226,11 +227,14 @@ export class InventarioAlmacenService {
       cantidad: number;
     }[];
   }> {
-    const inventarios = await manager.find(InventarioAlmacen, {
-      where: { productoId, almacenTipo },
-      relations: ['lote'],
-      order: { lote: { fechaCaducidad: 'ASC' } },
-    });
+    const inventarios = await manager
+      .createQueryBuilder(InventarioAlmacen, 'inv')
+      .innerJoinAndSelect('inv.lote', 'lote')
+      .where('inv.productoId = :productoId', { productoId })
+      .andWhere('inv.almacenTipo = :almacenTipo', { almacenTipo })
+      .orderBy('lote.fechaCaducidad', 'ASC')
+      .setLock('pessimistic_write')
+      .getMany();
 
     let totalDisponible = 0;
     for (const inv of inventarios) {

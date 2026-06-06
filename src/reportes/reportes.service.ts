@@ -50,6 +50,7 @@ export class ReportesService {
         'detalle.cantidad AS cantidad',
         'detalle.preciounitario AS precio_unitario',
         'detalle.subtotal AS subtotal',
+        'detalle.importebruto AS importe_bruto',
         'venta.folio AS folio_venta',
         'venta.createdat AS fecha_venta',
         'cliente.nombre AS cliente_nombre',

@@ -66,18 +66,20 @@ export class FacturasService {
       }
     }
 
-    const ultimoFolio = await this.facturaRepository
-      .createQueryBuilder('factura')
-      .where('factura.serie = :serie', { serie: serie || null })
-      .orderBy('factura.folio', 'DESC')
-      .getOne();
-
-    const nuevoFolio = ultimoFolio ? ultimoFolio.folio + 1 : 1;
+    let nuevoFolio: number;
+    try {
+      const result = await this.facturaRepository.query(
+        `SELECT nextval('facturas_folio_seq') AS folio`,
+      );
+      nuevoFolio = Number(result[0].folio);
+    } catch {
+      nuevoFolio = 1;
+    }
 
     const detallesData = await this.calcularDetalles(productos);
 
     const subtotal = detallesData.reduce(
-      (sum, d) => sum + Number(d.importe),
+      (sum, d) => sum + Number(d.importeBruto),
       0,
     );
     const descuentoTotal = detallesData.reduce(
@@ -158,7 +160,8 @@ export class FacturasService {
 
       const cantidad = prod.cantidad;
       const descuento = prod.descuento || 0;
-      const importe = precioUnitario * cantidad - descuento;
+      const importeBruto = precioUnitario * cantidad;
+      const importe = importeBruto - descuento;
 
       const tasaImpuesto = prod.tasaImpuesto || DEFAULT_TASA;
 
@@ -259,7 +262,7 @@ export class FacturasService {
         where: { facturaId: id },
       });
 
-      const subtotal = detalles.reduce((sum, d) => sum + Number(d.importe), 0);
+      const subtotal = detalles.reduce((sum, d) => sum + Number(d.importeBruto), 0);
       const descuentoTotal = detalles.reduce(
         (sum, d) => sum + Number(d.descuento),
         0,
@@ -307,7 +310,8 @@ export class FacturasService {
 
       const cantidad = prod.cantidad!;
       const descuento = prod.descuento || 0;
-      const importe = precioUnitario * cantidad - descuento;
+      const importeBruto = precioUnitario * cantidad;
+      const importe = importeBruto - descuento;
 
       const tasaImpuesto = DEFAULT_TASA;
       const impuestos: ImpuestosLinea[] = [];
@@ -334,6 +338,7 @@ export class FacturasService {
         valorUnitario: precioUnitario,
         descuento,
         importe,
+        importeBruto,
         impuestos,
       });
     }

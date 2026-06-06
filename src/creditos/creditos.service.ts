@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { IsNumber, IsOptional } from 'class-validator';
 import { Credito } from './entities/credito.entity';
+import { MovimientoCredito, TipoMovimientoCredito } from './entities/movimiento-credito.entity';
 
 export class CreateCreditoDto {
   @IsNumber()
@@ -26,6 +27,8 @@ export class CreditosService {
   constructor(
     @InjectRepository(Credito)
     private readonly creditoRepository: Repository<Credito>,
+    @InjectRepository(MovimientoCredito)
+    private readonly movimientoRepository: Repository<MovimientoCredito>,
   ) {}
 
   async findByCliente(clienteId: string): Promise<Credito | null> {
@@ -37,11 +40,20 @@ export class CreditosService {
   async create(
     clienteId: string,
     createDto: CreateCreditoDto,
+    usuarioId?: string,
   ): Promise<Credito> {
     const existente = await this.findByCliente(clienteId);
     if (existente) {
+      const anterior = { limite: Number(existente.limite), saldoActual: Number(existente.saldoActual) };
       Object.assign(existente, createDto);
-      return this.creditoRepository.save(existente);
+      const saved = await this.creditoRepository.save(existente);
+      await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.ACTUALIZACION, {
+        limiteAnterior: anterior.limite,
+        limiteNuevo: Number(saved.limite),
+        saldoActualAnterior: anterior.saldoActual,
+        saldoActualNuevo: Number(saved.saldoActual),
+      });
+      return saved;
     }
 
     const credito = this.creditoRepository.create({
@@ -51,12 +63,18 @@ export class CreditosService {
       idStatus: createDto.idStatus ?? 1,
       fechaDeCorte: createDto.fechaDeCorte ?? 15,
     });
-    return this.creditoRepository.save(credito);
+    const saved = await this.creditoRepository.save(credito);
+    await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.CREACION, {
+      limiteNuevo: Number(saved.limite),
+      saldoActualNuevo: Number(saved.saldoActual),
+    });
+    return saved;
   }
 
   async update(
     clienteId: string,
     updateDto: Partial<CreateCreditoDto>,
+    usuarioId?: string,
   ): Promise<Credito> {
     const credito = await this.findByCliente(clienteId);
     if (!credito) {
@@ -64,11 +82,24 @@ export class CreditosService {
         `Crédito para cliente ${clienteId} no encontrado`,
       );
     }
+
+    const anterior = { limite: Number(credito.limite), saldoActual: Number(credito.saldoActual) };
     Object.assign(credito, updateDto);
-    return this.creditoRepository.save(credito);
+    const saved = await this.creditoRepository.save(credito);
+    await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.ACTUALIZACION, {
+      limiteAnterior: anterior.limite,
+      limiteNuevo: Number(saved.limite),
+      saldoActualAnterior: anterior.saldoActual,
+      saldoActualNuevo: Number(saved.saldoActual),
+    });
+    return saved;
   }
 
-  async usarCredito(clienteId: string, monto: number): Promise<Credito> {
+  async usarCredito(
+    clienteId: string,
+    monto: number,
+    usuarioId?: string,
+  ): Promise<Credito> {
     const credito = await this.findByCliente(clienteId);
     if (!credito) {
       throw new NotFoundException(
@@ -81,8 +112,15 @@ export class CreditosService {
       throw new Error('El monto excede el crédito disponible');
     }
 
-    credito.saldoActual = Number(credito.saldoActual) + monto;
-    return this.creditoRepository.save(credito);
+    const saldoAnterior = Number(credito.saldoActual);
+    credito.saldoActual = saldoAnterior + monto;
+    const saved = await this.creditoRepository.save(credito);
+    await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.USO, {
+      saldoActualAnterior: saldoAnterior,
+      saldoActualNuevo: Number(saved.saldoActual),
+      observaciones: `Uso de crédito por $${monto.toFixed(2)}`,
+    });
+    return saved;
   }
 
   async getDisponible(clienteId: string): Promise<number> {
@@ -98,5 +136,30 @@ export class CreditosService {
         `Crédito para cliente ${clienteId} no encontrado`,
       );
     }
+  }
+
+  private async registrarMovimiento(
+    clienteId: string,
+    usuarioId: string | undefined,
+    tipo: TipoMovimientoCredito,
+    datos: {
+      limiteAnterior?: number;
+      limiteNuevo?: number;
+      saldoActualAnterior?: number;
+      saldoActualNuevo?: number;
+      observaciones?: string;
+    },
+  ): Promise<void> {
+    const movimiento = this.movimientoRepository.create({
+      clienteId,
+      usuarioId: usuarioId || 'SYSTEM',
+      tipo,
+      limiteAnterior: datos.limiteAnterior,
+      limiteNuevo: datos.limiteNuevo,
+      saldoActualAnterior: datos.saldoActualAnterior,
+      saldoActualNuevo: datos.saldoActualNuevo,
+      observaciones: datos.observaciones,
+    });
+    await this.movimientoRepository.save(movimiento);
   }
 }

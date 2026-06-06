@@ -6,17 +6,16 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
   Res,
+  Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
 import { CreateDocumentoClienteDto } from './dto/create-documento-cliente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtService } from '@nestjs/jwt';
 import { StreamableFile } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -29,7 +28,6 @@ function sanitizeFilename(name: string): string {
 export class UploadsController {
   constructor(
     private readonly uploadsService: UploadsService,
-    private readonly jwtService: JwtService,
   ) {}
 
   @Post()
@@ -68,18 +66,8 @@ export class UploadsController {
   }
 
   @Get(':id/ver')
-  async ver(@Param('id') id: string, @Res() res: any, @Query('token') token: string): Promise<any> {
-    if (!token) {
-      return res.status(401).json({ error: 'Token requerido' });
-    }
-
-    try {
-      const decoded = this.jwtService.verify(token);
-    } catch (error) {
-      console.error('[UploadsController.ver] Token verification failed:', error.message);
-      return res.status(401).json({ error: 'Token inválido', details: error.message });
-    }
-
+  @UseGuards(JwtAuthGuard)
+  async ver(@Param('id') id: string, @Res() res: any): Promise<any> {
     const filePath = await this.uploadsService.getFilePath(id);
     const documento = await this.uploadsService.findOne(id);
 

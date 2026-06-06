@@ -4,7 +4,12 @@
 -- =============================================
 
 -- Enums para valores STRING
-CREATE TYPE "user_tipo" AS ENUM ('admin', 'user', 'operator');
+CREATE TYPE "user_tipo" AS ENUM ('admin', 'usuario', 'caja');
+-- Para migrar desde la version anterior ('admin','user','operator'):
+--   ALTER TYPE user_tipo ADD VALUE 'usuario';
+--   ALTER TYPE user_tipo ADD VALUE 'caja';
+--   UPDATE users SET tipo = 'usuario' WHERE tipo = 'user';
+--   UPDATE users SET tipo = 'caja' WHERE tipo = 'operator';
 CREATE TYPE "descuento_tipo" AS ENUM ('CADUCIDAD', 'VOLUMEN', 'CATEGORIA', 'LABORATORIO');
 CREATE TYPE "tipo_documento" AS ENUM ('AVISO_FUNCIONAMIENTO', 'LICENCIA_SANITARIA');
 CREATE TYPE "metodo_pago" AS ENUM ('EFECTIVO', 'TARJETA', 'TRANSFERENCIA');
@@ -242,6 +247,24 @@ CREATE TABLE "detalle_venta_lote" (
   "cantidad" integer NOT NULL
 );
 
+);
+
+-- =============================================
+-- Movimientos Crédito (auditoría)
+-- =============================================
+CREATE TYPE tipo_movimiento_credito AS ENUM ('CREACION', 'ACTUALIZACION', 'USO');
+
+CREATE TABLE "movimientos_credito" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "clienteid" uuid NOT NULL REFERENCES "clientes"("id"),
+  "usuarioid" uuid REFERENCES "users"("id"),
+  "tipo" tipo_movimiento_credito NOT NULL,
+  "limiteanterior" decimal(12,2),
+  "limitenuevo" decimal(12,2),
+  "saldoactualanterior" decimal(12,2),
+  "saldoactualnuevo" decimal(12,2),
+  "observaciones" text,
+  "createdat" timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =============================================

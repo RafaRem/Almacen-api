@@ -443,7 +443,12 @@ export class VentasService {
       }
     }
 
-    return { ...savedVenta, detalles: savedDetalles, pagos: pagosData, descuentos: descuentosInfo };
+    const detallesConRelaciones = await manager.find(DetalleVenta, {
+      where: { ventaId: savedVenta.id },
+      relations: ['producto', 'lote'],
+    });
+
+    return { ...savedVenta, detalles: detallesConRelaciones, pagos: pagosData, descuentos: descuentosInfo };
     });
   }
 

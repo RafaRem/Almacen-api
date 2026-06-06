@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DescuentosService } from './descuentos.service';
 import { Descuento } from './entities/descuento.entity';
+import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
 
 const mockRepository = {
@@ -22,6 +23,10 @@ describe('DescuentosService', () => {
         DescuentosService,
         {
           provide: getRepositoryToken(Descuento),
+          useValue: mockRepository,
+        },
+        {
+          provide: getRepositoryToken(CategoriaCliente),
           useValue: mockRepository,
         },
       ],

@@ -18,6 +18,7 @@ import { Telefono } from '../telefonos/entities/telefono.entity';
 import { Domicilio } from '../domicilios/entities/domicilio.entity';
 import { FacturacionCliente } from '../facturacion-cliente/entities/facturacion-cliente.entity';
 import { Credito } from '../creditos/entities/credito.entity';
+import { MovimientoCredito } from '../creditos/entities/movimiento-credito.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { Configuracion } from '../configuraciones/entities/configuracion.entity';
 import { ConfiguracionSistema } from '../configuracion/entities/configuracion-sistema.entity';
@@ -56,6 +57,7 @@ export const getDatabaseConfig = (
     Domicilio,
     FacturacionCliente,
     Credito,
+    MovimientoCredito,
     InventarioAlmacen,
     Configuracion,
     ConfiguracionSistema,

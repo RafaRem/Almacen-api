@@ -232,6 +232,16 @@ CREATE TABLE "detalle_venta" (
   "importebruto" decimal(10,2) NOT NULL DEFAULT 0
 );
 
+-- =============================================
+-- Detalle Venta Lote (multi-lote por detalle)
+-- =============================================
+CREATE TABLE "detalle_venta_lote" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "detalleventaid" uuid NOT NULL REFERENCES "detalle_venta"("id") ON DELETE CASCADE,
+  "loteid" uuid NOT NULL REFERENCES "lotes"("id"),
+  "cantidad" integer NOT NULL
+);
+
 );
 
 -- =============================================

@@ -10,6 +10,7 @@ import { Venta } from './venta.entity';
 import { Producto } from '../../productos/entities/producto.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
 import { DescuentoVentaDetalle } from '../../descuentos/entities/descuento-venta-detalle.entity';
+import { DetalleVentaLote } from './detalle-venta-lote.entity';
 
 @Entity('detalle_venta')
 export class DetalleVenta {
@@ -63,4 +64,11 @@ export class DetalleVenta {
     (descuentoDetalle) => descuentoDetalle.detalleVenta,
   )
   descuentos: DescuentoVentaDetalle[];
+
+  @OneToMany(
+    () => DetalleVentaLote,
+    (detalleLote) => detalleLote.detalleVenta,
+    { cascade: true },
+  )
+  lotesUtilizados: DetalleVentaLote[];
 }

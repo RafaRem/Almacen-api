@@ -19,6 +19,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtService } from '@nestjs/jwt';
 import { StreamableFile } from '@nestjs/common';
 import * as fs from 'fs';
+import * as path from 'path';
+
+function sanitizeFilename(name: string): string {
+  return path.basename(name).replace(/["\r\n;]/g, '').substring(0, 255);
+}
 
 @Controller('uploads')
 export class UploadsController {
@@ -55,7 +60,7 @@ export class UploadsController {
 
     res.set({
       'Content-Type': documento.mimeType,
-      'Content-Disposition': `attachment; filename="${documento.nombreArchivo}"`,
+      'Content-Disposition': `attachment; filename="${sanitizeFilename(documento.nombreArchivo)}"`,
     });
 
     const file = fs.createReadStream(filePath);
@@ -83,7 +88,7 @@ export class UploadsController {
     }
 
     res.setHeader('Content-Type', documento.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${documento.nombreArchivo}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${sanitizeFilename(documento.nombreArchivo)}"`);
 
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);

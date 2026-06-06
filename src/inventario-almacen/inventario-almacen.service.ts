@@ -715,36 +715,6 @@ export class InventarioAlmacenService {
     });
   }
 
-  async debugFindByProductAndLote(
-    productoId: string,
-    loteId: string,
-    almacenTipo: AlmacenTipo,
-  ): Promise<any> {
-    const inventarios = await this.inventarioRepository.find({
-      where: { productoId },
-      relations: ['producto', 'lote'],
-    });
-
-    const filtrado = inventarios.filter(
-      (inv) => inv.loteId === loteId && inv.almacenTipo === almacenTipo,
-    );
-
-    return {
-      productoId,
-      loteId,
-      almacenTipo,
-      todosLosInventariosProducto: inventarios.map((inv) => ({
-        id: inv.id,
-        loteId: inv.loteId,
-        almacenTipo: inv.almacenTipo,
-        cantidadActual: inv.cantidadActual,
-        loteIdExactMatch: inv.loteId === loteId,
-        almacenTipoExactMatch: inv.almacenTipo === almacenTipo,
-      })),
-      filtrado,
-    };
-  }
-
   async getCapasPorProducto(productoId: string): Promise<any> {
     const inventarios = await this.inventarioRepository.find({
       where: { productoId },

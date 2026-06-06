@@ -6,13 +6,16 @@ import {
   Delete,
   Param,
   Body,
+  UseGuards,
 } from '@nestjs/common';
 import {
   FacturacionClienteService,
   CreateFacturacionClienteDto,
 } from './facturacion-cliente.service';
 import { FacturacionCliente } from './entities/facturacion-cliente.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('facturacion-cliente')
 export class FacturacionClienteController {
   constructor(private readonly facturacionService: FacturacionClienteService) {}

@@ -55,6 +55,9 @@ export class DetalleVenta {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'subtotal' })
   subtotal: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'importebruto' })
+  importeBruto: number;
+
   @OneToMany(
     () => DescuentoVentaDetalle,
     (descuentoDetalle) => descuentoDetalle.detalleVenta,

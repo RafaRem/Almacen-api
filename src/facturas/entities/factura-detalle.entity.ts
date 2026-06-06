@@ -62,6 +62,9 @@ export class FacturaDetalle {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   importe: number;
 
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'importebruto' })
+  importeBruto: number;
+
   @Column({ type: 'jsonb', nullable: true })
   impuestos: {
     base: number;

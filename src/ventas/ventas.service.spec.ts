@@ -100,29 +100,13 @@ describe('VentasService', () => {
   });
 
   describe('getNextFolio()', () => {
-    it('should return maxFolio + 1', async () => {
+    it('should call nextval sequence', async () => {
+      mockVentasRepository.query = jest.fn().mockResolvedValue([{ folio: 43 }]);
       const folio = await service.getNextFolio();
       expect(folio).toBe(43);
-    });
-
-    it('should return 1 when no sales exist', async () => {
-      mockVentasRepository.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({ maxFolio: null }),
-      });
-
-      const folio = await service.getNextFolio();
-      expect(folio).toBe(1);
-    });
-
-    it('should return 1 when maxFolio is 0', async () => {
-      mockVentasRepository.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({ maxFolio: 0 }),
-      });
-
-      const folio = await service.getNextFolio();
-      expect(folio).toBe(1);
+      expect(mockVentasRepository.query).toHaveBeenCalledWith(
+        `SELECT nextval('ventas_folio_seq') AS folio`,
+      );
     });
   });
 

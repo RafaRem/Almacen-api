@@ -20,6 +20,8 @@ import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { FormaPago } from '../common/enums/forma-pago.enum';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { ClientesService } from '../clientes/clientes.service';
+import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { TipoMovimiento, OrigenOperacion } from '../common/constants';
 
 @Injectable()
 export class VentasService {
@@ -47,11 +49,10 @@ export class VentasService {
   }
 
   private async getNextFolio(): Promise<number> {
-    const result = await this.ventasRepository
-      .createQueryBuilder('venta')
-      .select('MAX(venta.folio)', 'maxFolio')
-      .getRawOne();
-    return (result?.maxFolio || 0) + 1;
+    const result = await this.ventasRepository.query(
+      `SELECT nextval('ventas_folio_seq') AS folio`,
+    );
+    return Number(result[0].folio);
   }
 
   async create(
@@ -224,10 +225,7 @@ export class VentasService {
             });
           }
         }
-        if (
-          calculo.descuentoCategoria &&
-          calculo.descuentoCategoria.descuentoId
-        ) {
+        if (calculo.descuentoCategoria) {
           const montoCategoria = Number(calculo.descuentoCategoria.monto || 0);
           descuentosInfo.push({
             productoId: productoVenta.productoId,
@@ -288,11 +286,11 @@ export class VentasService {
               });
             }
 
-            if (dp.descuentoCategoriaInfo?.descuentoId) {
+            if (dp.descuentoCategoriaInfo) {
               console.log(`[create]   Agregando descuento CATEGORIA:`, dp.descuentoCategoriaInfo.tipo, dp.descuentoCategoria);
               descuentosInfo.push({
                 productoId: productoVenta.productoId,
-                descuentoId: dp.descuentoCategoriaInfo.descuentoId,
+                descuentoId: dp.descuentoCategoriaInfo.descuentoId ?? null,
                 tipo: dp.descuentoCategoriaInfo.tipo,
                 porcentaje: dp.descuentoCategoriaInfo.porcentaje,
                 monto: dp.descuentoCategoria,
@@ -305,10 +303,10 @@ export class VentasService {
         }
       }
 
-      const subtotalLinea =
-        precioVenta * productoVenta.cantidad - descuentoLinea;
+      const importeBruto = precioVenta * productoVenta.cantidad;
+      const subtotalLinea = importeBruto - descuentoLinea;
 
-      subtotal += precioVenta * productoVenta.cantidad;
+      subtotal += importeBruto;
       descuentoTotal += descuentoLinea;
 
       const primerLoteId =
@@ -321,6 +319,7 @@ export class VentasService {
         precioUnitario,
         descuentoLinea,
         subtotal: subtotalLinea,
+        importeBruto,
       });
     }
 
@@ -406,7 +405,7 @@ export class VentasService {
       const detalle = savedDetalles.find(
         (d) => d.productoId === descuentoInfo.productoId,
       );
-      if (detalle && descuentoInfo.descuentoId) {
+      if (detalle && (descuentoInfo.descuentoId || descuentoInfo.tipo === 'CATEGORIA')) {
         console.log(`[create] Insertando descuentoVentaDetalle: detalleId=${detalle.id}, tipo=${descuentoInfo.tipo}, monto=${descuentoInfo.monto}`);
         const descuentoVentaDetalle = this.descuentosVentaDetalleRepository.create({
           detalleVentaId: detalle.id,
@@ -519,6 +518,7 @@ export class VentasService {
       precioUnitario: Number(d.precioUnitario) || 0,
       descuentoLinea: Number(d.descuentoLinea) || 0,
       subtotal: Number(d.subtotal) || 0,
+      importeBruto: Number(d.importeBruto) || 0,
     }))
 
     const pagosConvertidos = pagos.map(p => ({
@@ -577,15 +577,59 @@ export class VentasService {
     return query.getOne();
   }
 
-  async cancel(id: string): Promise<Venta> {
-    const venta = await this.findOne(id);
+  async cancel(id: string, usuarioId?: string, motivo?: string): Promise<Venta> {
+    const venta = await this.ventasRepository.findOne({
+      where: { id },
+      relations: ['detalles', 'detalles.lote', 'detalles.producto'],
+    });
+
+    if (!venta) {
+      throw new NotFoundException(`Venta con ID ${id} no encontrada`);
+    }
 
     if (venta.statusId === 2) {
       throw new BadRequestException('La venta ya está cancelada');
     }
 
-    venta.statusId = 2;
-    return this.ventasRepository.save(venta);
+    const userId = usuarioId || 'SYSTEM';
+    const motivoCancelacion = motivo || 'Cancelación manual';
+
+    return this.dataSource.transaction(async (manager) => {
+      for (const detalle of venta.detalles) {
+        const cantidad = Number(detalle.cantidad);
+        if (cantidad <= 0) continue;
+
+        const loteId = detalle.loteId;
+        const productoId = detalle.productoId;
+
+        await this.inventarioAlmacenService.agregarStock(
+          productoId,
+          loteId,
+          AlmacenTipo.VENTAS,
+          cantidad,
+          undefined,
+          undefined,
+          manager,
+        );
+
+        const movimiento = manager.create(MovimientoAlmacen, {
+          productoId,
+          loteId,
+          almacenOrigen: AlmacenTipo.CLIENTE,
+          almacenDestino: AlmacenTipo.VENTAS,
+          cantidad,
+          userId,
+          observaciones: `Cancelación venta folio ${venta.folio}: ${motivoCancelacion}`,
+          tipoMovimiento: TipoMovimiento.ENTRADA_REVERSION,
+          origenOperacion: OrigenOperacion.POS,
+          revertido: false,
+        });
+        await manager.save(MovimientoAlmacen, movimiento);
+      }
+
+      venta.statusId = 2;
+      return manager.save(Venta, venta);
+    });
   }
 
   async previewDescuento(

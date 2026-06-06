@@ -16,20 +16,9 @@ export class UsersPermissionsService {
   ) {}
 
   async getPermissionsForUser(userId: string): Promise<UserPermission[]> {
-    const permissions = await this.permissionsRepository.find({
+    return this.permissionsRepository.find({
       where: { userId },
     });
-
-    if (permissions.length === 0) {
-      const user = await this.usersRepository.findOne({
-        where: { id: userId },
-      });
-      const userTipo = user?.tipo || UserTipo.USER;
-      await this.createDefaultPermissions(userId, userTipo);
-      return this.permissionsRepository.find({ where: { userId } });
-    }
-
-    return permissions;
   }
 
   async setPermissionsForUser(

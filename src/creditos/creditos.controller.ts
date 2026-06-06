@@ -6,10 +6,13 @@ import {
   Delete,
   Param,
   Body,
+  UseGuards,
 } from '@nestjs/common';
 import { CreditosService, CreateCreditoDto } from './creditos.service';
 import { Credito } from './entities/credito.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('creditos')
 export class CreditosController {
   constructor(private readonly creditosService: CreditosService) {}

@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User } from './entities/user.entity';
+import { User, UserTipo } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersPermissionsService } from './users-permissions.service';
@@ -22,7 +22,7 @@ export class UsersService {
     private usersPermissionsService: UsersPermissionsService,
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(createUserDto: CreateUserDto, currentUser?: User): Promise<User> {
     const existingUser = await this.usersRepository.findOne({
       where: [
         { email: createUserDto.email },
@@ -36,10 +36,16 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    const user = this.usersRepository.create({
+    const isAdmin = currentUser?.tipo === UserTipo.ADMIN;
+    const userData: Partial<User> = {
       ...createUserDto,
       password: hashedPassword,
-    });
+    };
+    if (!isAdmin) {
+      userData.tipo = UserTipo.USER;
+    }
+
+    const user = this.usersRepository.create(userData);
 
     const savedUser = await this.usersRepository.save(user);
 

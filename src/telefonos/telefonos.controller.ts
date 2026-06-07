@@ -6,10 +6,13 @@ import {
   Delete,
   Param,
   Body,
+  UseGuards,
 } from '@nestjs/common';
 import { TelefonosService, CreateTelefonoDto } from './telefonos.service';
 import { Telefono } from './entities/telefono.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('telefonos')
 export class TelefonosController {
   constructor(private readonly telefonosService: TelefonosService) {}

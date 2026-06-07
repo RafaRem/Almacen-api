@@ -28,10 +28,88 @@ export class ProductoVentaDto {
   @IsInt()
   @Min(1)
   cantidad: number;
+}
+
+export class DescuentosPreviewDto {
+  @IsNumber()
+  descuentoAplicado: number;
+
+  @IsNumber()
+  total: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DescuentoPorProductoDto)
+  descuentoPorProducto: DescuentoPorProductoDto[];
+}
+
+export class MejorDescuentoDto {
+  @IsUUID()
+  @IsOptional()
+  descuentoId?: string;
+
+  @IsString()
+  tipo: string;
+
+  @IsNumber()
+  porcentaje: number;
 
   @IsNumber()
   @IsOptional()
-  precioVenta?: number;
+  monto?: number | null;
+
+  @IsNumber()
+  precioConDescuento: number;
+
+  @IsString()
+  motivo: string;
+}
+
+export class DescuentoCategoriaInfoDto {
+  @IsUUID()
+  @IsOptional()
+  descuentoId?: string;
+
+  @IsString()
+  tipo: string;
+
+  @IsNumber()
+  porcentaje: number;
+
+  @IsNumber()
+  @IsOptional()
+  monto?: number | null;
+
+  @IsString()
+  motivo: string;
+}
+
+export class DescuentoPorProductoDto {
+  @IsUUID()
+  @IsNotEmpty()
+  productoId: string;
+
+  @IsNumber()
+  descuento: number;
+
+  @IsNumber()
+  descuentoProducto: number;
+
+  @IsNumber()
+  descuentoCategoria: number;
+
+  @IsString()
+  motivo: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MejorDescuentoDto)
+  mejorDescuento?: MejorDescuentoDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DescuentoCategoriaInfoDto)
+  descuentoCategoriaInfo?: DescuentoCategoriaInfoDto;
 }
 
 export class CreateVentaDto {
@@ -59,10 +137,7 @@ export class CreateVentaDto {
   productos: ProductoVentaDto[];
 
   @IsOptional()
-  descuentoPreview?: {
-    descuentoAplicado: number;
-    total: number;
-  };
+  descuentosPreview?: DescuentosPreviewDto;
 }
 
 export class UpdateVentaDto {

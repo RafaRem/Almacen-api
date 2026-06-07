@@ -6,10 +6,13 @@ import {
   Delete,
   Param,
   Body,
+  UseGuards,
 } from '@nestjs/common';
 import { DomiciliosService, CreateDomicilioDto } from './domicilios.service';
 import { Domicilio } from './entities/domicilio.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('domicilios')
 export class DomiciliosController {
   constructor(private readonly domiciliosService: DomiciliosService) {}

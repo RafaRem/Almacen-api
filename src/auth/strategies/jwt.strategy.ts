@@ -9,6 +9,7 @@ interface JwtPayload {
   sub: string;
   email: string;
   tipo: string;
+  type?: string;
 }
 
 @Injectable()
@@ -17,14 +18,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private configService: ConfigService,
     private usersService: UsersService,
   ) {
+    const secret = configService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new Error(
+        'JWT_SECRET is required. Set it in environment variables.',
+      );
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'default-secret',
+      secretOrKey: secret,
     });
   }
 
   async validate(payload: JwtPayload): Promise<User> {
+    if (payload.type && payload.type !== 'access') {
+      throw new UnauthorizedException('Invalid token type');
+    }
     const user = await this.usersService.findOne(payload.sub);
     if (!user) {
       throw new UnauthorizedException();

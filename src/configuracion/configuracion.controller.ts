@@ -10,10 +10,14 @@ import {
 } from '@nestjs/common';
 import { ConfiguracionService } from './configuracion.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { UserModule } from '../common/enums/user-module.enum';
 import { FormaPagoNombres } from '../common/enums/forma-pago.enum';
 
 @Controller('configuracion')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermission(UserModule.SETTINGS)
 export class ConfiguracionController {
   constructor(private readonly configuracionService: ConfiguracionService) {}
 

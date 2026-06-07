@@ -15,8 +15,13 @@ import {
   UpdateDescuentoDto,
 } from './dto/create-descuento.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { UserModule } from '../common/enums/user-module.enum';
 
 @Controller('descuentos')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermission(UserModule.DISCOUNTS)
 export class DescuentosController {
   constructor(private readonly descuentosService: DescuentosService) {}
 
@@ -26,19 +31,16 @@ export class DescuentosController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
   findAll() {
     return this.descuentosService.findAll();
   }
 
   @Get('laboratorio/:id')
-  @UseGuards(JwtAuthGuard)
   findByLaboratorio(@Param('id') id: string) {
     return this.descuentosService.findByLaboratorio(id);
   }
 
   @Get('calculadora')
-  @UseGuards(JwtAuthGuard)
   calcular(
     @Query('productoId') productoId: string,
     @Query('cantidad') cantidad: number,
@@ -52,20 +54,40 @@ export class DescuentosController {
     );
   }
 
+  @Post('preview-product')
+  previewProductDiscount(
+    @Body() body: {
+      productoId: string;
+      cantidad: number;
+      precioUnitario: number;
+      iva: number;
+      margen: number;
+      laboratorioId: string;
+      clienteId?: string;
+    },
+  ) {
+    return this.descuentosService.previewProductDiscount(
+      body.productoId,
+      body.cantidad,
+      body.precioUnitario,
+      body.iva,
+      body.margen,
+      body.laboratorioId,
+      body.clienteId,
+    );
+  }
+
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {
     return this.descuentosService.findOne(id);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
   update(@Param('id') id: string, @Body() updateDto: UpdateDescuentoDto) {
     return this.descuentosService.update(id, updateDto);
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string) {
     return this.descuentosService.remove(id);
   }

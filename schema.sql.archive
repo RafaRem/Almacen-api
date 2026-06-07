@@ -4,10 +4,24 @@
 -- =============================================
 
 -- Enums para valores STRING
-CREATE TYPE "user_tipo" AS ENUM ('admin', 'user', 'operator');
+CREATE TYPE "user_tipo" AS ENUM ('admin', 'usuario', 'caja');
+-- Para migrar desde la version anterior ('admin','user','operator'):
+--   ALTER TYPE user_tipo ADD VALUE 'usuario';
+--   ALTER TYPE user_tipo ADD VALUE 'caja';
+--   UPDATE users SET tipo = 'usuario' WHERE tipo = 'user';
+--   UPDATE users SET tipo = 'caja' WHERE tipo = 'operator';
 CREATE TYPE "descuento_tipo" AS ENUM ('CADUCIDAD', 'VOLUMEN', 'CATEGORIA', 'LABORATORIO');
 CREATE TYPE "tipo_documento" AS ENUM ('AVISO_FUNCIONAMIENTO', 'LICENCIA_SANITARIA');
 CREATE TYPE "metodo_pago" AS ENUM ('EFECTIVO', 'TARJETA', 'TRANSFERENCIA');
+
+-- =============================================
+-- Sequences for folios (thread-safe, concurrencia)
+-- =============================================
+CREATE SEQUENCE IF NOT EXISTS ventas_folio_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS facturas_folio_seq START 1;
+
+SELECT setval('ventas_folio_seq', COALESCE((SELECT MAX(folio) FROM ventas), 0) + 1);
+SELECT setval('facturas_folio_seq', COALESCE((SELECT MAX(folio) FROM facturas), 0) + 1);
 
 -- =============================================
 -- Users
@@ -156,6 +170,8 @@ CREATE TABLE "clientes" (
 -- =============================================
 CREATE TABLE "descuentos" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "nombre" varchar(255),
+  "descripcion" text,
   "tipo" "descuento_tipo" NOT NULL,
   "condiciones" jsonb,
   "porcentaje" decimal(5,2) NOT NULL,
@@ -166,6 +182,7 @@ CREATE TABLE "descuentos" (
   "fechaFin" date,
   "statusId" integer DEFAULT 1,
   "prioridad" integer DEFAULT 0,
+  "acumulable" boolean NOT NULL DEFAULT FALSE,
   "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
 );
@@ -216,7 +233,38 @@ CREATE TABLE "detalle_venta" (
   "cantidad" integer NOT NULL,
   "preciounitario" decimal(10,2) NOT NULL,
   "descuentolinea" decimal(10,2) DEFAULT 0,
-  "subtotal" decimal(10,2) NOT NULL
+  "subtotal" decimal(10,2) NOT NULL,
+  "importebruto" decimal(10,2) NOT NULL DEFAULT 0
+);
+
+-- =============================================
+-- Detalle Venta Lote (multi-lote por detalle)
+-- =============================================
+CREATE TABLE "detalle_venta_lote" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "detalleventaid" uuid NOT NULL REFERENCES "detalle_venta"("id") ON DELETE CASCADE,
+  "loteid" uuid NOT NULL REFERENCES "lotes"("id"),
+  "cantidad" integer NOT NULL
+);
+
+);
+
+-- =============================================
+-- Movimientos Crédito (auditoría)
+-- =============================================
+CREATE TYPE tipo_movimiento_credito AS ENUM ('CREACION', 'ACTUALIZACION', 'USO');
+
+CREATE TABLE "movimientos_credito" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "clienteid" uuid NOT NULL REFERENCES "clientes"("id"),
+  "usuarioid" uuid REFERENCES "users"("id"),
+  "tipo" tipo_movimiento_credito NOT NULL,
+  "limiteanterior" decimal(12,2),
+  "limitenuevo" decimal(12,2),
+  "saldoactualanterior" decimal(12,2),
+  "saldoactualnuevo" decimal(12,2),
+  "observaciones" text,
+  "createdat" timestamp DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =============================================
@@ -245,6 +293,26 @@ CREATE TABLE "detalle_lote" (
   "updatedAt" timestamp DEFAULT CURRENT_TIMESTAMP,
   UNIQUE("productoId", "loteId")
 );
+
+-- =============================================
+-- Descuentos Venta Detalle
+-- Tracking de descuentos aplicados a cada línea de venta
+-- =============================================
+CREATE TABLE "descuentos_venta_detalle" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "detalleVentaId" uuid NOT NULL REFERENCES "detalle_venta"("id") ON DELETE CASCADE,
+  "descuentoId" uuid REFERENCES "descuentos"("id") ON DELETE SET NULL,
+  "productoId" uuid NOT NULL REFERENCES "productos"("id"),
+  "tipo" "descuento_tipo" NOT NULL,
+  "porcentaje" decimal(5,2) NOT NULL,
+  "monto" decimal(10,2) NOT NULL,
+  "motivoGenerado" text,
+  "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_dvd_detalle ON descuentos_venta_detalle(detalleVentaId);
+CREATE INDEX idx_dvd_descuento ON descuentos_venta_detalle(descuentoId);
+CREATE INDEX idx_dvd_producto ON descuentos_venta_detalle(productoId);
 
 
 INSERT INTO configuraciones_sistema ("clave", "valor") VALUES

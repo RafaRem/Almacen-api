@@ -7,12 +7,21 @@ import {
   IsUUID,
   IsDateString,
   Min,
+  Max,
   IsInt,
 } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
 export class CreateDescuentoDto {
+  @IsOptional()
+  @IsString()
+  nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
+
   @IsEnum(DescuentoTipo)
   tipo: DescuentoTipo;
 
@@ -21,6 +30,7 @@ export class CreateDescuentoDto {
 
   @IsNumber()
   @Min(0)
+  @Max(100)
   porcentaje: number;
 
   @IsOptional()
@@ -43,11 +53,22 @@ export class CreateDescuentoDto {
   prioridad?: number;
 
   @IsOptional()
+  acumulable?: boolean;
+
+  @IsOptional()
   @IsInt()
   statusId?: number;
 }
 
 export class UpdateDescuentoDto {
+  @IsOptional()
+  @IsString()
+  nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
+
   @IsOptional()
   @IsEnum(DescuentoTipo)
   tipo?: DescuentoTipo;
@@ -58,6 +79,7 @@ export class UpdateDescuentoDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(100)
   porcentaje?: number;
 
   @IsOptional()
@@ -77,11 +99,14 @@ export class UpdateDescuentoDto {
   fechaFin?: string;
 
   @IsOptional()
-  @IsEnum(StatusId)
-  statusId?: StatusId;
+  prioridad?: number;
 
   @IsOptional()
-  prioridad?: number;
+  acumulable?: boolean;
+
+  @IsOptional()
+  @IsEnum(StatusId)
+  statusId?: StatusId;
 }
 
 export class CalcularDescuentoDto {

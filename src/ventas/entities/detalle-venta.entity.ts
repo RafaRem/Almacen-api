@@ -3,11 +3,14 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { Venta } from './venta.entity';
 import { Producto } from '../../productos/entities/producto.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
+import { DescuentoVentaDetalle } from '../../descuentos/entities/descuento-venta-detalle.entity';
+import { DetalleVentaLote } from './detalle-venta-lote.entity';
 
 @Entity('detalle_venta')
 export class DetalleVenta {
@@ -52,4 +55,20 @@ export class DetalleVenta {
 
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'subtotal' })
   subtotal: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'importebruto' })
+  importeBruto: number;
+
+  @OneToMany(
+    () => DescuentoVentaDetalle,
+    (descuentoDetalle) => descuentoDetalle.detalleVenta,
+  )
+  descuentos: DescuentoVentaDetalle[];
+
+  @OneToMany(
+    () => DetalleVentaLote,
+    (detalleLote) => detalleLote.detalleVenta,
+    { cascade: true },
+  )
+  lotesUtilizados: DetalleVentaLote[];
 }

@@ -172,21 +172,6 @@ export class InventarioAlmacenController {
     );
   }
 
-  @Get('debug/:productoId/:loteId/:almacenTipo')
-  @UseGuards(JwtAuthGuard)
-  debugInventario(
-    @Param('productoId') productoId: string,
-    @Param('loteId') loteId: string,
-    @Param('almacenTipo') almacenTipo: string,
-  ) {
-    console.log('[debug] Buscando:', { productoId, loteId, almacenTipo });
-    return this.inventarioService.debugFindByProductAndLote(
-      productoId,
-      loteId,
-      parseInt(almacenTipo) as AlmacenTipo,
-    );
-  }
-
   @Get('capas/:productoId')
   @UseGuards(JwtAuthGuard)
   getCapasPorProducto(@Param('productoId') productoId: string) {

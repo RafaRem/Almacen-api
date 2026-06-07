@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
@@ -81,7 +81,6 @@ export class InventarioAlmacenService {
     const agrupado = new Map<string, any>();
 
     for (const inv of inventarios) {
-      console.log('[getStockPorAlmacen] inv debug - productoId:', inv.productoId, 'ivaCfdi:', inv.ivaCfdi, 'precioVenta:', inv.precioVenta, 'loteId:', inv.loteId);
       const key = inv.productoId;
       if (agrupado.has(key)) {
         agrupado.get(key).cantidadActual += Number(inv.cantidadActual);
@@ -133,7 +132,6 @@ export class InventarioAlmacenService {
       }
     }
 
-    console.log('[getStockPorAlmacen] Returning resultado with lots:', JSON.stringify(resultado.map(r => ({ productoId: r.productoId, lotes: r.lotes })), null, 2));
     return resultado;
   }
 
@@ -144,8 +142,11 @@ export class InventarioAlmacenService {
     cantidad: number,
     ivaCfdi?: number | null,
     precioUnitarioLote?: number | null,
+    managerArg?: EntityManager,
   ): Promise<InventarioAlmacen> {
-    let inventario = await this.inventarioRepository.findOne({
+    const repo = managerArg ? managerArg.getRepository(InventarioAlmacen) : this.inventarioRepository;
+
+    let inventario = await repo.findOne({
       where: { productoId, loteId, almacenTipo },
     });
 
@@ -157,14 +158,13 @@ export class InventarioAlmacenService {
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
       }
-      const saved = await this.inventarioRepository.save(inventario);
-      return this.actualizarPrecioVenta(saved);
+      return repo.save(inventario);
     } else {
       let precioLote = precioUnitarioLote;
       if (precioLote === undefined || precioLote === null || precioLote === 0) {
         throw new Error('precioUnitarioLote es requerido para agregar stock');
       }
-      inventario = this.inventarioRepository.create({
+      inventario = repo.create({
         productoId,
         loteId,
         almacenTipo,
@@ -174,8 +174,7 @@ export class InventarioAlmacenService {
       });
     }
 
-    const saved = await this.inventarioRepository.save(inventario);
-    return this.actualizarPrecioVenta(saved);
+    return repo.save(inventario);
   }
 
   calcularPrecioVenta(
@@ -190,7 +189,7 @@ export class InventarioAlmacenService {
     const margenValor = margen ?? 20;
 
     const precioNeto = precioUnitario * (1 + iva / 100);
-    const cantidadMargen = precioNeto * (margenValor / 100);
+    const cantidadMargen = precioUnitario * (margenValor / 100);
     const precioVenta = precioNeto + cantidadMargen;
 
     return Math.round(precioVenta * 100) / 100;
@@ -215,12 +214,54 @@ export class InventarioAlmacenService {
     return this.inventarioRepository.save(inventario);
   }
 
+  private async queryLotesPorFIFO(
+    manager: EntityManager,
+    productoId: string,
+    cantidad: number,
+    almacenTipo: AlmacenTipo,
+  ): Promise<{
+    inventarios: InventarioAlmacen[];
+    totalDisponible: number;
+    lotsSelected: {
+      inventario: InventarioAlmacen;
+      cantidad: number;
+    }[];
+  }> {
+    const inventarios = await manager
+      .createQueryBuilder(InventarioAlmacen, 'inv')
+      .innerJoinAndSelect('inv.lote', 'lote')
+      .where('inv.productoId = :productoId', { productoId })
+      .andWhere('inv.almacenTipo = :almacenTipo', { almacenTipo })
+      .orderBy('lote.fechaCaducidad', 'ASC')
+      .setLock('pessimistic_write')
+      .getMany();
+
+    let totalDisponible = 0;
+    for (const inv of inventarios) {
+      totalDisponible += Number(inv.cantidadActual);
+    }
+
+    const lotsSelected: { inventario: InventarioAlmacen; cantidad: number }[] = [];
+    let restante = cantidad;
+
+    for (const inv of inventarios) {
+      if (restante <= 0) break;
+      const disponible = Number(inv.cantidadActual);
+      const aTransferir = Math.min(disponible, restante);
+      lotsSelected.push({ inventario: inv, cantidad: aTransferir });
+      restante -= aTransferir;
+    }
+
+    return { inventarios, totalDisponible, lotsSelected };
+  }
+
   async reducirStockFIFO(
     productoId: string,
     cantidad: number,
     almacenTipoOrigen: AlmacenTipo,
     userId: string = SYSTEM_USER_ID,
     metadata?: MovimientoMetadata,
+    managerArg?: EntityManager,
   ): Promise<{
     success: boolean;
     message: string;
@@ -240,17 +281,9 @@ export class InventarioAlmacenService {
       };
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const inventarios = await manager.find(InventarioAlmacen, {
-        where: { productoId, almacenTipo: almacenTipoOrigen },
-        relations: ['lote'],
-        order: { lote: { fechaCaducidad: 'ASC' } },
-      });
-
-      let totalDisponible = 0;
-      for (const inv of inventarios) {
-        totalDisponible += Number(inv.cantidadActual);
-      }
+    const executeReduce = async (manager: EntityManager) => {
+      const { inventarios, totalDisponible, lotsSelected } =
+        await this.queryLotesPorFIFO(manager, productoId, cantidad, almacenTipoOrigen);
 
       if (totalDisponible < cantidad) {
         return {
@@ -266,25 +299,22 @@ export class InventarioAlmacenService {
         cantidad: number;
         precio: number;
       }[] = [];
-      let restante = cantidad;
 
-      for (const inv of inventarios) {
-        if (restante <= 0) break;
-
-        const disponible = Number(inv.cantidadActual);
-        const aTransferir = Math.min(disponible, restante);
-
-        inv.cantidadActual -= aTransferir;
-        await manager.save(inv);
+      for (const { inventario, cantidad: cant } of lotsSelected) {
+        if (inventario.precioVenta == null) {
+          throw new Error(
+            `Precio de venta no asignado para producto ${productoId} (lote: ${inventario.lote?.numeroLote || inventario.loteId}). Configure precioVenta en Inventario.`,
+          );
+        }
+        inventario.cantidadActual -= cant;
+        await manager.save(inventario);
 
         lotsUsed.push({
-          loteId: inv.loteId,
-          numeroLote: inv.lote?.numeroLote || 'N/A',
-          cantidad: aTransferir,
-          precio: inv.precioUnitarioLote,
+          loteId: inventario.loteId,
+          numeroLote: inventario.lote?.numeroLote || 'N/A',
+          cantidad: cant,
+          precio: inventario.precioVenta,
         });
-
-        restante -= aTransferir;
       }
 
       const movimiento = manager.create(MovimientoAlmacen, {
@@ -306,6 +336,70 @@ export class InventarioAlmacenService {
         message: `Vendido ${cantidad} unidades usando FEPU`,
         lotsUsed,
         movimientoId: savedMovimiento.id,
+      };
+    };
+
+    if (managerArg) {
+      return executeReduce(managerArg);
+    } else {
+      return this.dataSource.transaction(executeReduce);
+    }
+  }
+
+  async consultarLotesFIFO(
+    productoId: string,
+    cantidad: number,
+    almacenTipo: AlmacenTipo = AlmacenTipo.VENTAS,
+  ): Promise<{
+    success: boolean;
+    lotsUsed: {
+      loteId: string;
+      numeroLote: string;
+      cantidad: number;
+      precio: number;
+      ivaCfdi: number;
+      fechaCaducidad?: Date;
+    }[];
+    precioPromedio: number;
+    precioVentaTotal: number;
+  }> {
+    return this.dataSource.transaction(async (manager) => {
+      const { inventarios, totalDisponible, lotsSelected } =
+        await this.queryLotesPorFIFO(manager, productoId, cantidad, almacenTipo);
+
+      if (totalDisponible < cantidad) {
+        return { success: false, lotsUsed: [], precioPromedio: 0, precioVentaTotal: 0 };
+      }
+
+      const lotsUsed: {
+        loteId: string;
+        numeroLote: string;
+        cantidad: number;
+        precio: number;
+        ivaCfdi: number;
+        fechaCaducidad?: Date;
+      }[] = [];
+
+      for (const { inventario, cantidad: cant } of lotsSelected) {
+        lotsUsed.push({
+          loteId: inventario.loteId,
+          numeroLote: inventario.lote?.numeroLote || 'N/A',
+          cantidad: cant,
+          precio: inventario.precioVenta || inventario.precioUnitarioLote,
+          ivaCfdi: inventario.ivaCfdi || 0,
+          fechaCaducidad: inventario.lote?.fechaCaducidad,
+        });
+      }
+
+      const totalPrecio = lotsUsed.reduce((sum, l) => sum + l.precio * l.cantidad, 0);
+      const totalCantidad = lotsUsed.reduce((sum, l) => sum + l.cantidad, 0);
+      const precioPromedio = totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
+
+      return {
+        success: true,
+        lotsUsed,
+        precioPromedio: Math.round(precioPromedio * 100) / 100,
+        precioVentaTotal: Math.round(totalPrecio * 100) / 100,
       };
     });
   }
@@ -622,52 +716,8 @@ export class InventarioAlmacenService {
   async findByProductoId(productoId: string): Promise<InventarioAlmacen | null> {
     return this.inventarioRepository.findOne({
       where: { productoId },
+      relations: ['lote'],
     });
-  }
-
-  async debugFindByProductAndLote(
-    productoId: string,
-    loteId: string,
-    almacenTipo: AlmacenTipo,
-  ): Promise<any> {
-    console.log('[debug] Query directa a BD:', {
-      productoId,
-      loteId,
-      almacenTipo,
-    });
-    console.log(
-      '[debug] almacenTipo es numero?',
-      typeof almacenTipo,
-      almacenTipo,
-    );
-
-    const inventarios = await this.inventarioRepository.find({
-      where: { productoId },
-      relations: ['producto', 'lote'],
-    });
-
-    console.log('[debug] Todos los inventarios para productoId:', inventarios);
-
-    const filtrado = inventarios.filter(
-      (inv) => inv.loteId === loteId && inv.almacenTipo === almacenTipo,
-    );
-
-    console.log('[debug] Filtrado por loteId y almacenTipo:', filtrado);
-
-    return {
-      productoId,
-      loteId,
-      almacenTipo,
-      todosLosInventariosProducto: inventarios.map((inv) => ({
-        id: inv.id,
-        loteId: inv.loteId,
-        almacenTipo: inv.almacenTipo,
-        cantidadActual: inv.cantidadActual,
-        loteIdExactMatch: inv.loteId === loteId,
-        almacenTipoExactMatch: inv.almacenTipo === almacenTipo,
-      })),
-      filtrado,
-    };
   }
 
   async getCapasPorProducto(productoId: string): Promise<any> {

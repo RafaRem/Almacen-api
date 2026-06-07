@@ -23,4 +23,12 @@ export class AuthController {
 
     return this.authService.login(user);
   }
+
+  @Post('refresh')
+  async refresh(@Body('refresh_token') refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('refresh_token is required');
+    }
+    return this.authService.refreshToken(refreshToken);
+  }
 }

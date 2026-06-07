@@ -83,10 +83,6 @@ export class ClientesService {
     id: string,
     updateClienteDto: UpdateClienteDto,
   ): Promise<Cliente> {
-    console.log(
-      '🔍 DEBUG update() - received DTO:',
-      JSON.stringify(updateClienteDto, null, 2),
-    );
     const cliente = await this.findOne(id);
 
     if (updateClienteDto.email && updateClienteDto.email !== cliente.email) {

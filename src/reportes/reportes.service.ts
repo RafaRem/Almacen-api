@@ -23,6 +23,7 @@ export interface KardexInventarioFilters {
 
 @Injectable()
 export class ReportesService {
+
   constructor(
     @InjectRepository(Producto)
     private productosRepository: Repository<Producto>,
@@ -57,37 +58,32 @@ export class ReportesService {
         'producto.nombre AS producto_nombre',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 });
-
     if (filters?.clienteNombre) {
       queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
         clienteNombre: `%${filters.clienteNombre}%`,
       });
     }
-
     if (filters?.fechaFrom) {
       queryBuilder.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
         fechaFrom: filters.fechaFrom,
       });
     }
-
     if (filters?.fechaTo) {
       queryBuilder.andWhere('DATE(venta.createdAt) <= :fechaTo', {
         fechaTo: filters.fechaTo,
       });
     }
-
     const resultados = await queryBuilder
       .orderBy('venta.createdAt', 'DESC')
       .getRawMany();
-
     return resultados.map((r) => ({
       nombreCliente: r.cliente_nombre || 'Mostrador',
       folioVenta: r.folio_venta,
       fechaVenta: r.fecha_venta,
       producto: r.producto_nombre,
-      cantidad: parseInt(r.cantidad, 10),
-      precioVenta: parseFloat(r.precio_unitario),
-      total: parseFloat(r.precio_unitario) * parseInt(r.cantidad, 10),
+      cantidad: parseInt(r.cantidad, 10) || 0,
+      precioVenta: parseInt(r.cantidad, 10) > 0 ? (parseFloat(r.importe_bruto) / parseInt(r.cantidad, 10)) : 0,
+      total: parseFloat(r.importe_bruto) || 0,
     }));
   }
 
@@ -99,36 +95,31 @@ export class ReportesService {
       .leftJoin('detalle.producto', 'producto')
       .leftJoin('detalle.lote', 'lote')
       .select([
-        'detalle.id AS detalle_id',
         'producto.id AS producto_id',
         'producto.nombre AS producto_nombre',
         'lote.numeroLote AS numero_lote',
         'SUM(detalle.cantidad) AS total_cantidad_vendida',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 })
-      .groupBy('detalle.id, producto.id, producto.nombre, lote.numeroLote');
-
+      .groupBy('producto.id, producto.nombre, lote.numeroLote');
     if (filters?.productoNombre) {
       queryBuilder.andWhere('LOWER(producto.nombre) LIKE LOWER(:productoNombre)', {
         productoNombre: `%${filters.productoNombre}%`,
       });
     }
-
     if (filters?.folioVenta) {
       queryBuilder.andWhere('venta.folio = :folioVenta', {
         folioVenta: parseInt(filters.folioVenta, 10),
       });
     }
-
     const resultados = await queryBuilder
       .orderBy('producto.nombre', 'ASC')
       .getRawMany();
-
     return resultados.map((r) => ({
       productoId: r.producto_id,
       nombreProducto: r.producto_nombre,
       numeroLote: r.numero_lote,
-      totalCantidadVendida: parseInt(r.total_cantidad_vendida, 10),
+      totalCantidadVendida: parseInt(r.total_cantidad_vendida, 10) || 0,
     }));
   }
 
@@ -138,18 +129,15 @@ export class ReportesService {
       .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
       .where('producto.id = :id', { id: productoId })
       .getOne();
-
     if (!producto) {
       return null;
     }
-
     const inventario = await this.inventarioRepository
       .createQueryBuilder('inventario')
       .leftJoinAndSelect('inventario.lote', 'lote')
       .where('inventario.productoId = :productoId', { productoId })
       .andWhere('inventario.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
       .getOne();
-
     const detalles = await this.detallesRepository
       .createQueryBuilder('detalle')
       .leftJoinAndSelect('detalle.venta', 'venta')
@@ -159,18 +147,16 @@ export class ReportesService {
       .andWhere('venta.statusId = :statusId', { statusId: 1 })
       .orderBy('venta.createdAt', 'DESC')
       .getMany();
-
     const trazabilidad = detalles.map((d) => ({
       folioVenta: d.venta?.folio,
       fechaVenta: d.venta?.createdAt,
       clienteNombre: d.venta?.cliente?.nombre || 'Mostrador',
       numeroLote: d.lote?.numeroLote,
-      cantidad: d.cantidad,
+      cantidad: d.cantidad || 0,
       precioUnitarioLote: inventario?.precioUnitarioLote || 0,
-      precioVenta: d.precioUnitario,
-      total: Number(d.precioUnitario) * d.cantidad,
+      precioVenta: d.precioUnitario || 0,
+      total: (d.precioUnitario || 0) * (d.cantidad || 0),
     }));
-
     return {
       producto: {
         id: producto.id,
@@ -190,7 +176,6 @@ export class ReportesService {
     const hoy = new Date();
     const fechaLimite = new Date();
     fechaLimite.setMonth(hoy.getMonth() + meses);
-
     return this.inventarioRepository
       .createQueryBuilder('inventario')
       .leftJoinAndSelect('inventario.producto', 'producto')
@@ -209,18 +194,23 @@ export class ReportesService {
       .getMany();
   }
 
-  async getAlertasVigencia(dias: number = 30): Promise<DocumentoCliente[]> {
+  async getAlertasVigencia(dias: number = 30): Promise<any[]> {
     const hoy = new Date();
     const fechaLimite = new Date();
     fechaLimite.setDate(hoy.getDate() + dias);
-
-    return this.documentosRepository.find({
+    const docs = await this.documentosRepository.find({
+      relations: ['cliente'],
       where: {
         vigencia: Between(hoy, fechaLimite),
         statusId: 1,
       },
       order: { vigencia: 'ASC' },
     });
+    return docs.map((d) => ({
+      ...d,
+      clienteNombre: d.cliente?.nombre || 'Mostrador',
+      cliente: undefined,
+    }));
   }
 
   async getStockMinimo(): Promise<any[]> {
@@ -238,7 +228,6 @@ export class ReportesService {
 
   async getProductosCaducados(): Promise<any[]> {
     const hoy = new Date();
-
     return this.inventarioRepository
       .createQueryBuilder('inventario')
       .leftJoinAndSelect('inventario.producto', 'producto')

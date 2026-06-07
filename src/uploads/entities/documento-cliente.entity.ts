@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { TipoDocumento } from '../../common/enums/tipo-documento.enum';
+import { Cliente } from '../../clientes/entities/cliente.entity';
 
 @Entity('documentos_cliente')
 export class DocumentoCliente {
@@ -16,6 +17,10 @@ export class DocumentoCliente {
 
   @Column()
   clienteId: string;
+
+  @ManyToOne(() => Cliente)
+  @JoinColumn({ name: 'clienteId' })
+  cliente: Cliente;
 
   @Column({
     type: 'enum',

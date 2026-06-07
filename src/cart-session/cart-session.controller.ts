@@ -4,11 +4,11 @@ import {
   Put,
   Delete,
   Post,
-  Param,
   Body,
   HttpException,
   HttpStatus,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CartSessionService } from './cart-session.service';
@@ -19,8 +19,9 @@ import { CartSessionDto, SaveCartDto } from './dto/cart-session.dto';
 export class CartSessionController {
   constructor(private readonly cartSessionService: CartSessionService) {}
 
-  @Get(':userId')
-  async getCartSession(@Param('userId') userId: string) {
+  @Get()
+  async getCartSession(@Request() req) {
+    const userId = req.user.id;
     const session = await this.cartSessionService.getCartSession(userId);
     if (!session) {
       throw new HttpException('Cart session not found', HttpStatus.NOT_FOUND);
@@ -28,15 +29,12 @@ export class CartSessionController {
     return session;
   }
 
-  @Put(':userId')
+  @Put()
   async saveCartSession(
-    @Param('userId') userId: string,
     @Body() cartSessionDto: CartSessionDto,
+    @Request() req,
   ) {
-    if (cartSessionDto.userId !== userId) {
-      throw new HttpException('User ID mismatch', HttpStatus.FORBIDDEN);
-    }
-
+    const userId = req.user.id;
     const success = await this.cartSessionService.saveCartSession(
       userId,
       cartSessionDto,
@@ -50,8 +48,9 @@ export class CartSessionController {
     return { success: true, message: 'Cart session saved' };
   }
 
-  @Delete(':userId')
-  async deleteCartSession(@Param('userId') userId: string) {
+  @Delete()
+  async deleteCartSession(@Request() req) {
+    const userId = req.user.id;
     const success = await this.cartSessionService.deleteCartSession(userId);
     if (!success) {
       throw new HttpException(
@@ -62,14 +61,16 @@ export class CartSessionController {
     return { success: true, message: 'Cart session deleted' };
   }
 
-  @Get(':userId/exists')
-  async cartSessionExists(@Param('userId') userId: string) {
+  @Get('exists')
+  async cartSessionExists(@Request() req) {
+    const userId = req.user.id;
     const exists = await this.cartSessionService.cartSessionExists(userId);
     return { exists };
   }
 
-  @Post(':userId/refresh')
-  async refreshTTL(@Param('userId') userId: string) {
+  @Post('refresh')
+  async refreshTTL(@Request() req) {
+    const userId = req.user.id;
     const refreshed = await this.cartSessionService.refreshTTL(userId);
     if (!refreshed) {
       throw new HttpException(

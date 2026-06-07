@@ -1,6 +1,7 @@
-import { TypeOrmModuleOptions } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
+import { DataSource, DataSourceOptions } from 'typeorm';
+import { config } from 'dotenv';
 import { User } from '../users/entities/user.entity';
+import { UserPermission } from '../users/entities/user-permission.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Producto } from '../productos/entities/producto.entity';
@@ -23,20 +24,19 @@ import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-alm
 import { Configuracion } from '../configuraciones/entities/configuracion.entity';
 import { ConfiguracionSistema } from '../configuracion/entities/configuracion-sistema.entity';
 import { MovimientoRevertido } from '../movimientos-almacen/entities/movimiento-revertido.entity';
-import { UserPermission } from '../users/entities/user-permission.entity';
 import { DatosEmpresa } from '../empresa/entities/datos-empresa.entity';
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { DetalleVentaLote } from '../ventas/entities/detalle-venta-lote.entity';
 
-export const getDatabaseConfig = (
-  configService: ConfigService,
-): TypeOrmModuleOptions => ({
+config();
+
+export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
-  host: configService.get<string>('DATABASE_HOST'),
-  port: configService.get<number>('DATABASE_PORT'),
-  username: configService.get<string>('DATABASE_USER'),
-  password: configService.get<string>('DATABASE_PASSWORD'),
-  database: configService.get<string>('DATABASE_NAME'),
+  host: process.env.DATABASE_HOST || 'localhost',
+  port: parseInt(process.env.DATABASE_PORT || '5433', 10),
+  username: process.env.DATABASE_USER || 'postgres',
+  password: process.env.DATABASE_PASSWORD || 'postgres',
+  database: process.env.DATABASE_NAME || 'almacen_db',
   entities: [
     User,
     UserPermission,
@@ -61,11 +61,14 @@ export const getDatabaseConfig = (
     InventarioAlmacen,
     Configuracion,
     ConfiguracionSistema,
-MovimientoRevertido,
-    UserPermission,
+    MovimientoRevertido,
     DatosEmpresa,
     DetalleLote,
     DetalleVentaLote,
   ],
+  migrations: ['src/migrations/*.ts'],
   synchronize: false,
-});
+};
+
+const dataSource = new DataSource(dataSourceOptions);
+export default dataSource;

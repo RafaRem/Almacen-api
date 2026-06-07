@@ -7,6 +7,7 @@ import {
   IsUUID,
   IsDateString,
   Min,
+  Max,
   IsInt,
 } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
@@ -29,6 +30,7 @@ export class CreateDescuentoDto {
 
   @IsNumber()
   @Min(0)
+  @Max(100)
   porcentaje: number;
 
   @IsOptional()
@@ -77,6 +79,7 @@ export class UpdateDescuentoDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(100)
   porcentaje?: number;
 
   @IsOptional()

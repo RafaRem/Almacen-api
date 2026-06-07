@@ -716,6 +716,7 @@ export class InventarioAlmacenService {
   async findByProductoId(productoId: string): Promise<InventarioAlmacen | null> {
     return this.inventarioRepository.findOne({
       where: { productoId },
+      relations: ['lote'],
     });
   }
 

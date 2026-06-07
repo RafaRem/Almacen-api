@@ -3,20 +3,32 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.DATABASE_SYNCHRONIZE === 'true'
+  ) {
+    throw new Error(
+      'DATABASE_SYNCHRONIZE=true no permitido en produccion. Establece DATABASE_SYNCHRONIZE=false',
+    );
+  }
+
   const app = await NestFactory.create(AppModule);
 
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
+    : true;
+
   app.enableCors({
-    origin: true,
+    origin: corsOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: false,
-      forbidNonWhitelisted: false,
+      whitelist: true,
+      forbidNonWhitelisted: true,
       transform: true,
-      skipMissingProperties: true,
     }),
   );
 

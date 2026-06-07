@@ -9,6 +9,7 @@ import { Venta } from './entities/venta.entity';
 import { DetalleVenta } from './entities/detalle-venta.entity';
 import { PagoVenta } from './entities/pago-venta.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
+import { DetalleVentaLote } from './entities/detalle-venta-lote.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { ProductosService } from '../productos/productos.service';
 import { LotesService } from '../lotes/lotes.service';
@@ -385,6 +386,20 @@ export class VentasService {
     }
     const savedDetalles = await manager.save(DetalleVenta, detalles);
 
+    for (const detalle of savedDetalles) {
+      const lotesDeProducto = movimientosLotes.filter(
+        (ml) => ml.productoId === detalle.productoId,
+      );
+      for (const loteInfo of lotesDeProducto) {
+        const detalleLote = this.detallesRepository.manager.create(DetalleVentaLote, {
+          detalleVentaId: detalle.id,
+          loteId: loteInfo.loteId,
+          cantidad: loteInfo.cantidad,
+        });
+        await manager.save(DetalleVentaLote, detalleLote);
+      }
+    }
+
     for (const pago of pagosData) {
       const pagoVenta = this.pagosRepository.create({
         ventaId: savedVenta.id,
@@ -428,7 +443,12 @@ export class VentasService {
       }
     }
 
-    return { ...savedVenta, detalles: savedDetalles, pagos: pagosData, descuentos: descuentosInfo };
+    const detallesConRelaciones = await manager.find(DetalleVenta, {
+      where: { ventaId: savedVenta.id },
+      relations: ['producto', 'lote'],
+    });
+
+    return { ...savedVenta, detalles: detallesConRelaciones, pagos: pagosData, descuentos: descuentosInfo };
     });
   }
 
@@ -580,7 +600,7 @@ export class VentasService {
   async cancel(id: string, usuarioId?: string, motivo?: string): Promise<Venta> {
     const venta = await this.ventasRepository.findOne({
       where: { id },
-      relations: ['detalles', 'detalles.lote', 'detalles.producto'],
+      relations: ['detalles', 'detalles.lote', 'detalles.producto', 'detalles.lotesUtilizados', 'detalles.lotesUtilizados.lote'],
     });
 
     if (!venta) {
@@ -596,35 +616,39 @@ export class VentasService {
 
     return this.dataSource.transaction(async (manager) => {
       for (const detalle of venta.detalles) {
-        const cantidad = Number(detalle.cantidad);
-        if (cantidad <= 0) continue;
+        const lotesUtilizados = detalle.lotesUtilizados?.length
+          ? detalle.lotesUtilizados
+          : [{ loteId: detalle.loteId, cantidad: detalle.cantidad, lote: detalle.lote }];
+        for (const loteUso of lotesUtilizados) {
+          const cantidad = Number(loteUso.cantidad);
+          if (cantidad <= 0) continue;
+          const loteId = loteUso.loteId;
+          const productoId = detalle.productoId;
 
-        const loteId = detalle.loteId;
-        const productoId = detalle.productoId;
+          await this.inventarioAlmacenService.agregarStock(
+            productoId,
+            loteId,
+            AlmacenTipo.VENTAS,
+            cantidad,
+            undefined,
+            undefined,
+            manager,
+          );
 
-        await this.inventarioAlmacenService.agregarStock(
-          productoId,
-          loteId,
-          AlmacenTipo.VENTAS,
-          cantidad,
-          undefined,
-          undefined,
-          manager,
-        );
-
-        const movimiento = manager.create(MovimientoAlmacen, {
-          productoId,
-          loteId,
-          almacenOrigen: AlmacenTipo.CLIENTE,
-          almacenDestino: AlmacenTipo.VENTAS,
-          cantidad,
-          userId,
-          observaciones: `Cancelación venta folio ${venta.folio}: ${motivoCancelacion}`,
-          tipoMovimiento: TipoMovimiento.ENTRADA_REVERSION,
-          origenOperacion: OrigenOperacion.POS,
-          revertido: false,
-        });
-        await manager.save(MovimientoAlmacen, movimiento);
+          const movimiento = manager.create(MovimientoAlmacen, {
+            productoId,
+            loteId,
+            almacenOrigen: AlmacenTipo.CLIENTE,
+            almacenDestino: AlmacenTipo.VENTAS,
+            cantidad,
+            userId,
+            observaciones: `Cancelación venta folio ${venta.folio}: ${motivoCancelacion}`,
+            tipoMovimiento: TipoMovimiento.ENTRADA_REVERSION,
+            origenOperacion: OrigenOperacion.POS,
+            revertido: false,
+          });
+          await manager.save(MovimientoAlmacen, movimiento);
+        }
       }
 
       venta.statusId = 2;

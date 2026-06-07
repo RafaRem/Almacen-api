@@ -16,8 +16,12 @@ import { FacturasService } from './facturas.service';
 import { CreateFacturaDto } from './dto/create-factura.dto';
 import { UpdateFacturaDto } from './dto/update-factura.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { UserModule } from '../common/enums/user-module.enum';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermission(UserModule.INVOICES)
 @Controller('facturas')
 export class FacturasController {
   constructor(private readonly facturasService: FacturasService) {}
@@ -59,10 +63,11 @@ export class FacturasController {
     return this.facturasService.update(id, updateFacturaDto);
   }
 
-  @Post(':id/timbrar')
-  @HttpCode(HttpStatus.OK)
-  timbrar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.timbrar(id);
+  @Post(':id/marcar-como-timbrada-demo')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission(UserModule.INVOICES)
+  marcarComoTimbradaDemo(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.marcarComoTimbradaDemo(id);
   }
 
   @Post(':id/cancelar')

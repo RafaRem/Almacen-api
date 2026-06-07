@@ -3,9 +3,17 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DescuentosService } from './descuentos.service';
 import { Descuento } from './entities/descuento.entity';
+import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
 
 const mockRepository = {
+  find: jest.fn(),
+  findOne: jest.fn(),
+  create: jest.fn(),
+  save: jest.fn(),
+};
+
+const mockCatRepository = {
   find: jest.fn(),
   findOne: jest.fn(),
   create: jest.fn(),
@@ -23,6 +31,10 @@ describe('DescuentosService', () => {
         {
           provide: getRepositoryToken(Descuento),
           useValue: mockRepository,
+        },
+        {
+          provide: getRepositoryToken(CategoriaCliente),
+          useValue: mockCatRepository,
         },
       ],
     }).compile();
@@ -73,8 +85,10 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           5,
-          100,
           laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -102,8 +116,10 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           5,
-          100,
           laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -113,6 +129,15 @@ describe('DescuentosService', () => {
     });
 
     describe('category discounts (CATEGORIA)', () => {
+      beforeEach(() => {
+        mockCatRepository.findOne.mockResolvedValue({
+          id: categoriaClienteId,
+          nombre: 'Categoria 5',
+          descuento: 15,
+          statusId: 1,
+        });
+      });
+
       it('should accumulate category discount WITH product discount', async () => {
         const descuentos = [
           createDescuento({
@@ -133,9 +158,10 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           5,
-          100,
           laboratorioId,
           categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -164,9 +190,10 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           1,
-          100,
           laboratorioId,
           categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -177,7 +204,17 @@ describe('DescuentosService', () => {
     });
 
     describe('30% cap', () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+      });
+
       it('should cap total discount at 30% of precioOriginal', async () => {
+        mockCatRepository.findOne.mockResolvedValue({
+          id: categoriaClienteId,
+          nombre: 'Categoria 5',
+          descuento: 20,
+          statusId: 1,
+        });
         const descuentos = [
           createDescuento({
             id: 'desc-1',
@@ -197,9 +234,10 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           1,
-          100,
           laboratorioId,
           categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoTotal).toBe(30);
@@ -207,6 +245,12 @@ describe('DescuentosService', () => {
       });
 
       it('should NOT cap when under 30%', async () => {
+        mockCatRepository.findOne.mockResolvedValue({
+          id: categoriaClienteId,
+          nombre: 'Categoria 5',
+          descuento: 15,
+          statusId: 1,
+        });
         const descuentos = [
           createDescuento({
             id: 'desc-vol',
@@ -226,9 +270,10 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           1,
-          100,
           laboratorioId,
           categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoTotal).toBe(25);
@@ -251,7 +296,6 @@ describe('DescuentosService', () => {
         const resultLessThan5 = await service.calcularDescuentosAcumulables(
           'prod-1',
           3,
-          100,
           laboratorioId,
         );
         expect(resultLessThan5.descuentoProducto).toBeNull();
@@ -259,7 +303,6 @@ describe('DescuentosService', () => {
         const resultExactly5 = await service.calcularDescuentosAcumulables(
           'prod-1',
           5,
-          100,
           laboratorioId,
         );
         expect(resultExactly5.descuentoProducto?.porcentaje).toBe(10);
@@ -279,7 +322,6 @@ describe('DescuentosService', () => {
         const resultWithinRange = await service.calcularDescuentosAcumulables(
           'prod-1',
           5,
-          100,
           laboratorioId,
         );
         expect(resultWithinRange.descuentoProducto?.porcentaje).toBe(10);
@@ -287,7 +329,6 @@ describe('DescuentosService', () => {
         const resultAboveMax = await service.calcularDescuentosAcumulables(
           'prod-1',
           15,
-          100,
           laboratorioId,
         );
         expect(resultAboveMax.descuentoProducto).toBeNull();
@@ -309,7 +350,6 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           1,
-          100,
           laboratorioId,
         );
         expect(result.descuentoProducto).toBeNull();
@@ -329,7 +369,6 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           1,
-          100,
           laboratorioId,
         );
         expect(result.descuentoProducto?.porcentaje).toBe(5);
@@ -343,7 +382,6 @@ describe('DescuentosService', () => {
         const result = await service.calcularDescuentosAcumulables(
           'prod-1',
           1,
-          100,
           laboratorioId,
         );
 

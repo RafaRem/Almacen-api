@@ -37,6 +37,7 @@ export const dataSourceOptions: DataSourceOptions = {
   username: process.env.DATABASE_USER || 'postgres',
   password: process.env.DATABASE_PASSWORD || 'postgres',
   database: process.env.DATABASE_NAME || 'almacen_db',
+  timezone: 'America/Mexico_City',
   entities: [
     User,
     UserPermission,
@@ -68,7 +69,7 @@ export const dataSourceOptions: DataSourceOptions = {
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,
-};
+} as any;
 
 const dataSource = new DataSource(dataSourceOptions);
 export default dataSource;

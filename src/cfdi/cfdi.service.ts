@@ -95,7 +95,7 @@ export class CfdiService {
     const folio = getValue(/Folio="([^"]+)"/);
     const fecha = getValue(/Fecha="([^"]+)"/);
     const subtotal = parseFloat(getValue(/SubTotal="([^"]+)"/)) || 0;
-    const total = parseFloat(getValue(/Total="([^"]+)"/)) || 0;
+    const total = parseFloat(getValue(/\sTotal="([^"]+)"/)) || 0;
 
     const emisorRfc = getValue(/<cfdi:Emisor[^>]*Rfc="([^"]+)"/);
     const emisorNombre = getValue(/<cfdi:Emisor[^>]*Nombre="([^"]+)"/);

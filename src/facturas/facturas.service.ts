@@ -346,7 +346,7 @@ export class FacturasService {
     return detalles;
   }
 
-  async timbrar(id: string): Promise<Factura> {
+  async marcarComoTimbradaDemo(id: string): Promise<Factura> {
     const factura = await this.findOne(id);
 
     if (factura.statusId === FacturaStatus.CANCELADA) {

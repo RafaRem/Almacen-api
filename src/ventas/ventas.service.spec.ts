@@ -607,7 +607,7 @@ describe('VentasService', () => {
 
     it('should create a basic sale with single product and EFECTIVO', async () => {
       const dto = {
-        productos: [{ productoId: 'prod-1', cantidad: 5, precioVenta: 61.2 }],
+        productos: [{ productoId: 'prod-1', cantidad: 5 }],
         metodoPago: MetodoPago.EFECTIVO,
       };
       const result = await service.create(dto as any, usuarioId);

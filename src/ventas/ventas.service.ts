@@ -189,7 +189,7 @@ export class VentasService {
       );
       const precioUnitario = totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
 
-      const precioVenta = productoVenta.precioVenta ?? precioUnitario;
+      const precioVenta = inventarioProducto.precioVenta;
 
       const fechaRaw = inventarioProducto?.lote?.fechaCaducidad;
       const fechaCaducidad = (fechaRaw instanceof Date)

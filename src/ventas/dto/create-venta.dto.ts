@@ -28,10 +28,6 @@ export class ProductoVentaDto {
   @IsInt()
   @Min(1)
   cantidad: number;
-
-  @IsNumber()
-  @IsOptional()
-  precioVenta?: number;
 }
 
 export class DescuentosPreviewDto {

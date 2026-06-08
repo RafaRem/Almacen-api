@@ -32,7 +32,7 @@ export class AuthService {
     const [access_token, refresh_token] = await Promise.all([
       this.jwtService.signAsync(
         { ...payload, type: 'access' },
-        { expiresIn: '15m' as const },
+        { expiresIn: '2h' as const },
       ),
       this.jwtService.signAsync(
         { ...payload, type: 'refresh' },
@@ -70,7 +70,7 @@ export class AuthService {
       return {
         access_token: await this.jwtService.signAsync(
           { ...newPayload, type: 'access' },
-          { expiresIn: '15m' as const },
+          { expiresIn: '2h' as const },
         ),
       };
     } catch (e) {

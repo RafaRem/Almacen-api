@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
-import { ReportesService, VentasPorClienteFilters, KardexInventarioFilters } from './reportes.service';
+import { ReportesService, VentasPorClienteFilters, KardexInventarioFilters, ResumenClientesFilters } from './reportes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('reportes')
@@ -14,6 +14,26 @@ export class ReportesController {
     @Query('fechaTo') fechaTo: string,
   ) {
     return this.reportesService.getVentasPorCliente({ clienteNombre, fechaFrom, fechaTo });
+  }
+
+  @Get('resumen-clientes')
+  @UseGuards(JwtAuthGuard)
+  getResumenClientes(
+    @Query('fechaFrom') fechaFrom: string,
+    @Query('fechaTo') fechaTo: string,
+    @Query('clienteNombre') clienteNombre: string,
+    @Query('categoriaClienteId') categoriaClienteId: string,
+    @Query('rfc') rfc: string,
+    @Query('diasInactividad') diasInactividad: string,
+  ) {
+    return this.reportesService.getResumenClientes({
+      fechaFrom,
+      fechaTo,
+      clienteNombre,
+      categoriaClienteId,
+      rfc,
+      diasInactividad: diasInactividad ? parseInt(diasInactividad, 10) : 90,
+    } as ResumenClientesFilters);
   }
 
   @Get('kardex-inventario')
@@ -43,7 +63,7 @@ export class ReportesController {
   @UseGuards(JwtAuthGuard)
   getAlertasVigencia(@Query('dias') dias: string) {
     return this.reportesService.getAlertasVigencia(
-      dias ? parseInt(dias, 10) : 30,
+      dias ? parseInt(dias, 10) : 60,
     );
   }
 

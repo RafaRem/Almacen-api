@@ -15,7 +15,7 @@ export class DocumentoCliente {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ type: 'uuid' })
   clienteId: string;
 
   @ManyToOne(() => Cliente)

@@ -103,7 +103,7 @@ export class ReportesService {
       .leftJoin('cliente.categoriaCliente', 'categoria')
       .select([
         'cliente.id AS cliente_id',
-        "CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidos, '')) AS cliente_nombre",
+        "CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, '')) AS cliente_nombre",
         'cliente.rfc AS rfc',
         'categoria.nombre AS categoria_nombre',
         'COUNT(venta.id) AS cantidad_compras',
@@ -115,10 +115,10 @@ export class ReportesService {
         fechaFrom: new Date(filters.fechaFrom + 'T00:00:00.000Z'),
         fechaTo: new Date(filters.fechaTo + 'T23:59:59.999Z'),
       })
-      .groupBy('cliente.id, cliente.nombre, cliente.apellidos, cliente.rfc, categoria.nombre');
+      .groupBy('cliente.id, cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno, cliente.rfc, categoria.nombre');
 
     if (filters.clienteNombre) {
-      qb.andWhere("LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidos, ''))) LIKE :clienteNombre", {
+      qb.andWhere("LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, ''))) LIKE :clienteNombre", {
         clienteNombre: `%${filters.clienteNombre.toLowerCase()}%`,
       });
     }
@@ -347,22 +347,38 @@ export class ReportesService {
     });
     return docs.map((d) => ({
       ...d,
-      clienteNombre: d.cliente?.nombre || 'Mostrador',
+      clienteNombre: d.cliente
+        ? `${d.cliente.nombre} ${d.cliente.apellidoPaterno || ''} ${d.cliente.apellidoMaterno || ''}`.trim()
+        : 'Mostrador',
       cliente: undefined,
     }));
   }
 
   async getStockMinimo(): Promise<any[]> {
-    return this.inventarioRepository
-      .createQueryBuilder('inventario')
-      .leftJoinAndSelect('inventario.producto', 'producto')
-      .leftJoinAndSelect('inventario.lote', 'lote')
-      .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
-      .where('inventario.cantidadActual <= producto.stockMinimo')
-      .andWhere('inventario.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
+    const results = await this.inventarioRepository
+      .createQueryBuilder('inv')
+      .leftJoin('inv.producto', 'producto')
+      .leftJoin('inv.lote', 'lote')
+      .leftJoin('producto.laboratorio', 'laboratorio')
+      .select([
+        'producto.id AS "id"',
+        'producto.nombre AS "nombre"',
+        'producto.codigoBarras AS "codigoBarras"',
+        'producto.stockMinimo AS "stockMinimo"',
+        'producto.stockMaximo AS "stockMaximo"',
+        'laboratorio.nombre AS laboratorio',
+        'SUM(inv.cantidadActual) AS "stockTotal"',
+      ])
+      .where('inv.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
       .andWhere('producto.statusId = :statusId', { statusId: 1 })
-      .orderBy('inventario.cantidadActual', 'ASC')
-      .getMany();
+      .groupBy('"producto"."id", "producto"."nombre", "producto"."codigoBarras", "producto"."stockMinimo", "producto"."stockMaximo", "laboratorio"."nombre"')
+      .having('SUM(inv.cantidadActual) <= "producto"."stockMinimo"')
+      .orderBy('"stockTotal"', 'ASC')
+      .getRawMany();
+    return results.map((r) => ({
+      ...r,
+      stockTotal: parseInt(r.stockTotal, 10) || 0,
+    }));
   }
 
   async getProductosCaducados(): Promise<any[]> {

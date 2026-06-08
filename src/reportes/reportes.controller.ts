@@ -63,7 +63,7 @@ export class ReportesController {
   @UseGuards(JwtAuthGuard)
   getAlertasVigencia(@Query('dias') dias: string) {
     return this.reportesService.getAlertasVigencia(
-      dias ? parseInt(dias, 10) : 30,
+      dias ? parseInt(dias, 10) : 60,
     );
   }
 

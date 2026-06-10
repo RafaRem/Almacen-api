@@ -32,6 +32,8 @@ import { EmpresaModule } from './empresa/empresa.module';
 import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
 import { CartSessionModule } from './cart-session/cart-session.module';
 import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
+import { ProveedoresModule } from './proveedores/proveedores.module';
+import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
 
 @Module({
   imports: [
@@ -74,6 +76,8 @@ import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
     TicketUploadsModule,
     CartSessionModule,
     DetalleLoteModule,
+    ProveedoresModule,
+    OrdenesCompraModule,
   ],
   controllers: [AppController],
   providers: [AppService],

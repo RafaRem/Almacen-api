@@ -59,6 +59,9 @@ export class CreateDescuentoDto {
   fechaFin?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   prioridad?: number;
 
   @IsOptional()
@@ -118,6 +121,9 @@ export class UpdateDescuentoDto {
   fechaFin?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   prioridad?: number;
 
   @IsOptional()
@@ -139,6 +145,14 @@ export class CalcularDescuentoDto {
   @IsOptional()
   @IsUUID()
   clienteId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  laboratorioId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fechaCaducidad?: string;
 }
 
 export class PreviewProductDiscountDto {
@@ -154,7 +168,6 @@ export class PreviewProductDiscountDto {
   precioUnitario: number;
 
   @IsNumber()
-  @Min(0)
   iva: number;
 
   @IsNumber()
@@ -166,4 +179,8 @@ export class PreviewProductDiscountDto {
   @IsOptional()
   @IsUUID()
   clienteId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fechaCaducidad?: string;
 }

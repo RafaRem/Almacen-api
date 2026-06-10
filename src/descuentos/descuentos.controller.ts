@@ -52,6 +52,8 @@ export class DescuentosController {
     @Query('productoId') productoId: string,
     @Query('cantidad') cantidad: number,
     @Query('clienteId') clienteId?: string,
+    @Query('laboratorioId') laboratorioId?: string,
+    @Query('fechaCaducidad') fechaCaducidad?: string,
   ) {
     let categoriaClienteId: string | undefined;
     if (clienteId) {
@@ -60,11 +62,13 @@ export class DescuentosController {
         categoriaClienteId = cliente?.categoriaClienteId;
       } catch {}
     }
+    const fechaCad = fechaCaducidad ? new Date(fechaCaducidad) : undefined;
     return this.descuentosService.calcularMejorDescuento(
       productoId,
       Number(cantidad),
-      '',
+      laboratorioId || '',
       categoriaClienteId,
+      fechaCad,
     );
   }
 
@@ -79,6 +83,7 @@ export class DescuentosController {
         categoriaClienteId = cliente?.categoriaClienteId;
       } catch {}
     }
+    const fechaCaducidad = dto.fechaCaducidad ? new Date(dto.fechaCaducidad) : undefined;
     return this.descuentosService.previewProductDiscount(
       dto.productoId,
       dto.cantidad,
@@ -87,6 +92,7 @@ export class DescuentosController {
       dto.margen,
       dto.laboratorioId,
       categoriaClienteId,
+      fechaCaducidad,
     );
   }
 

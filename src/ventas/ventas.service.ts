@@ -814,25 +814,13 @@ export class VentasService {
 
         if (calculo.descuentoCategoria) {
           descuentoCategoriaInfo = calculo.descuentoCategoria;
-          const baseCategoria = subtotalLinea;
-          const montoCat = calculo.descuentoCategoria.monto
-            ? Math.min(calculo.descuentoCategoria.monto, baseCategoria)
-            : (baseCategoria * calculo.descuentoCategoria.porcentaje / 100);
-          descuentoCategoriaMonto = Number(montoCat.toFixed(2));
+          descuentoCategoriaMonto = Number(calculo.descuentoCategoria.monto.toFixed(2));
           descuentoCategoriaInfo.monto = descuentoCategoriaMonto;
         }
 
         descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
 
-        const alternativasCalc = await this.descuentosService.calcularMejorDescuento(
-          productoVenta.productoId,
-          productoVenta.cantidad,
-          producto.laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
-          subtotalLinea,
-        );
-        preciosAlternativos = alternativasCalc.preciosAlternativos;
+        preciosAlternativos = [];
       } catch (error) {
         this.logger.error(`Error en descuento acumulable: ${error.message}`);
       }

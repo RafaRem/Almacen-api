@@ -717,6 +717,7 @@ export class InventarioAlmacenService {
     return this.inventarioRepository.findOne({
       where: { productoId },
       relations: ['lote'],
+      order: { createdAt: 'DESC' },
     });
   }
 

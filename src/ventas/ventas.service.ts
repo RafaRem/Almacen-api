@@ -823,6 +823,16 @@ export class VentasService {
         }
 
         descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
+
+        const alternativasCalc = await this.descuentosService.calcularMejorDescuento(
+          productoVenta.productoId,
+          productoVenta.cantidad,
+          producto.laboratorioId,
+          categoriaClienteId,
+          fechaCaducidad,
+          subtotalLinea,
+        );
+        preciosAlternativos = alternativasCalc.preciosAlternativos;
       } catch (error) {
         this.logger.error(`Error en descuento acumulable: ${error.message}`);
       }

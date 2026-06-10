@@ -7,6 +7,7 @@ import { Producto } from '../productos/entities/producto.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
 import { Descuento } from '../descuentos/entities/descuento.entity';
+import { DescuentoProducto } from '../descuentos/entities/descuento-producto.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { DocumentoCliente } from '../uploads/entities/documento-cliente.entity';
 import { Cliente } from '../clientes/entities/cliente.entity';
@@ -48,6 +49,7 @@ export const getDatabaseConfig = (
       MovimientoAlmacen,
       CategoriaCliente,
       Descuento,
+      DescuentoProducto,
       DescuentoVentaDetalle,
       DocumentoCliente,
       Cliente,

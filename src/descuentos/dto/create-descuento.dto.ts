@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsEnum,
@@ -8,8 +7,8 @@ import {
   IsDateString,
   Min,
   Max,
-  IsInt,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
@@ -28,10 +27,16 @@ export class CreateDescuentoDto {
   @IsOptional()
   condiciones?: Record<string, any>;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @Max(100)
   porcentaje: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  monto?: number;
 
   @IsOptional()
   @IsUUID()
@@ -40,6 +45,10 @@ export class CreateDescuentoDto {
   @IsOptional()
   @IsUUID()
   categoriaClienteId?: string;
+
+  @IsOptional()
+  @IsUUID('4', { each: true })
+  productoIds?: string[];
 
   @IsOptional()
   @IsDateString()
@@ -56,8 +65,8 @@ export class CreateDescuentoDto {
   acumulable?: boolean;
 
   @IsOptional()
-  @IsInt()
-  statusId?: number;
+  @IsEnum(StatusId)
+  statusId?: StatusId;
 }
 
 export class UpdateDescuentoDto {
@@ -77,10 +86,16 @@ export class UpdateDescuentoDto {
   condiciones?: Record<string, any>;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @Max(100)
   porcentaje?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  monto?: number;
 
   @IsOptional()
   @IsUUID()
@@ -89,6 +104,10 @@ export class UpdateDescuentoDto {
   @IsOptional()
   @IsUUID()
   categoriaClienteId?: string;
+
+  @IsOptional()
+  @IsUUID('4', { each: true })
+  productoIds?: string[];
 
   @IsOptional()
   @IsDateString()
@@ -116,6 +135,33 @@ export class CalcularDescuentoDto {
   @IsNumber()
   @Min(1)
   cantidad: number;
+
+  @IsOptional()
+  @IsUUID()
+  clienteId?: string;
+}
+
+export class PreviewProductDiscountDto {
+  @IsUUID()
+  productoId: string;
+
+  @IsNumber()
+  @Min(1)
+  cantidad: number;
+
+  @IsNumber()
+  @Min(0)
+  precioUnitario: number;
+
+  @IsNumber()
+  @Min(0)
+  iva: number;
+
+  @IsNumber()
+  margen: number;
+
+  @IsUUID()
+  laboratorioId: string;
 
   @IsOptional()
   @IsUUID()

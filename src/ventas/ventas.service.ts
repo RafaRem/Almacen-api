@@ -228,7 +228,7 @@ export class VentasService {
           }
         }
         if (calculo.descuentoCategoria) {
-          const montoCategoria = Number(calculo.descuentoCategoria.monto || 0);
+          const montoCategoria = Number((calculo.descuentoCategoria.monto || 0).toFixed(2));
           descuentosInfo.push({
             productoId: productoVenta.productoId,
             descuentoId: calculo.descuentoCategoria.descuentoId,

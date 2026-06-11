@@ -347,12 +347,13 @@ export class DescuentosService {
     } | null = null;
     if (mejorProducto) {
       const montoProducto = calcularMonto(mejorProducto, subtotalLinea);
+      const montoProductoRounded = Number(montoProducto.toFixed(2));
       descuentoProductoInfo = {
         descuentoId: mejorProducto.descuentoId,
         tipo: mejorProducto.tipo,
         porcentaje: mejorProducto.porcentaje,
-        monto: Number(montoProducto.toFixed(2)),
-        precioConDescuento: Number((subtotalLinea - montoProducto).toFixed(2)),
+        monto: montoProductoRounded,
+        precioConDescuento: Number((subtotalLinea - montoProductoRounded).toFixed(2)),
         motivo: mejorProducto.motivo,
       };
     }

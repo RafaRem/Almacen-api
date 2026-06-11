@@ -26,6 +26,9 @@ import { ConfiguracionSistema } from '../configuracion/entities/configuracion-si
 import { MovimientoRevertido } from '../movimientos-almacen/entities/movimiento-revertido.entity';
 import { UserPermission } from '../users/entities/user-permission.entity';
 import { DatosEmpresa } from '../empresa/entities/datos-empresa.entity';
+import { Proveedor } from '../proveedores/entities/proveedor.entity';
+import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
+import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { DetalleVentaLote } from '../ventas/entities/detalle-venta-lote.entity';
 
@@ -68,6 +71,9 @@ export const getDatabaseConfig = (
       MovimientoRevertido,
       UserPermission,
       DatosEmpresa,
+      Proveedor,
+      OrdenCompra,
+      DetalleOrdenCompra,
       DetalleLote,
       DetalleVentaLote,
     ],

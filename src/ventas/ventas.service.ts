@@ -24,6 +24,12 @@ import { ConfiguracionesService } from '../configuraciones/configuraciones.servi
 import { ClientesService } from '../clientes/clientes.service';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { TipoMovimiento, OrigenOperacion } from '../common/constants';
+import { parseDate } from '../common/utils/date-utils';
+import {
+  DescuentoInfoEntry,
+  PreviewDescuentoResult,
+  PreviewProductoDescuento,
+} from '../descuentos/types/descuento.types';
 
 @Injectable()
 export class VentasService {
@@ -89,14 +95,7 @@ export class VentasService {
       numeroLote: string;
       cantidad: number;
     }[] = [];
-    const descuentosInfo: {
-      productoId: string;
-      descuentoId: string | null;
-      tipo: string;
-      porcentaje: number;
-      monto: number;
-      motivo: string;
-    }[] = [];
+    const descuentosInfo: DescuentoInfoEntry[] = [];
 
     let categoriaClienteId: string | undefined;
     if (createVentaDto.clienteId) {
@@ -105,7 +104,9 @@ export class VentasService {
           createVentaDto.clienteId,
         );
         categoriaClienteId = cliente?.categoriaClienteId;
-      } catch {}
+      } catch {
+        this.logger.error('Error fetching cliente en create');
+      }
     }
 
     for (const productoVenta of createVentaDto.productos) {
@@ -191,12 +192,7 @@ export class VentasService {
 
       const precioVenta = inventarioProducto.precioVenta;
 
-      const fechaRaw = inventarioProducto?.lote?.fechaCaducidad;
-      const fechaCaducidad = (fechaRaw instanceof Date)
-        ? fechaRaw
-        : (typeof fechaRaw === 'string' || typeof fechaRaw === 'number')
-          ? new Date(fechaRaw)
-          : undefined;
+      const fechaCaducidad = parseDate(inventarioProducto?.lote?.fechaCaducidad);
 
       let descuentoLinea = 0;
       let montoProductoLinea = 0;
@@ -628,72 +624,10 @@ export class VentasService {
   async previewDescuento(
     productos: { productoId: string; cantidad: number }[],
     clienteId?: string,
-  ): Promise<{
-    subtotal: number;
-    descuentoAplicado: number;
-    iva: number;
-    total: number;
-    descuentoPorProducto: {
-      productoId: string;
-      descuento: number;
-      descuentoProducto: number;
-      descuentoCategoria: number;
-      motivo: string;
-      mejorDescuento: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        precioConDescuento: number;
-        motivo: string;
-      };
-      descuentoCategoriaInfo: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        motivo: string;
-      } | null;
-      preciosAlternativos: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
-        motivo: string;
-      }[];
-    }[];
-  }> {
+  ): Promise<PreviewDescuentoResult> {
     let subtotal = 0;
     let descuentoTotal = 0;
-    const descuentoPorProducto: {
-      productoId: string;
-      descuento: number;
-      descuentoProducto: number;
-      descuentoCategoria: number;
-      motivo: string;
-      mejorDescuento: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        precioConDescuento: number;
-        motivo: string;
-      };
-      descuentoCategoriaInfo: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        motivo: string;
-      } | null;
-      preciosAlternativos: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
-        motivo: string;
-      }[];
-    }[] = [];
+    const descuentoPorProducto: PreviewProductoDescuento[] = [];
 
     let categoriaClienteId: string | undefined;
     if (clienteId) {
@@ -792,12 +726,7 @@ export class VentasService {
       }[] = [];
 
       try {
-        const fechaRaw = inventarioProducto?.lote?.fechaCaducidad;
-        const fechaCaducidad = (fechaRaw instanceof Date)
-          ? fechaRaw
-          : (typeof fechaRaw === 'string' || typeof fechaRaw === 'number')
-            ? new Date(fechaRaw)
-            : undefined;
+        const fechaCaducidad = parseDate(inventarioProducto?.lote?.fechaCaducidad);
         const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,

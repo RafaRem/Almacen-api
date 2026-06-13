@@ -63,7 +63,7 @@ export class DescuentosController {
       } catch {}
     }
     const fechaCad = fechaCaducidad ? new Date(fechaCaducidad) : undefined;
-    return this.descuentosService.calcularMejorDescuento(
+    return this.descuentosService.calcularDescuentosAcumulables(
       productoId,
       Number(cantidad),
       laboratorioId || '',

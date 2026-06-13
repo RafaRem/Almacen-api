@@ -11,6 +11,7 @@ import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import {
   SYSTEM_USER_ID,
   TipoMovimiento,
@@ -175,7 +176,9 @@ export class InventarioAlmacenService {
           tipoMovimiento,
           origenOperacion: OrigenOperacion.API,
         });
-        await movimientoRepo.save(movimiento);
+        const savedMov = await movimientoRepo.save(movimiento);
+        saved.ultimoMovimientoId = savedMov.id;
+        await repo.save(saved);
       }
       return saved;
     } else {
@@ -207,7 +210,9 @@ export class InventarioAlmacenService {
         tipoMovimiento,
         origenOperacion: OrigenOperacion.API,
       });
-      await movimientoRepo.save(movimiento);
+      const savedMov = await movimientoRepo.save(movimiento);
+      saved.ultimoMovimientoId = savedMov.id;
+      await repo.save(saved);
     }
 
     return saved;
@@ -563,6 +568,17 @@ export class InventarioAlmacenService {
 
       const savedMovimiento = await manager.save(movimiento);
 
+      const detalleLoteRepo = manager.getRepository(DetalleLote);
+      await detalleLoteRepo.save(detalleLoteRepo.create({
+        productoId,
+        loteId,
+        cantidad,
+        precioUnitario: inventarioOrigen.precioUnitarioLote,
+        ivaCfdi: inventarioOrigen.ivaCfdi,
+        movimientoId: savedMovimiento.id,
+        almacenTipo: almacenTipoOrigen,
+      }));
+
       inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
       await manager.save(inventarioOrigen);
 
@@ -674,6 +690,17 @@ export class InventarioAlmacenService {
           });
 
           const savedMovimiento = await manager.save(movimiento);
+
+          const detalleLoteRepo = manager.getRepository(DetalleLote);
+          await detalleLoteRepo.save(detalleLoteRepo.create({
+            productoId: item.productoId,
+            loteId: item.loteId,
+            cantidad: item.cantidad,
+            precioUnitario: inventarioOrigen.precioUnitarioLote,
+            ivaCfdi: inventarioOrigen.ivaCfdi,
+            movimientoId: savedMovimiento.id,
+            almacenTipo: almacenTipoOrigen,
+          }));
 
           inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
           await manager.save(inventarioOrigen);

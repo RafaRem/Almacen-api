@@ -23,7 +23,7 @@ const mockLaboratorioRepository = {
   save: jest.fn(),
 };
 const mockInventarioAlmacenService = {
-  agregarStock: jest.fn(),
+  agregarStock: jest.fn().mockResolvedValue({ ultimoMovimientoId: 'mov-1' }),
 };
 const mockDetalleLoteService = {
   create: jest.fn(),

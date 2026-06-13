@@ -234,7 +234,7 @@ export class CfdiService {
         });
       }
 
-      await this.inventarioAlmacenService.agregarStock(
+      const inventario = await this.inventarioAlmacenService.agregarStock(
         producto.id,
         lote.id,
         AlmacenTipo.RECEPCION,
@@ -252,6 +252,8 @@ export class CfdiService {
         cantidad: prodDto.cantidad,
         precioUnitario: concepto?.valorUnitario || 0,
         ivaCfdi: concepto?.ivaCfdi || null,
+        movimientoId: inventario.ultimoMovimientoId || undefined,
+        almacenTipo: AlmacenTipo.RECEPCION,
       });
     }
 

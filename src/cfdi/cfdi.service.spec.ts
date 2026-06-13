@@ -195,6 +195,9 @@ describe('CfdiService', () => {
         10,
         16,
         50,
+        undefined,
+        'ENTRADA_BODEGA',
+        'user-1',
       );
     });
   });

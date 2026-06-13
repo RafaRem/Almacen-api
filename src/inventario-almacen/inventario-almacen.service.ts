@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
@@ -143,8 +144,11 @@ export class InventarioAlmacenService {
     ivaCfdi?: number | null,
     precioUnitarioLote?: number | null,
     managerArg?: EntityManager,
+    tipoMovimiento?: string,
+    userId?: string,
   ): Promise<InventarioAlmacen> {
     const repo = managerArg ? managerArg.getRepository(InventarioAlmacen) : this.inventarioRepository;
+    const movimientoRepo = managerArg ? managerArg.getRepository(MovimientoAlmacen) : this.movimientoRepository;
 
     let inventario = await repo.findOne({
       where: { productoId, loteId, almacenTipo },
@@ -158,7 +162,22 @@ export class InventarioAlmacenService {
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
       }
-      return repo.save(inventario);
+      const saved = await repo.save(inventario);
+      if (tipoMovimiento) {
+        const movimiento = movimientoRepo.create({
+          productoId,
+          loteId,
+          almacenOrigen: almacenTipo,
+          almacenDestino: almacenTipo,
+          cantidad,
+          userId: userId || SYSTEM_USER_ID,
+          observaciones: `Entrada por ${tipoMovimiento}`,
+          tipoMovimiento,
+          origenOperacion: OrigenOperacion.API,
+        });
+        await movimientoRepo.save(movimiento);
+      }
+      return saved;
     } else {
       let precioLote = precioUnitarioLote;
       if (precioLote === undefined || precioLote === null || precioLote === 0) {
@@ -174,7 +193,24 @@ export class InventarioAlmacenService {
       });
     }
 
-    return repo.save(inventario);
+    const saved = await repo.save(inventario);
+
+    if (tipoMovimiento) {
+      const movimiento = movimientoRepo.create({
+        productoId,
+        loteId,
+        almacenOrigen: almacenTipo,
+        almacenDestino: almacenTipo,
+        cantidad,
+        userId: userId || SYSTEM_USER_ID,
+        observaciones: `Entrada por ${tipoMovimiento}`,
+        tipoMovimiento,
+        origenOperacion: OrigenOperacion.API,
+      });
+      await movimientoRepo.save(movimiento);
+    }
+
+    return saved;
   }
 
   calcularPrecioVenta(

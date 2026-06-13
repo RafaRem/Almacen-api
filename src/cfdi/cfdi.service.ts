@@ -7,6 +7,7 @@ import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { TipoMovimiento } from '../common/constants';
 import {
   CfdiPreviewDto,
   RecepcionConfirmadaDto,
@@ -240,6 +241,9 @@ export class CfdiService {
         prodDto.cantidad,
         concepto?.ivaCfdi,
         concepto?.valorUnitario || 0,
+        undefined,
+        TipoMovimiento.ENTRADA_BODEGA,
+        userId,
       );
 
       await this.detalleLoteService.create({

@@ -616,6 +616,22 @@ export class VentasService {
             revertido: false,
           });
           await manager.save(MovimientoAlmacen, movimiento);
+
+          const originalMov = await manager.findOne(MovimientoAlmacen, {
+            where: {
+              productoId,
+              loteId,
+              tipoMovimiento: TipoMovimiento.VENTA,
+              revertido: false,
+            },
+            order: { fecha: 'DESC' },
+          });
+          if (originalMov) {
+            originalMov.revertido = true;
+            originalMov.revertidoPor = userId;
+            originalMov.fechaReversion = new Date();
+            await manager.save(originalMov);
+          }
         }
       }
 

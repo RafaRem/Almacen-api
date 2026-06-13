@@ -391,6 +391,7 @@ describe('VentasService', () => {
       mockDataSource.transaction = jest.fn((cb) => cb(mockManager));
       mockManager.save = jest.fn();
       mockManager.create = jest.fn().mockReturnValue({});
+      mockManager.findOne = jest.fn();
       mockClientesService.findOne = jest.fn();
       mockInventarioAlmacenService.findByProductoId = jest.fn();
       mockInventarioAlmacenService.agregarStock = jest.fn();

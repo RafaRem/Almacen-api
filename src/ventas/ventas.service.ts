@@ -94,6 +94,7 @@ export class VentasService {
       loteId: string;
       numeroLote: string;
       cantidad: number;
+      movimientoId: string;
     }[] = [];
     const descuentosInfo: DescuentoInfoEntry[] = [];
 
@@ -179,6 +180,7 @@ export class VentasService {
           loteId: loteInfo.loteId,
           numeroLote: loteInfo.numeroLote,
           cantidad: loteInfo.cantidad,
+          movimientoId: resultadoFEPU.movimientoId!,
         });
       }
 
@@ -374,6 +376,7 @@ export class VentasService {
           detalleVentaId: detalle.id,
           loteId: loteInfo.loteId,
           cantidad: loteInfo.cantidad,
+          movimientoId: loteInfo.movimientoId,
         });
         await manager.save(DetalleVentaLote, detalleLote);
       }

@@ -315,6 +315,37 @@ resource "azurerm_container_app" "api" {
         value = tostring(var.redis_port)
       }
 
+      startup_probe {
+        transport               = "HTTP"
+        port                    = var.container_target_port
+        path                    = var.health_probe_path
+        initial_delay           = 5
+        interval_seconds        = 10
+        timeout                 = 5
+        failure_count_threshold = 18
+      }
+
+      readiness_probe {
+        transport               = "HTTP"
+        port                    = var.container_target_port
+        path                    = var.health_probe_path
+        initial_delay           = 5
+        interval_seconds        = 10
+        timeout                 = 5
+        failure_count_threshold = 3
+        success_count_threshold = 1
+      }
+
+      liveness_probe {
+        transport               = "HTTP"
+        port                    = var.container_target_port
+        path                    = var.health_probe_path
+        initial_delay           = 30
+        interval_seconds        = 30
+        timeout                 = 5
+        failure_count_threshold = 3
+      }
+
       volume_mounts {
         name = "uploads"
         path = "/uploads"

@@ -175,6 +175,12 @@ variable "container_target_port" {
   default     = 3000
 }
 
+variable "health_probe_path" {
+  description = "HTTP path used by Container Apps startup, readiness, and liveness probes."
+  type        = string
+  default     = "/health"
+}
+
 variable "redis_host" {
   description = "Redis host. Leave localhost to keep Redis optional until a managed Redis instance is added."
   type        = string

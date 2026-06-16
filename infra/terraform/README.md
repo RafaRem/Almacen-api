@@ -9,6 +9,7 @@ Terraform stack for the backend-only Azure deployment:
 - Log Analytics for Container Apps logs
 - PostgreSQL public firewall access from all public IPs, with database authentication still required
 - Azure Key Vault for `DATABASE_PASSWORD` and `JWT_SECRET`
+- HTTP startup, readiness, and liveness probes against `/health`
 - Resource Group/Key Vault stay in `eastus`; PostgreSQL and Container Apps use `eastus2` because this subscription is restricted/saturated for those services in `eastus`.
 - Terraform state is stored remotely in Azure Storage: `rg-nueva-era-prod` / `stnuevaeraprod2xg97h` / `tfstate` / `almacen-api-prod.tfstate`.
 

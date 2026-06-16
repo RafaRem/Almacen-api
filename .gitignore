@@ -43,6 +43,13 @@ lerna-debug.log*
 .env.local
 .env.dev
 
+# Terraform local state and plans
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/tfplan
+**/*.tfplan
+
 # temp directory
 .temp
 .tmp

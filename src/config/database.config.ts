@@ -69,6 +69,6 @@ export const getDatabaseConfig = (
       DetalleLote,
       DetalleVentaLote,
     ],
-    synchronize: false,
+    synchronize: configService.get<string>('DATABASE_SYNCHRONIZE') === 'true',
   } as any;
 };

@@ -276,6 +276,16 @@ resource "azurerm_container_app" "api" {
       }
 
       env {
+        name  = "DATABASE_SSL"
+        value = "true"
+      }
+
+      env {
+        name  = "DATABASE_SSL_REJECT_UNAUTHORIZED"
+        value = "false"
+      }
+
+      env {
         name  = "DATABASE_USER"
         value = var.postgres_admin_login
       }

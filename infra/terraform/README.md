@@ -109,14 +109,8 @@ Terraform creates:
 - A federated credential limited to `repo:RafaRem/Almacen-api:environment:prod`.
 - RBAC for ACR push, Key Vault secret read, Terraform state access, and Container App updates.
 
-After applying Terraform, set the GitHub repository variables:
-
-```sh
-gh api -X PUT repos/RafaRem/Almacen-api/environments/prod
-gh variable set AZURE_CLIENT_ID --repo RafaRem/Almacen-api --body "$(terraform output -raw github_actions_client_id)"
-gh variable set AZURE_TENANT_ID --repo RafaRem/Almacen-api --body "19767c7d-34c4-415c-9a1d-45ccfb89a3dd"
-gh variable set AZURE_SUBSCRIPTION_ID --repo RafaRem/Almacen-api --body "5e3f35c0-0fe2-40db-a778-723c73670c4c"
-```
+The workflow references the GitHub environment `prod`, uses non-secret Azure
+IDs directly, and authenticates with OIDC, so no GitHub secrets are required.
 
 Deployment order:
 

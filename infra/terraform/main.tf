@@ -73,11 +73,11 @@ resource "azurerm_user_assigned_identity" "github_actions" {
 }
 
 resource "azurerm_federated_identity_credential" "github_actions_prod" {
-  name      = "github-actions-${var.github_environment_name}"
-  parent_id = azurerm_user_assigned_identity.github_actions.id
-  audience  = ["api://AzureADTokenExchange"]
-  issuer    = "https://token.actions.githubusercontent.com"
-  subject   = local.github_actions_subject
+  name                      = "github-actions-${var.github_environment_name}"
+  user_assigned_identity_id = azurerm_user_assigned_identity.github_actions.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = "https://token.actions.githubusercontent.com"
+  subject                   = local.github_actions_subject
 }
 
 resource "azurerm_key_vault" "main" {

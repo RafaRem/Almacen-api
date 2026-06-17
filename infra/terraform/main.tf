@@ -15,18 +15,19 @@ locals {
   container_apps_location = coalesce(var.container_apps_location, var.location)
   postgres_location       = coalesce(var.postgres_location, var.location)
 
-  resource_group_name   = "rg-${local.base_name}"
-  container_app_name    = "ca-api-${local.base_name}"
-  container_env_name    = "cae-${local.base_name}-${local.container_apps_location}"
-  key_vault_name        = substr(replace("kv-${var.project_name}-${var.environment}-${local.suffix}", "_", "-"), 0, 24)
-  log_analytics_name    = "log-${local.base_name}"
-  postgres_server_name  = "psql-${local.base_name}-${local.postgres_location}-${local.suffix}"
-  acr_name              = substr(replace("acr${var.project_name}${var.environment}${local.suffix}", "-", ""), 0, 50)
-  storage_account_name  = substr(replace("st${var.project_name}${var.environment}${local.suffix}", "-", ""), 0, 24)
-  uploads_share_name    = "uploads"
-  backend_source_dir    = abspath("${path.module}/../..")
-  backend_image_default = "${azurerm_container_registry.main.login_server}/${var.backend_image_name}:${var.backend_image_tag}"
-  backend_image         = coalesce(var.backend_container_image, local.backend_image_default)
+  resource_group_name    = "rg-${local.base_name}"
+  container_app_name     = "ca-api-${local.base_name}"
+  container_env_name     = "cae-${local.base_name}-${local.container_apps_location}"
+  key_vault_name         = substr(replace("kv-${var.project_name}-${var.environment}-${local.suffix}", "_", "-"), 0, 24)
+  log_analytics_name     = "log-${local.base_name}"
+  postgres_server_name   = "psql-${local.base_name}-${local.postgres_location}-${local.suffix}"
+  acr_name               = substr(replace("acr${var.project_name}${var.environment}${local.suffix}", "-", ""), 0, 50)
+  storage_account_name   = substr(replace("st${var.project_name}${var.environment}${local.suffix}", "-", ""), 0, 24)
+  uploads_share_name     = "uploads"
+  backend_source_dir     = abspath("${path.module}/../..")
+  backend_image_default  = "${azurerm_container_registry.main.login_server}/${var.backend_image_name}:${var.backend_image_tag}"
+  backend_image          = coalesce(var.backend_container_image, local.backend_image_default)
+  github_actions_subject = "repo:${var.github_repository}:environment:${var.github_environment_name}"
 
   common_tags = merge(var.tags, {
     environment = var.environment
@@ -64,6 +65,21 @@ resource "azurerm_user_assigned_identity" "container_apps" {
   tags                = local.common_tags
 }
 
+resource "azurerm_user_assigned_identity" "github_actions" {
+  name                = "id-${local.base_name}-github-actions"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.common_tags
+}
+
+resource "azurerm_federated_identity_credential" "github_actions_prod" {
+  name      = "github-actions-${var.github_environment_name}"
+  parent_id = azurerm_user_assigned_identity.github_actions.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = local.github_actions_subject
+}
+
 resource "azurerm_key_vault" "main" {
   name                       = local.key_vault_name
   location                   = azurerm_resource_group.main.location
@@ -92,6 +108,30 @@ resource "azurerm_role_assignment" "container_apps_acr_pull" {
   scope                = azurerm_container_registry.main.id
   role_definition_name = "AcrPull"
   principal_id         = azurerm_user_assigned_identity.container_apps.principal_id
+}
+
+resource "azurerm_role_assignment" "github_actions_acr_push" {
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPush"
+  principal_id         = azurerm_user_assigned_identity.github_actions.principal_id
+}
+
+resource "azurerm_role_assignment" "github_actions_key_vault_secrets_user" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.github_actions.principal_id
+}
+
+resource "azurerm_role_assignment" "github_actions_resource_group_contributor" {
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_user_assigned_identity.github_actions.principal_id
+}
+
+resource "azurerm_role_assignment" "github_actions_tfstate_blob_data_contributor" {
+  scope                = azurerm_storage_account.main.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.github_actions.principal_id
 }
 
 resource "terraform_data" "build_backend_image" {

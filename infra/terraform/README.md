@@ -93,6 +93,35 @@ az provider register --namespace Microsoft.OperationalInsights
 - The backend image defaults to the ACR image path created by this stack: `almacen-api:latest`.
 - GitHub Actions should build and push the backend image to ACR. Terraform only creates the registry and points Container Apps at `almacen-api:latest`.
 - `build_backend_image` exists as a local fallback, but should stay `false` for normal CI/CD-driven deployments.
+- The release deployment workflow uses GitHub OIDC with the managed identity created by this stack. It builds the release image, runs SQL migrations, applies Terraform with the release tag, and verifies `/health`.
 - Redis is not provisioned yet. The backend currently falls back when Redis is unavailable, so managed Redis can be added later if cart/session persistence requires it.
 - The current backend writes uploads to local paths; Azure Files is mounted at `/uploads` to support that behavior without code changes.
 - PostgreSQL uses `administrator_password_wo` with an ephemeral Terraform variable, so the admin password is not stored as a readable Terraform state or plan attribute. Keep `TF_VAR_postgres_admin_password` in your shell while planning/applying.
+
+## GitHub Release Deployment
+
+The workflow at `.github/workflows/deploy-prod.yml` runs on `release.published`
+and can also be started manually with `workflow_dispatch`.
+
+Terraform creates:
+
+- A user-assigned managed identity for GitHub Actions.
+- A federated credential limited to `repo:RafaRem/Almacen-api:environment:prod`.
+- RBAC for ACR push, Key Vault secret read, Terraform state access, and Container App updates.
+
+After applying Terraform, set the GitHub repository variables:
+
+```sh
+gh api -X PUT repos/RafaRem/Almacen-api/environments/prod
+gh variable set AZURE_CLIENT_ID --repo RafaRem/Almacen-api --body "$(terraform output -raw github_actions_client_id)"
+gh variable set AZURE_TENANT_ID --repo RafaRem/Almacen-api --body "19767c7d-34c4-415c-9a1d-45ccfb89a3dd"
+gh variable set AZURE_SUBSCRIPTION_ID --repo RafaRem/Almacen-api --body "5e3f35c0-0fe2-40db-a778-723c73670c4c"
+```
+
+Deployment order:
+
+1. Build and smoke-test the NestJS backend.
+2. Build and push the release image to ACR.
+3. Run pending SQL files from `migrations/` with `scripts/run-sql-migrations.sh`.
+4. Apply Terraform with `backend_image_tag` set to the release tag.
+5. Verify the public `/health` endpoint.

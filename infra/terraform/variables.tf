@@ -193,6 +193,18 @@ variable "redis_port" {
   default     = 6379
 }
 
+variable "github_repository" {
+  description = "GitHub repository allowed to deploy through OIDC, in owner/name format."
+  type        = string
+  default     = "RafaRem/Almacen-api"
+}
+
+variable "github_environment_name" {
+  description = "GitHub environment name used in the OIDC federated credential subject."
+  type        = string
+  default     = "prod"
+}
+
 variable "tags" {
   description = "Tags applied to Azure resources."
   type        = map(string)

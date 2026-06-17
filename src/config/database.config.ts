@@ -32,10 +32,51 @@ import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
 import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { DetalleVentaLote } from '../ventas/entities/detalle-venta-lote.entity';
+import { Factura } from '../facturas/entities/factura.entity';
+import { FacturaDetalle } from '../facturas/entities/factura-detalle.entity';
+
+export const databaseEntities = [
+  User,
+  UserPermission,
+  Laboratorio,
+  Lote,
+  Producto,
+  MovimientoAlmacen,
+  CategoriaCliente,
+  Descuento,
+  DescuentoProducto,
+  DescuentoVentaDetalle,
+  DocumentoCliente,
+  Cliente,
+  Venta,
+  DetalleVenta,
+  PagoVenta,
+  RegimenFiscal,
+  Telefono,
+  Domicilio,
+  FacturacionCliente,
+  Credito,
+  MovimientoCredito,
+  InventarioAlmacen,
+  Configuracion,
+  ConfiguracionSistema,
+  MovimientoRevertido,
+  DatosEmpresa,
+  Proveedor,
+  Recepcion,
+  OrdenCompra,
+  DetalleOrdenCompra,
+  DetalleLote,
+  DetalleVentaLote,
+  Factura,
+  FacturaDetalle,
+];
 
 export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
+  const useSsl = configService.get<string>('DATABASE_SSL') === 'true';
+
   return {
     type: 'postgres',
     host: configService.get<string>('DATABASE_HOST'),
@@ -44,41 +85,15 @@ export const getDatabaseConfig = (
     password: configService.get<string>('DATABASE_PASSWORD'),
     database: configService.get<string>('DATABASE_NAME'),
     timezone: 'America/Mexico_City',
-    entities: [
-      User,
-      UserPermission,
-      Laboratorio,
-      Lote,
-      Producto,
-      MovimientoAlmacen,
-      CategoriaCliente,
-      Descuento,
-      DescuentoProducto,
-      DescuentoVentaDetalle,
-      DocumentoCliente,
-      Cliente,
-      Venta,
-      DetalleVenta,
-      PagoVenta,
-      RegimenFiscal,
-      Telefono,
-      Domicilio,
-      FacturacionCliente,
-      Credito,
-      MovimientoCredito,
-      InventarioAlmacen,
-      Configuracion,
-      ConfiguracionSistema,
-      MovimientoRevertido,
-      UserPermission,
-      DatosEmpresa,
-      Proveedor,
-      Recepcion,
-      OrdenCompra,
-      DetalleOrdenCompra,
-      DetalleLote,
-      DetalleVentaLote,
-    ],
-    synchronize: false,
+    uuidExtension: 'pgcrypto',
+    entities: databaseEntities,
+    ssl: useSsl
+      ? {
+          rejectUnauthorized:
+            configService.get<string>('DATABASE_SSL_REJECT_UNAUTHORIZED') !==
+            'false',
+        }
+      : undefined,
+    synchronize: configService.get<string>('DATABASE_SYNCHRONIZE') === 'true',
   } as any;
 };

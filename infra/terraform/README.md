@@ -119,3 +119,13 @@ Deployment order:
 3. Run pending SQL files from `migrations/` with `scripts/run-sql-migrations.sh`.
 4. Apply Terraform with `backend_image_tag` set to the release tag.
 5. Verify the public `/health` endpoint.
+
+Migration behavior:
+
+- Applied SQL files are tracked in `schema_migrations` with a SHA-256 checksum.
+- If production is empty, the workflow initializes the schema with TypeORM
+  `schema:sync` and baselines the existing SQL files so future SQL files run
+  normally.
+- If a non-empty database has no `schema_migrations` table, the runner refuses
+  to replay historical migrations unless `BASELINE_EXISTING_DATABASE=true` is
+  explicitly set for a one-time baseline.

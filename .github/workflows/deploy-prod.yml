@@ -1,14 +1,9 @@
 name: Deploy Production
+run-name: Deploy production from ${{ github.event.release.tag_name }}
 
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Image tag to deploy. Defaults to the current ref name."
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -31,26 +26,29 @@ jobs:
     name: Prepare release metadata
     runs-on: ubuntu-latest
     outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       sha_tag: ${{ steps.meta.outputs.sha_tag }}
     steps:
       - name: Resolve image tags
         id: meta
         env:
-          INPUT_IMAGE_TAG: ${{ inputs.image_tag || '' }}
           RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           set -euo pipefail
 
-          raw_tag="$RELEASE_TAG"
-          if [[ -z "$raw_tag" ]]; then
-            raw_tag="$INPUT_IMAGE_TAG"
-          fi
-          if [[ -z "$raw_tag" ]]; then
-            raw_tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_EVENT_NAME" != "release" || -z "$RELEASE_TAG" ]]; then
+            echo "Production deploys must be triggered by publishing a GitHub Release." >&2
+            exit 1
           fi
 
-          image_tag="$(printf '%s' "$raw_tag" | tr '/:' '--' | tr -cd 'A-Za-z0-9_.-')"
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            echo "Pre-releases do not deploy to production. Publish a normal release when ready." >&2
+            exit 1
+          fi
+
+          image_tag="$(printf '%s' "$RELEASE_TAG" | tr '/:' '--' | tr -cd 'A-Za-z0-9_.-')"
           sha_tag="sha-${GITHUB_SHA::12}"
 
           if [[ -z "$image_tag" ]]; then
@@ -59,6 +57,7 @@ jobs:
           fi
 
           {
+            echo "release_tag=$RELEASE_TAG"
             echo "image_tag=$image_tag"
             echo "sha_tag=$sha_tag"
           } >> "$GITHUB_OUTPUT"
@@ -70,6 +69,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -94,6 +95,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -140,6 +143,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -198,6 +203,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Azure login
         uses: azure/login@v2

@@ -1,9 +1,11 @@
 import {
   IsUUID,
   IsNumber,
+  IsPositive,
   IsEnum,
   IsOptional,
   IsString,
+  Min,
   ValidateIf,
 } from 'class-validator';
 import { AlmacenTipo } from '../../common/enums/almacen-tipo.enum';
@@ -23,6 +25,7 @@ export class CreateMovimientoAlmacenDto {
   almacenDestino: AlmacenTipo | null;
 
   @IsNumber()
+  @Min(1)
   cantidad: number;
 
   @IsOptional()

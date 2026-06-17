@@ -225,6 +225,10 @@ export class OrdenesCompraService {
               `El lote ${detalleRecibido.numeroLote} pertenece a otro laboratorio`,
             );
           }
+          if (detalleRecibido.fechaCaducidad) {
+            lote.fechaCaducidad = new Date(detalleRecibido.fechaCaducidad);
+            lote = await manager.save(Lote, lote);
+          }
         } else {
           lote = manager.create(Lote, {
             numeroLote: detalleRecibido.numeroLote,

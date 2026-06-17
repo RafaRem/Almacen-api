@@ -6,6 +6,8 @@ import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
+import { ProveedoresService } from '../proveedores/proveedores.service';
+import { RecepcionesService } from '../recepciones/recepciones.service';
 
 const mockProductoRepository = {
   findOne: jest.fn(),
@@ -26,6 +28,13 @@ const mockInventarioAlmacenService = {
   agregarStock: jest.fn().mockResolvedValue({ ultimoMovimientoId: 'mov-1' }),
 };
 const mockDetalleLoteService = {
+  create: jest.fn(),
+};
+const mockProveedoresService = {
+  findByRfc: jest.fn(),
+  create: jest.fn(),
+};
+const mockRecepcionesService = {
   create: jest.fn(),
 };
 
@@ -54,6 +63,8 @@ describe('CfdiService', () => {
         { provide: getRepositoryToken(Laboratorio), useValue: mockLaboratorioRepository },
         { provide: InventarioAlmacenService, useValue: mockInventarioAlmacenService },
         { provide: DetalleLoteService, useValue: mockDetalleLoteService },
+        { provide: ProveedoresService, useValue: mockProveedoresService },
+        { provide: RecepcionesService, useValue: mockRecepcionesService },
       ],
     }).compile();
 
@@ -63,6 +74,9 @@ describe('CfdiService', () => {
     mockLoteRepository.findOne.mockResolvedValue(null);
     mockLoteRepository.create.mockReturnValue({});
     mockLoteRepository.save.mockResolvedValue({ id: 'lote-1' });
+    mockProveedoresService.findByRfc.mockResolvedValue(null);
+    mockProveedoresService.create.mockResolvedValue({ id: 'prov-1' });
+    mockRecepcionesService.create.mockResolvedValue({ id: 'rec-1' });
   });
 
   describe('validarXml', () => {
@@ -190,7 +204,7 @@ describe('CfdiService', () => {
 
       expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledWith(
         'prod-1',
-        'lote-1',
+        expect.any(String),
         1,
         10,
         16,

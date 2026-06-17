@@ -34,6 +34,7 @@ import { CartSessionModule } from './cart-session/cart-session.module';
 import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
 import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
+import { RecepcionModule } from './recepciones/recepcion.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
     DetalleLoteModule,
     ProveedoresModule,
     OrdenesCompraModule,
+    RecepcionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

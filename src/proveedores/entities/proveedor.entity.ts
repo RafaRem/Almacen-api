@@ -18,7 +18,7 @@ export class Proveedor {
   @Column({ nullable: true })
   telefono: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, unique: true })
   rfc: string;
 
   @Column({ nullable: true })

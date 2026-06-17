@@ -38,8 +38,22 @@ export class ProveedoresService {
     return proveedor;
   }
 
+  async findByRfc(rfc: string): Promise<Proveedor | null> {
+    return this.proveedoresRepository.findOne({ where: { rfc } });
+  }
+
   async update(id: string, updateProveedorDto: UpdateProveedorDto): Promise<Proveedor> {
     const proveedor = await this.findOne(id);
+
+    if (updateProveedorDto.rfc && updateProveedorDto.rfc !== proveedor.rfc) {
+      const existing = await this.proveedoresRepository.findOne({
+        where: { rfc: updateProveedorDto.rfc },
+      });
+      if (existing) {
+        throw new ConflictException('RFC already exists');
+      }
+    }
+
     Object.assign(proveedor, updateProveedorDto);
     return this.proveedoresRepository.save(proveedor);
   }

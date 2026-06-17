@@ -13,7 +13,6 @@ import { Lote } from '../../lotes/entities/lote.entity';
 import { MovimientoAlmacen } from '../../movimientos-almacen/entities/movimiento-almacen.entity';
 
 @Entity('detalle_lote')
-@Index('uq_detalle_lote_producto_lote', ['productoId', 'loteId'], { unique: true })
 export class DetalleLote {
   @PrimaryGeneratedColumn('uuid')
   id: string;

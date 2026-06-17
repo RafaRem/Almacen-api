@@ -9,6 +9,8 @@ import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-al
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almacen.module';
 import { DetalleLoteModule } from '../detalle-lote/detalle-lote.module';
+import { RecepcionModule } from '../recepciones/recepcion.module';
+import { ProveedoresModule } from '../proveedores/proveedores.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { DetalleLoteModule } from '../detalle-lote/detalle-lote.module';
     ]),
     InventarioAlmacenModule,
     DetalleLoteModule,
+    RecepcionModule,
+    ProveedoresModule,
   ],
   controllers: [CfdiController],
   providers: [CfdiService],

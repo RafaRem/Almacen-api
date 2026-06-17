@@ -19,6 +19,7 @@
     "test:smoke": "jest --config ./test/jest-smoke.json",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "migration:sql": "bash scripts/run-sql-migrations.sh",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/data-source.ts"

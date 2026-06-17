@@ -24,6 +24,12 @@ import { ConfiguracionesService } from '../configuraciones/configuraciones.servi
 import { ClientesService } from '../clientes/clientes.service';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { TipoMovimiento, OrigenOperacion } from '../common/constants';
+import { parseDate } from '../common/utils/date-utils';
+import {
+  DescuentoInfoEntry,
+  PreviewDescuentoResult,
+  PreviewProductoDescuento,
+} from '../descuentos/types/descuento.types';
 
 @Injectable()
 export class VentasService {
@@ -88,15 +94,9 @@ export class VentasService {
       loteId: string;
       numeroLote: string;
       cantidad: number;
+      movimientoId: string;
     }[] = [];
-    const descuentosInfo: {
-      productoId: string;
-      descuentoId: string | null;
-      tipo: string;
-      porcentaje: number;
-      monto: number;
-      motivo: string;
-    }[] = [];
+    const descuentosInfo: DescuentoInfoEntry[] = [];
 
     let categoriaClienteId: string | undefined;
     if (createVentaDto.clienteId) {
@@ -105,7 +105,9 @@ export class VentasService {
           createVentaDto.clienteId,
         );
         categoriaClienteId = cliente?.categoriaClienteId;
-      } catch {}
+      } catch {
+        this.logger.error('Error fetching cliente en create');
+      }
     }
 
     for (const productoVenta of createVentaDto.productos) {
@@ -178,6 +180,7 @@ export class VentasService {
           loteId: loteInfo.loteId,
           numeroLote: loteInfo.numeroLote,
           cantidad: loteInfo.cantidad,
+          movimientoId: resultadoFEPU.movimientoId!,
         });
       }
 
@@ -191,12 +194,7 @@ export class VentasService {
 
       const precioVenta = inventarioProducto.precioVenta;
 
-      const fechaRaw = inventarioProducto?.lote?.fechaCaducidad;
-      const fechaCaducidad = (fechaRaw instanceof Date)
-        ? fechaRaw
-        : (typeof fechaRaw === 'string' || typeof fechaRaw === 'number')
-          ? new Date(fechaRaw)
-          : undefined;
+      const fechaCaducidad = parseDate(inventarioProducto?.lote?.fechaCaducidad);
 
       let descuentoLinea = 0;
       let montoProductoLinea = 0;
@@ -228,7 +226,7 @@ export class VentasService {
           }
         }
         if (calculo.descuentoCategoria) {
-          const montoCategoria = Number(calculo.descuentoCategoria.monto || 0);
+          const montoCategoria = Number((calculo.descuentoCategoria.monto || 0).toFixed(2));
           descuentosInfo.push({
             productoId: productoVenta.productoId,
             descuentoId: calculo.descuentoCategoria.descuentoId,
@@ -378,6 +376,7 @@ export class VentasService {
           detalleVentaId: detalle.id,
           loteId: loteInfo.loteId,
           cantidad: loteInfo.cantidad,
+          movimientoId: loteInfo.movimientoId,
         });
         await manager.save(DetalleVentaLote, detalleLote);
       }
@@ -617,6 +616,22 @@ export class VentasService {
             revertido: false,
           });
           await manager.save(MovimientoAlmacen, movimiento);
+
+          const originalMov = await manager.findOne(MovimientoAlmacen, {
+            where: {
+              productoId,
+              loteId,
+              tipoMovimiento: TipoMovimiento.VENTA,
+              revertido: false,
+            },
+            order: { fecha: 'DESC' },
+          });
+          if (originalMov) {
+            originalMov.revertido = true;
+            originalMov.revertidoPor = userId;
+            originalMov.fechaReversion = new Date();
+            await manager.save(originalMov);
+          }
         }
       }
 
@@ -628,72 +643,10 @@ export class VentasService {
   async previewDescuento(
     productos: { productoId: string; cantidad: number }[],
     clienteId?: string,
-  ): Promise<{
-    subtotal: number;
-    descuentoAplicado: number;
-    iva: number;
-    total: number;
-    descuentoPorProducto: {
-      productoId: string;
-      descuento: number;
-      descuentoProducto: number;
-      descuentoCategoria: number;
-      motivo: string;
-      mejorDescuento: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        precioConDescuento: number;
-        motivo: string;
-      };
-      descuentoCategoriaInfo: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        motivo: string;
-      } | null;
-      preciosAlternativos: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
-        motivo: string;
-      }[];
-    }[];
-  }> {
+  ): Promise<PreviewDescuentoResult> {
     let subtotal = 0;
     let descuentoTotal = 0;
-    const descuentoPorProducto: {
-      productoId: string;
-      descuento: number;
-      descuentoProducto: number;
-      descuentoCategoria: number;
-      motivo: string;
-      mejorDescuento: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        precioConDescuento: number;
-        motivo: string;
-      };
-      descuentoCategoriaInfo: {
-        descuentoId: string | null;
-        tipo: string;
-        porcentaje: number;
-        monto: number;
-        motivo: string;
-      } | null;
-      preciosAlternativos: {
-        tipo: string;
-        porcentaje: number;
-        monto: number | null;
-        precioConDescuento: number;
-        motivo: string;
-      }[];
-    }[] = [];
+    const descuentoPorProducto: PreviewProductoDescuento[] = [];
 
     let categoriaClienteId: string | undefined;
     if (clienteId) {
@@ -792,12 +745,7 @@ export class VentasService {
       }[] = [];
 
       try {
-        const fechaRaw = inventarioProducto?.lote?.fechaCaducidad;
-        const fechaCaducidad = (fechaRaw instanceof Date)
-          ? fechaRaw
-          : (typeof fechaRaw === 'string' || typeof fechaRaw === 'number')
-            ? new Date(fechaRaw)
-            : undefined;
+        const fechaCaducidad = parseDate(inventarioProducto?.lote?.fechaCaducidad);
         const calculo = await this.descuentosService.calcularDescuentosAcumulables(
           productoVenta.productoId,
           productoVenta.cantidad,
@@ -814,15 +762,13 @@ export class VentasService {
 
         if (calculo.descuentoCategoria) {
           descuentoCategoriaInfo = calculo.descuentoCategoria;
-          const baseCategoria = subtotalLinea;
-          const montoCat = calculo.descuentoCategoria.monto
-            ? Math.min(calculo.descuentoCategoria.monto, baseCategoria)
-            : (baseCategoria * calculo.descuentoCategoria.porcentaje / 100);
-          descuentoCategoriaMonto = Number(montoCat.toFixed(2));
+          descuentoCategoriaMonto = Number(calculo.descuentoCategoria.monto.toFixed(2));
           descuentoCategoriaInfo.monto = descuentoCategoriaMonto;
         }
 
         descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
+
+        preciosAlternativos = [];
       } catch (error) {
         this.logger.error(`Error en descuento acumulable: ${error.message}`);
       }

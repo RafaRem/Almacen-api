@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { DescuentosService } from './descuentos.service';
 import { Descuento } from './entities/descuento.entity';
 import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
+import { DescuentoProducto } from './entities/descuento-producto.entity';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
 import { StatusId } from '../common/enums/status-id.enum';
 import { NotFoundException } from '@nestjs/common';
@@ -23,6 +24,10 @@ const mockCatRepository = {
   save: jest.fn(),
 };
 
+const mockDescuentoProductoRepository = {
+  find: jest.fn(),
+};
+
 describe('DescuentosService', () => {
   let service: DescuentosService;
   let repository: Repository<Descuento>;
@@ -39,19 +44,20 @@ describe('DescuentosService', () => {
           provide: getRepositoryToken(CategoriaCliente),
           useValue: mockCatRepository,
         },
+        {
+          provide: getRepositoryToken(DescuentoProducto),
+          useValue: mockDescuentoProductoRepository,
+        },
       ],
     }).compile();
 
     service = module.get<DescuentosService>(DescuentosService);
     repository = module.get<Repository<Descuento>>(getRepositoryToken(Descuento));
     jest.resetAllMocks();
+    mockDescuentoProductoRepository.find.mockResolvedValue([]);
   });
 
-  describe('calcularDescuentosAcumulables', () => {
-    const laboratorioId = 'lab-123';
-    const categoriaClienteId = 'cat-5';
-
-    const createDescuento = (overrides: Partial<Descuento> = {}): Descuento => ({
+  const createDescuento = (overrides: Partial<Descuento> = {}): Descuento => ({
       id: 'desc-' + Math.random().toString(36).substr(2, 9),
       nombre: undefined,
       descripcion: undefined,
@@ -70,6 +76,10 @@ describe('DescuentosService', () => {
       updatedAt: new Date(),
       ...overrides,
     });
+
+  describe('calcularDescuentosAcumulables', () => {
+    const laboratorioId = 'lab-123';
+    const categoriaClienteId = 'cat-5';
 
     describe('VOLUMEN discount', () => {
       it('should apply VOLUMEN only when cantidad meets minCantidad', async () => {
@@ -482,6 +492,198 @@ describe('DescuentosService', () => {
       });
     });
 
+    describe('date validation', () => {
+      describe('VOLUMEN with fechaInicio/fechaFin', () => {
+        it('should apply when current date is within range', async () => {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          const descuentos = [
+            createDescuento({
+              id: 'desc-vol',
+              tipo: DescuentoTipo.VOLUMEN,
+              porcentaje: 10,
+              condiciones: { minCantidad: 1 },
+              fechaInicio: yesterday,
+              fechaFin: tomorrow,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId,
+          );
+
+          expect(result.descuentoProducto).not.toBeNull();
+          expect(result.descuentoProducto?.porcentaje).toBe(10);
+        });
+
+        it('should NOT apply when date range is in the past', async () => {
+          const lastMonth = new Date();
+          lastMonth.setMonth(lastMonth.getMonth() - 1);
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+
+          const descuentos = [
+            createDescuento({
+              id: 'desc-vol',
+              tipo: DescuentoTipo.VOLUMEN,
+              porcentaje: 10,
+              condiciones: { minCantidad: 1 },
+              fechaInicio: lastMonth,
+              fechaFin: yesterday,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId,
+          );
+
+          expect(result.descuentoProducto).toBeNull();
+        });
+
+        it('should NOT apply when date range is in the future', async () => {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const nextYear = new Date();
+          nextYear.setFullYear(nextYear.getFullYear() + 1);
+
+          const descuentos = [
+            createDescuento({
+              id: 'desc-vol',
+              tipo: DescuentoTipo.VOLUMEN,
+              porcentaje: 10,
+              condiciones: { minCantidad: 1 },
+              fechaInicio: tomorrow,
+              fechaFin: nextYear,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId,
+          );
+
+          expect(result.descuentoProducto).toBeNull();
+        });
+
+        it('should apply when no date range is set', async () => {
+          const descuentos = [
+            createDescuento({
+              id: 'desc-vol',
+              tipo: DescuentoTipo.VOLUMEN,
+              porcentaje: 10,
+              condiciones: { minCantidad: 1 },
+              fechaInicio: null,
+              fechaFin: null,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId,
+          );
+
+          expect(result.descuentoProducto).not.toBeNull();
+          expect(result.descuentoProducto?.porcentaje).toBe(10);
+        });
+      });
+
+      describe('CADUCIDAD with fechaInicio/fechaFin', () => {
+        const within30Days = new Date();
+        within30Days.setDate(within30Days.getDate() + 15);
+
+        it('should apply when date range is active', async () => {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          const descuentos = [
+            createDescuento({
+              id: 'desc-cad',
+              tipo: DescuentoTipo.CADUCIDAD,
+              porcentaje: 8,
+              condiciones: { diasPrevios: 30 },
+              fechaInicio: yesterday,
+              fechaFin: tomorrow,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId, undefined, within30Days, 100,
+          );
+
+          expect(result.descuentoProducto).not.toBeNull();
+          expect(result.descuentoProducto?.tipo).toBe(DescuentoTipo.CADUCIDAD);
+        });
+
+        it('should NOT apply when date range has expired', async () => {
+          const lastMonth = new Date();
+          lastMonth.setMonth(lastMonth.getMonth() - 1);
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+
+          const descuentos = [
+            createDescuento({
+              id: 'desc-cad',
+              tipo: DescuentoTipo.CADUCIDAD,
+              porcentaje: 8,
+              condiciones: { diasPrevios: 30 },
+              fechaInicio: lastMonth,
+              fechaFin: yesterday,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId, undefined, within30Days, 100,
+          );
+
+          expect(result.descuentoProducto).toBeNull();
+        });
+      });
+
+      describe('CATEGORIA ignores fechaInicio/fechaFin', () => {
+        it('should still apply when dates are set (category assignment controls eligibility)', async () => {
+          const lastMonth = new Date();
+          lastMonth.setMonth(lastMonth.getMonth() - 1);
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+
+          mockCatRepository.findOne.mockResolvedValue({
+            id: categoriaClienteId,
+            nombre: 'Vip',
+            descuento: 15,
+            statusId: 1,
+          });
+
+          const descuentos = [
+            createDescuento({
+              id: 'desc-cat',
+              tipo: DescuentoTipo.CATEGORIA,
+              porcentaje: 15,
+              categoriaClienteId,
+              fechaInicio: lastMonth,
+              fechaFin: yesterday,
+            }),
+          ];
+          mockRepository.find.mockResolvedValue(descuentos);
+
+          const result = await service.calcularDescuentosAcumulables(
+            'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          );
+
+          expect(result.descuentoCategoria).not.toBeNull();
+          expect(result.descuentoCategoria?.porcentaje).toBe(15);
+        });
+      });
+    });
+
     describe('30% cap', () => {
       beforeEach(() => {
         mockCatRepository.findOne.mockResolvedValue({
@@ -544,7 +746,7 @@ describe('DescuentosService', () => {
           'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
         );
 
-        expect(result.descuentoTotal).toBe(25);
+        expect(result.descuentoTotal).toBeCloseTo(23.5, 1);
         expect(result.excedeLimite).toBe(false);
       });
 
@@ -633,9 +835,9 @@ describe('DescuentosService', () => {
           'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
         );
 
-        expect(result.porcentajeEfectivo).toBe(25);
+        expect(result.porcentajeEfectivo).toBeCloseTo(23.5, 1);
         expect(result.precioOriginal).toBe(100);
-        expect(result.precioFinal).toBe(75);
+        expect(result.precioFinal).toBeCloseTo(76.5, 1);
       });
 
       it('should handle precioVentaUnitario=0 gracefully', async () => {
@@ -671,6 +873,192 @@ describe('DescuentosService', () => {
         expect(result.descuentoCategoria).toBeNull();
         expect(result.descuentoTotal).toBe(10);
         expect(result.porcentajeEfectivo).toBe(10);
+      });
+    });
+
+    describe('Escenario 1 - Volumen + Categoría montos exactos', () => {
+      beforeEach(() => {
+        mockCatRepository.findOne.mockResolvedValue({
+          id: categoriaClienteId,
+          nombre: 'Categoria 5',
+          descuento: 15,
+          statusId: 1,
+        });
+      });
+
+      it('should calculate exact amounts: 5×$61.20, volumen 10% + categoría 15%', async () => {
+        const descuentos = [
+          createDescuento({
+            id: 'desc-vol',
+            tipo: DescuentoTipo.VOLUMEN,
+            porcentaje: 10,
+            condiciones: { minCantidad: 5 },
+          }),
+          createDescuento({
+            id: 'desc-cat',
+            tipo: DescuentoTipo.CATEGORIA,
+            porcentaje: 15,
+            categoriaClienteId,
+          }),
+        ];
+        mockRepository.find.mockResolvedValue(descuentos);
+
+        const precioVenta = 61.20;
+        const cantidad = 5;
+        const subtotal = precioVenta * cantidad;
+
+        const result = await service.calcularDescuentosAcumulables(
+          'prod-1', cantidad, laboratorioId, categoriaClienteId, undefined, precioVenta,
+        );
+
+        expect(result.precioOriginal).toBeCloseTo(306, 1);
+        expect(result.descuentoProducto?.porcentaje).toBe(10);
+        expect(result.descuentoCategoria?.porcentaje).toBe(15);
+        expect(result.descuentoProducto?.monto).toBeCloseTo(30.6, 1);
+        expect(result.descuentoProducto?.precioConDescuento).toBeCloseTo(275.4, 1);
+        expect(result.descuentoCategoria?.monto).toBeCloseTo(41.31, 1);
+        expect(result.descuentoTotal).toBeCloseTo(71.91, 1);
+        expect(result.precioFinal).toBeCloseTo(234.09, 1);
+        expect(result.porcentajeEfectivo).toBeCloseTo(23.5, 1);
+        expect(result.excedeLimite).toBe(false);
+      });
+    });
+
+    describe('Escenario 2 - Laboratorio + Categoría', () => {
+      beforeEach(() => {
+        mockCatRepository.findOne.mockResolvedValue({
+          id: categoriaClienteId,
+          nombre: 'Categoria 5',
+          descuento: 15,
+          statusId: 1,
+        });
+      });
+
+      it('should accumulate LABORATORIO 5% + CATEGORÍA 15% with correct amounts', async () => {
+        const descuentos = [
+          createDescuento({
+            id: 'desc-lab',
+            tipo: DescuentoTipo.LABORATORIO,
+            porcentaje: 5,
+            laboratorioId,
+          }),
+          createDescuento({
+            id: 'desc-cat',
+            tipo: DescuentoTipo.CATEGORIA,
+            porcentaje: 15,
+            categoriaClienteId,
+          }),
+        ];
+        mockRepository.find.mockResolvedValue(descuentos);
+
+        const result = await service.calcularDescuentosAcumulables(
+          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+        );
+
+        expect(result.descuentoProducto).not.toBeNull();
+        expect(result.descuentoProducto?.tipo).toBe(DescuentoTipo.LABORATORIO);
+        expect(result.descuentoProducto?.porcentaje).toBe(5);
+        expect(result.descuentoCategoria).not.toBeNull();
+        expect(result.descuentoCategoria?.porcentaje).toBe(15);
+        expect(result.descuentoTotal).toBeCloseTo(19.25, 1);
+        expect(result.precioFinal).toBeCloseTo(80.75, 1);
+        expect(result.porcentajeEfectivo).toBeCloseTo(19.25, 1);
+        expect(result.excedeLimite).toBe(false);
+      });
+
+      it('should include both in descuentosAplicables', async () => {
+        const descuentos = [
+          createDescuento({
+            id: 'desc-lab',
+            tipo: DescuentoTipo.LABORATORIO,
+            porcentaje: 5,
+            laboratorioId,
+          }),
+          createDescuento({
+            id: 'desc-cat',
+            tipo: DescuentoTipo.CATEGORIA,
+            porcentaje: 15,
+            categoriaClienteId,
+          }),
+        ];
+        mockRepository.find.mockResolvedValue(descuentos);
+
+        const result = await service.calcularDescuentosAcumulables(
+          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+        );
+
+        expect(result.descuentosAplicables).toHaveLength(2);
+        const labDesc = result.descuentosAplicables.find(d => d.esProducto);
+        expect(labDesc?.tipo).toBe(DescuentoTipo.LABORATORIO);
+        expect(labDesc?.porcentaje).toBe(5);
+        const catDesc = result.descuentosAplicables.find(d => !d.esProducto);
+        expect(catDesc?.tipo).toBe(DescuentoTipo.CATEGORIA);
+        expect(catDesc?.porcentaje).toBe(15);
+      });
+    });
+
+    describe('descuentos_productos', () => {
+      it('should NOT apply discount assigned to a different product', async () => {
+        const descuentos = [
+          createDescuento({
+            id: 'desc-vol',
+            tipo: DescuentoTipo.VOLUMEN,
+            porcentaje: 10,
+            condiciones: { minCantidad: 1 },
+          }),
+        ];
+        mockRepository.find.mockResolvedValue(descuentos);
+        mockDescuentoProductoRepository.find.mockResolvedValue([
+          { descuentoId: 'desc-vol', productoId: 'other-prod', statusId: 1 },
+        ]);
+
+        const result = await service.calcularDescuentosAcumulables(
+          'prod-1', 1, laboratorioId,
+        );
+
+        expect(result.descuentoProducto).toBeNull();
+      });
+
+      it('should apply discount assigned to the same product', async () => {
+        const descuentos = [
+          createDescuento({
+            id: 'desc-vol',
+            tipo: DescuentoTipo.VOLUMEN,
+            porcentaje: 10,
+            condiciones: { minCantidad: 1 },
+          }),
+        ];
+        mockRepository.find.mockResolvedValue(descuentos);
+        mockDescuentoProductoRepository.find.mockResolvedValue([
+          { descuentoId: 'desc-vol', productoId: 'prod-1', statusId: 1 },
+        ]);
+
+        const result = await service.calcularDescuentosAcumulables(
+          'prod-1', 1, laboratorioId,
+        );
+
+        expect(result.descuentoProducto).not.toBeNull();
+        expect(result.descuentoProducto?.porcentaje).toBe(10);
+      });
+
+      it('should apply discounts without any product assignments to all products', async () => {
+        const descuentos = [
+          createDescuento({
+            id: 'desc-vol',
+            tipo: DescuentoTipo.VOLUMEN,
+            porcentaje: 10,
+            condiciones: { minCantidad: 1 },
+          }),
+        ];
+        mockRepository.find.mockResolvedValue(descuentos);
+        mockDescuentoProductoRepository.find.mockResolvedValue([]);
+
+        const result = await service.calcularDescuentosAcumulables(
+          'prod-1', 1, laboratorioId,
+        );
+
+        expect(result.descuentoProducto).not.toBeNull();
+        expect(result.descuentoProducto?.porcentaje).toBe(10);
       });
     });
 
@@ -748,6 +1136,108 @@ describe('DescuentosService', () => {
       expect(result.preciosAlternativos).toHaveLength(1);
       expect(result.preciosAlternativos[0].porcentaje).toBe(10);
     });
+
+    it('should use createDescuento helper and return sorted by percentage desc', async () => {
+      const descuentos = [
+        createDescuento({
+          id: 'desc-5',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 5,
+          condiciones: { minCantidad: 1 },
+        }),
+        createDescuento({
+          id: 'desc-15',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 15,
+          condiciones: { minCantidad: 1 },
+        }),
+        createDescuento({
+          id: 'desc-10',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 10,
+          condiciones: { minCantidad: 1 },
+        }),
+      ];
+      mockRepository.find.mockResolvedValue(descuentos);
+
+      const result = await service.calcularMejorDescuento(
+        'prod-1', 1, 'lab-x', undefined, undefined, 100,
+      );
+
+      expect(result.mejorDescuento.porcentaje).toBe(15);
+      expect(result.mejorDescuento.tipo).toBe(DescuentoTipo.VOLUMEN);
+      expect(result.preciosAlternativos).toHaveLength(2);
+      expect(result.preciosAlternativos[0].porcentaje).toBe(10);
+      expect(result.preciosAlternativos[1].porcentaje).toBe(5);
+    });
+
+    it('should exclude the best discount from preciosAlternativos', async () => {
+      const descuentos = [
+        createDescuento({
+          id: 'desc-best',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 20,
+          condiciones: { minCantidad: 1 },
+        }),
+        createDescuento({
+          id: 'desc-other',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 10,
+          condiciones: { minCantidad: 1 },
+        }),
+      ];
+      mockRepository.find.mockResolvedValue(descuentos);
+
+      const result = await service.calcularMejorDescuento(
+        'prod-1', 1, 'lab-x', undefined, undefined, 100,
+      );
+
+      expect(result.mejorDescuento.porcentaje).toBe(20);
+      expect(result.mejorDescuento.descuentoId).toBeUndefined();
+      expect(result.preciosAlternativos).toHaveLength(1);
+      expect(result.preciosAlternativos[0].porcentaje).toBe(10);
+    });
+
+    it('should respect descuentos_productos filtering', async () => {
+      const descuentos = [
+        createDescuento({
+          id: 'desc-assigned',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 15,
+          condiciones: { minCantidad: 1 },
+        }),
+      ];
+      mockRepository.find.mockResolvedValue(descuentos);
+      mockDescuentoProductoRepository.find.mockResolvedValue([
+        { descuentoId: 'desc-assigned', productoId: 'other-prod', statusId: 1 },
+      ]);
+
+      const result = await service.calcularMejorDescuento(
+        'prod-1', 1, 'lab-x',
+      );
+
+      expect(result.mejorDescuento.tipo).toBe('NINGUNO');
+      expect(result.preciosAlternativos).toEqual([]);
+    });
+
+    it('should calculate precioConDescuento when subtotalLinea is provided', async () => {
+      const descuentos = [
+        createDescuento({
+          id: 'desc-10',
+          tipo: DescuentoTipo.VOLUMEN,
+          porcentaje: 10,
+          condiciones: { minCantidad: 1 },
+        }),
+      ];
+      mockRepository.find.mockResolvedValue(descuentos);
+
+      const result = await service.calcularMejorDescuento(
+        'prod-1', 1, 'lab-x', undefined, undefined, 200,
+      );
+
+      expect(result.mejorDescuento.porcentaje).toBe(10);
+      expect(result.mejorDescuento.precioConDescuento).toBe(180);
+    });
   });
 
   describe('previewProductDiscount', () => {
@@ -817,6 +1307,75 @@ describe('DescuentosService', () => {
       expect(result!.tieneDescuento).toBe(true);
       expect(result!.descuentoProducto).toBeNull();
       expect(result!.descuentoCategoria).not.toBeNull();
+    });
+
+    it('should apply CADUCIDAD when fechaCaducidad is provided', async () => {
+      const nearExpiry = new Date();
+      nearExpiry.setDate(nearExpiry.getDate() + 10);
+
+      const descuentos = [
+        {
+          id: 'desc-cad',
+          nombre: undefined,
+          descripcion: undefined,
+          tipo: DescuentoTipo.CADUCIDAD,
+          porcentaje: 8,
+          monto: null,
+          condiciones: { diasPrevios: 30 },
+          prioridad: 1,
+          acumulable: false,
+          statusId: 1,
+          laboratorioId: null,
+          categoriaClienteId: null,
+          fechaInicio: null,
+          fechaFin: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      mockRepository.find.mockResolvedValue(descuentos);
+
+      const result = await service.previewProductDiscount(
+        'prod-1', 1, 100, 16, 20, 'lab-x', undefined, nearExpiry,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.tieneDescuento).toBe(true);
+      expect(result!.descuentoProducto?.tipo).toBe(DescuentoTipo.CADUCIDAD);
+      expect(result!.descuentoProducto?.porcentaje).toBe(8);
+    });
+
+    it('should NOT apply CADUCIDAD when fechaCaducidad is far out', async () => {
+      const farExpiry = new Date();
+      farExpiry.setDate(farExpiry.getDate() + 90);
+
+      const descuentos = [
+        {
+          id: 'desc-cad',
+          nombre: undefined,
+          descripcion: undefined,
+          tipo: DescuentoTipo.CADUCIDAD,
+          porcentaje: 8,
+          monto: null,
+          condiciones: { diasPrevios: 30 },
+          prioridad: 1,
+          acumulable: false,
+          statusId: 1,
+          laboratorioId: null,
+          categoriaClienteId: null,
+          fechaInicio: null,
+          fechaFin: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      mockRepository.find.mockResolvedValue(descuentos);
+
+      const result = await service.previewProductDiscount(
+        'prod-1', 1, 100, 16, 20, 'lab-x', undefined, farExpiry,
+      );
+
+      expect(result).toBeNull();
     });
   });
 

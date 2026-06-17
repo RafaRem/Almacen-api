@@ -37,15 +37,6 @@ export class Cliente {
   @Column({ type: 'varchar', length: 20, unique: true, nullable: true })
   rfc: string;
 
-  @Column({ type: 'varchar', length: 3, nullable: true })
-  usoCfdi: string;
-
-  @Column({ type: 'varchar', length: 10, nullable: true })
-  regimenFiscal: string;
-
-  @Column({ type: 'varchar', length: 5, nullable: true })
-  codigoPostal: string;
-
   @Column({ type: 'uuid', name: 'categoriaclienteid', nullable: true })
   categoriaClienteId: string;
 

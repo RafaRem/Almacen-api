@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { DetalleVenta } from './detalle-venta.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
+import { MovimientoAlmacen } from '../../movimientos-almacen/entities/movimiento-almacen.entity';
 
 @Entity('detalle_venta_lote')
 export class DetalleVentaLote {
@@ -29,4 +30,11 @@ export class DetalleVentaLote {
 
   @Column({ type: 'int', name: 'cantidad' })
   cantidad: number;
+
+  @Column({ type: 'uuid', name: 'movimientoid', nullable: true })
+  movimientoId: string;
+
+  @ManyToOne(() => MovimientoAlmacen)
+  @JoinColumn({ name: 'movimientoid' })
+  movimiento: MovimientoAlmacen;
 }

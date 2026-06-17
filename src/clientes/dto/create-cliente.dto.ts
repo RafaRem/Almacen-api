@@ -6,6 +6,7 @@ import {
   IsUUID,
   IsInt,
   IsIn,
+  ValidateIf,
 } from 'class-validator';
 
 type TipoPersonaDto = 'fisica' | 'moral';
@@ -67,19 +68,11 @@ export class UpdateClienteDto {
 
   @IsOptional()
   @IsString()
-  telefono?: string;
-
-  @IsOptional()
-  @IsString()
-  direccion?: string;
-
-  @IsOptional()
-  @IsString()
   rfc?: string;
 
-  @IsOptional()
+  @ValidateIf((o) => o.categoriaClienteId !== null && o.categoriaClienteId !== undefined)
   @IsUUID()
-  categoriaClienteId?: string;
+  categoriaClienteId?: string | null;
 
   @IsOptional()
   @IsIn(['fisica', 'moral'])

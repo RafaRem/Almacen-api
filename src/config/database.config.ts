@@ -7,6 +7,7 @@ import { Producto } from '../productos/entities/producto.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
 import { Descuento } from '../descuentos/entities/descuento.entity';
+import { DescuentoProducto } from '../descuentos/entities/descuento-producto.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { DocumentoCliente } from '../uploads/entities/documento-cliente.entity';
 import { Cliente } from '../clientes/entities/cliente.entity';
@@ -25,6 +26,10 @@ import { ConfiguracionSistema } from '../configuracion/entities/configuracion-si
 import { MovimientoRevertido } from '../movimientos-almacen/entities/movimiento-revertido.entity';
 import { UserPermission } from '../users/entities/user-permission.entity';
 import { DatosEmpresa } from '../empresa/entities/datos-empresa.entity';
+import { Proveedor } from '../proveedores/entities/proveedor.entity';
+import { Recepcion } from '../recepciones/entities/recepcion.entity';
+import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
+import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { DetalleVentaLote } from '../ventas/entities/detalle-venta-lote.entity';
 
@@ -48,6 +53,7 @@ export const getDatabaseConfig = (
       MovimientoAlmacen,
       CategoriaCliente,
       Descuento,
+      DescuentoProducto,
       DescuentoVentaDetalle,
       DocumentoCliente,
       Cliente,
@@ -66,6 +72,10 @@ export const getDatabaseConfig = (
       MovimientoRevertido,
       UserPermission,
       DatosEmpresa,
+      Proveedor,
+      Recepcion,
+      OrdenCompra,
+      DetalleOrdenCompra,
       DetalleLote,
       DetalleVentaLote,
     ],

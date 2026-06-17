@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsEnum,
@@ -8,8 +7,8 @@ import {
   IsDateString,
   Min,
   Max,
-  IsInt,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { DescuentoTipo } from '../../common/enums/descuento-tipo.enum';
 
@@ -28,10 +27,16 @@ export class CreateDescuentoDto {
   @IsOptional()
   condiciones?: Record<string, any>;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @Max(100)
   porcentaje: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  monto?: number;
 
   @IsOptional()
   @IsUUID()
@@ -42,6 +47,10 @@ export class CreateDescuentoDto {
   categoriaClienteId?: string;
 
   @IsOptional()
+  @IsUUID('4', { each: true })
+  productoIds?: string[];
+
+  @IsOptional()
   @IsDateString()
   fechaInicio?: string;
 
@@ -50,14 +59,17 @@ export class CreateDescuentoDto {
   fechaFin?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   prioridad?: number;
 
   @IsOptional()
   acumulable?: boolean;
 
   @IsOptional()
-  @IsInt()
-  statusId?: number;
+  @IsEnum(StatusId)
+  statusId?: StatusId;
 }
 
 export class UpdateDescuentoDto {
@@ -77,10 +89,16 @@ export class UpdateDescuentoDto {
   condiciones?: Record<string, any>;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @Max(100)
   porcentaje?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  monto?: number;
 
   @IsOptional()
   @IsUUID()
@@ -91,6 +109,10 @@ export class UpdateDescuentoDto {
   categoriaClienteId?: string;
 
   @IsOptional()
+  @IsUUID('4', { each: true })
+  productoIds?: string[];
+
+  @IsOptional()
   @IsDateString()
   fechaInicio?: string;
 
@@ -99,6 +121,9 @@ export class UpdateDescuentoDto {
   fechaFin?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   prioridad?: number;
 
   @IsOptional()
@@ -120,4 +145,42 @@ export class CalcularDescuentoDto {
   @IsOptional()
   @IsUUID()
   clienteId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  laboratorioId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fechaCaducidad?: string;
+}
+
+export class PreviewProductDiscountDto {
+  @IsUUID()
+  productoId: string;
+
+  @IsNumber()
+  @Min(1)
+  cantidad: number;
+
+  @IsNumber()
+  @Min(0)
+  precioUnitario: number;
+
+  @IsNumber()
+  iva: number;
+
+  @IsNumber()
+  margen: number;
+
+  @IsUUID()
+  laboratorioId: string;
+
+  @IsOptional()
+  @IsUUID()
+  clienteId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fechaCaducidad?: string;
 }

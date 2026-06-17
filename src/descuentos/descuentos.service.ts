@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Descuento } from './entities/descuento.entity';
+import { DescuentoProducto } from './entities/descuento-producto.entity';
 import {
   CreateDescuentoDto,
   UpdateDescuentoDto,
@@ -9,19 +10,39 @@ import {
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
 import { StatusId } from '../common/enums/status-id.enum';
 import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
+import { isWithinDateRange } from '../common/utils/date-utils';
+import { calcularMonto, calcularPrecioConDescuento } from '../common/utils/descuento-utils';
+import {
+  DescuentoAcumulableResult,
+  DescuentoProductoResult,
+  DescuentoEvaluadoBasico,
+  DescuentoInfoEntry,
+} from './types/descuento.types';
 
 @Injectable()
 export class DescuentosService {
   constructor(
     @InjectRepository(Descuento)
     private descuentosRepository: Repository<Descuento>,
+    @InjectRepository(DescuentoProducto)
+    private descuentosProductosRepository: Repository<DescuentoProducto>,
     @InjectRepository(CategoriaCliente)
     private categoriaClienteRepository: Repository<CategoriaCliente>,
   ) {}
 
   async create(createDto: CreateDescuentoDto): Promise<Descuento> {
-    const descuento = this.descuentosRepository.create(createDto);
-    return this.descuentosRepository.save(descuento);
+    const { productoIds, ...rest } = createDto;
+    const descuento = this.descuentosRepository.create(rest);
+    const saved = await this.descuentosRepository.save(descuento);
+    if (productoIds && productoIds.length > 0) {
+      const asignaciones = productoIds.map(productoId => ({
+        descuentoId: saved.id,
+        productoId,
+        statusId: StatusId.ACTIVE,
+      }));
+      await this.descuentosProductosRepository.save(asignaciones);
+    }
+    return saved;
   }
 
   async findAll(): Promise<Descuento[]> {
@@ -39,25 +60,44 @@ export class DescuentosService {
   }
 
   async findByLaboratorio(laboratorioId: string): Promise<Descuento[]> {
-    const hoy = new Date();
-    return this.descuentosRepository.find({
+    const descuentos = await this.descuentosRepository.find({
       where: {
         laboratorioId,
         tipo: DescuentoTipo.LABORATORIO,
         statusId: 1,
-        fechaInicio: LessThanOrEqual(hoy),
-        fechaFin: MoreThanOrEqual(hoy),
       },
+    });
+    const hoy = new Date();
+    return descuentos.filter((d) => {
+      if (!d.fechaInicio && !d.fechaFin) return true;
+      if (d.fechaInicio && d.fechaFin) {
+        return new Date(d.fechaInicio) <= hoy && new Date(d.fechaFin) >= hoy;
+      }
+      return false;
     });
   }
 
   async update(id: string, updateDto: UpdateDescuentoDto): Promise<Descuento> {
+    const { productoIds, ...rest } = updateDto;
     const descuento = await this.findOne(id);
-    Object.assign(descuento, updateDto);
-    return this.descuentosRepository.save(descuento);
+    Object.assign(descuento, rest);
+    const saved = await this.descuentosRepository.save(descuento);
+    if (productoIds !== undefined) {
+      await this.descuentosProductosRepository.delete({ descuentoId: id });
+      if (productoIds.length > 0) {
+        const asignaciones = productoIds.map(productoId => ({
+          descuentoId: id,
+          productoId,
+          statusId: StatusId.ACTIVE,
+        }));
+        await this.descuentosProductosRepository.save(asignaciones);
+      }
+    }
+    return saved;
   }
 
   private static readonly LIMITE_MAXIMO_PORCENTAJE = 30;
+  private readonly logger = new Logger(DescuentosService.name);
 
   private evaluarDescuento(
     d: Descuento,
@@ -68,6 +108,7 @@ export class DescuentosService {
       categoriaClienteId?: string;
       fechaCaducidad?: Date;
     },
+    productosPorDescuento?: Map<string, Set<string>>,
   ): {
     porcentaje: number;
     monto: number | null;
@@ -77,8 +118,13 @@ export class DescuentosService {
     descuentoId: string;
     acumulable: boolean;
   } | null {
-    const { cantidad, laboratorioId, categoriaClienteId, fechaCaducidad } = args;
+    const { productoId, cantidad, laboratorioId, categoriaClienteId, fechaCaducidad } = args;
     const hoy = new Date();
+
+    const asignados = productosPorDescuento?.get(d.id);
+    if (asignados && !asignados.has(productoId)) {
+      return null;
+    }
 
     if (d.tipo === DescuentoTipo.VOLUMEN && d.condiciones) {
       const { minCantidad, maxCantidad } = d.condiciones;
@@ -87,15 +133,18 @@ export class DescuentosService {
         cantidad >= minCantidad &&
         (!maxCantidad || cantidad <= maxCantidad)
       ) {
-        return {
-          porcentaje: Number(d.porcentaje),
-          monto: d.monto ? Number(d.monto) : null,
-          tipo: d.tipo,
-          motivo: `Descuento por volumen: ${cantidad} piezas`,
-          prioridad: d.prioridad,
-          descuentoId: d.id,
-          acumulable: d.acumulable,
-        };
+        const dentroRangoFechas = isWithinDateRange(d.fechaInicio, d.fechaFin, hoy);
+        if (dentroRangoFechas) {
+          return {
+            porcentaje: Number(d.porcentaje),
+            monto: d.monto ? Number(d.monto) : null,
+            tipo: d.tipo,
+            motivo: `Descuento por volumen: ${cantidad} piezas`,
+            prioridad: d.prioridad,
+            descuentoId: d.id,
+            acumulable: d.acumulable,
+          };
+        }
       }
     }
 
@@ -103,12 +152,7 @@ export class DescuentosService {
       d.tipo === DescuentoTipo.LABORATORIO &&
       d.laboratorioId === laboratorioId
     ) {
-      const dentroRangoFechas =
-        (!d.fechaInicio && !d.fechaFin) ||
-        (d.fechaInicio &&
-          d.fechaFin &&
-          new Date(d.fechaInicio) <= hoy &&
-          new Date(d.fechaFin) >= hoy);
+      const dentroRangoFechas = isWithinDateRange(d.fechaInicio, d.fechaFin, hoy);
       if (dentroRangoFechas) {
         return {
           porcentaje: Number(d.porcentaje),
@@ -135,12 +179,29 @@ export class DescuentosService {
         diasPrevios &&
         diasHastaCaducidad <= diasPrevios &&
         diasHastaCaducidad >= 0
-      ) {
+        ) {
+        const dentroRangoFechas = isWithinDateRange(d.fechaInicio, d.fechaFin, hoy);
+        if (dentroRangoFechas) {
+          return {
+            porcentaje: Number(d.porcentaje),
+            monto: d.monto ? Number(d.monto) : null,
+            tipo: d.tipo,
+            motivo: `Descuento por caducidad próxima: ${diasHastaCaducidad} días`,
+            prioridad: d.prioridad,
+            descuentoId: d.id,
+            acumulable: d.acumulable,
+          };
+        }
+      }
+    }
+
+    if (d.tipo === DescuentoTipo.CATEGORIA && d.categoriaClienteId) {
+      if (categoriaClienteId && d.categoriaClienteId === categoriaClienteId) {
         return {
           porcentaje: Number(d.porcentaje),
           monto: d.monto ? Number(d.monto) : null,
           tipo: d.tipo,
-          motivo: `Descuento por caducidad próxima: ${diasHastaCaducidad} días`,
+          motivo: `Descuento por categoría de cliente: ${d.nombre || d.categoriaClienteId}`,
           prioridad: d.prioridad,
           descuentoId: d.id,
           acumulable: d.acumulable,
@@ -158,56 +219,19 @@ export class DescuentosService {
     categoriaClienteId?: string,
     fechaCaducidad?: Date,
     precioVentaUnitario?: number,
-  ): Promise<{
-    descuentosAplicables: {
-      descuentoId: string | null;
-      tipo: DescuentoTipo;
-      porcentaje: number;
-      monto: number;
-      motivo: string;
-      esProducto: boolean;
-    }[];
-    descuentoProducto: {
-      descuentoId: string | null;
-      tipo: DescuentoTipo;
-      porcentaje: number;
-      monto: number;
-      precioConDescuento: number;
-      motivo: string;
-    } | null;
-    descuentoCategoria: {
-      descuentoId: string | null;
-      tipo: DescuentoTipo;
-      porcentaje: number;
-      monto: number;
-      motivo: string;
-    } | null;
-    descuentoTotal: number;
-    precioOriginal: number;
-    precioFinal: number;
-    porcentajeEfectivo: number;
-    excedeLimite: boolean;
-  }> {
+  ): Promise<DescuentoAcumulableResult> {
     const subtotalLinea = (precioVentaUnitario || 0) * cantidad;
 
-    const todosDescuentos = await this.descuentosRepository.find({
-      where: { statusId: 1 },
+    const descuentosEvaluados = await this.evaluarDescuentosDisponibles({
+      productoId, cantidad, laboratorioId, categoriaClienteId, fechaCaducidad,
     });
-
-    const descuentosEvaluados = todosDescuentos
-      .map((d) =>
-        this.evaluarDescuento(d, {
-          productoId,
-          cantidad,
-          laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
-        }),
-      )
-      .filter((d): d is NonNullable<typeof d> => d !== null);
 
     const descuentosProducto = descuentosEvaluados.filter(
       (d) => d.tipo !== DescuentoTipo.CATEGORIA,
+    );
+
+    const categoriaDesdeTabla = descuentosEvaluados.find(
+      (d) => d.tipo === DescuentoTipo.CATEGORIA,
     );
 
     const ordenarPorBeneficio = (
@@ -226,17 +250,8 @@ export class DescuentosService {
     };
     descuentosProducto.sort(ordenarPorBeneficio);
 
-    const calcularMonto = (
-      d: { porcentaje: number; monto: number | null },
-      base: number,
-    ) => {
-      if (d.monto && d.monto > 0) return d.monto;
-      return (base * d.porcentaje) / 100;
-    };
-
     const mejorProducto = descuentosProducto[0] || null;
 
-    // Category discount from categorias_cliente table
     let descuentoCategoria: {
       porcentaje: number;
       monto: number | null;
@@ -246,7 +261,9 @@ export class DescuentosService {
       descuentoId: string | null;
       acumulable: boolean;
     } | null = null;
-    if (categoriaClienteId) {
+    if (categoriaDesdeTabla) {
+      descuentoCategoria = { ...categoriaDesdeTabla };
+    } else if (categoriaClienteId) {
       const categoria = await this.categoriaClienteRepository.findOne({
         where: { id: categoriaClienteId, statusId: StatusId.ACTIVE },
       });
@@ -273,12 +290,13 @@ export class DescuentosService {
     } | null = null;
     if (mejorProducto) {
       const montoProducto = calcularMonto(mejorProducto, subtotalLinea);
+      const montoProductoRounded = Number(montoProducto.toFixed(2));
       descuentoProductoInfo = {
         descuentoId: mejorProducto.descuentoId,
         tipo: mejorProducto.tipo,
         porcentaje: mejorProducto.porcentaje,
-        monto: Number(montoProducto.toFixed(2)),
-        precioConDescuento: Number((subtotalLinea - montoProducto).toFixed(2)),
+        monto: montoProductoRounded,
+        precioConDescuento: Number((subtotalLinea - montoProductoRounded).toFixed(2)),
         motivo: mejorProducto.motivo,
       };
     }
@@ -291,9 +309,12 @@ export class DescuentosService {
       motivo: string;
     } | null = null;
     if (descuentoCategoria) {
+      const baseCategoria = descuentoProductoInfo
+        ? descuentoProductoInfo.precioConDescuento
+        : subtotalLinea;
       const montoCategoria = calcularMonto(
         descuentoCategoria,
-        subtotalLinea,
+        baseCategoria,
       );
       descuentoCategoriaInfo = {
         descuentoId: descuentoCategoria.descuentoId,
@@ -373,6 +394,52 @@ export class DescuentosService {
     await this.descuentosRepository.remove(descuento);
   }
 
+  async findProductoIds(id: string): Promise<string[]> {
+    const asignaciones = await this.descuentosProductosRepository.find({
+      where: { descuentoId: id, statusId: StatusId.ACTIVE },
+    });
+    return asignaciones.map(a => a.productoId);
+  }
+
+  private async cargarAsignacionesProducto(): Promise<Map<string, Set<string>>> {
+    const asignaciones = await this.descuentosProductosRepository.find({
+      where: { statusId: StatusId.ACTIVE },
+    });
+    const map = new Map<string, Set<string>>();
+    for (const a of asignaciones) {
+      if (!map.has(a.descuentoId)) {
+        map.set(a.descuentoId, new Set());
+      }
+      map.get(a.descuentoId)!.add(a.productoId);
+    }
+    return map;
+  }
+
+  private async evaluarDescuentosDisponibles(args: {
+    productoId: string;
+    cantidad: number;
+    laboratorioId: string;
+    categoriaClienteId?: string;
+    fechaCaducidad?: Date;
+  }) {
+    const todosDescuentos = await this.descuentosRepository.find({
+      where: { statusId: 1 },
+    });
+    const productosPorDescuento = await this.cargarAsignacionesProducto();
+    return todosDescuentos
+      .map((d) =>
+        this.evaluarDescuento(d, args, productosPorDescuento),
+      )
+      .filter((d): d is NonNullable<typeof d> => d !== null);
+  }
+
+  /**
+   * @deprecated Usar `calcularDescuentosAcumulables` en su lugar.
+   * Esta función solo evalúa descuentos de producto y NO considera:
+   * - Descuentos de categoría
+   * - Límite máximo del 30%
+   * Se mantiene por compatibilidad con llamadas externas al endpoint /calculadora.
+   */
   async calcularMejorDescuento(
     productoId: string,
     cantidad: number,
@@ -396,95 +463,10 @@ export class DescuentosService {
       motivo: string;
     }[];
   }> {
-    const descuentos: {
-      porcentaje: number;
-      monto: number | null;
-      tipo: DescuentoTipo;
-      motivo: string;
-      prioridad: number;
-    }[] = [];
-
-    const todosDescuentos = await this.descuentosRepository.find({
-      where: { statusId: 1 },
-    });
-
-    for (const d of todosDescuentos) {
-      if (d.tipo === DescuentoTipo.VOLUMEN && d.condiciones) {
-        const { minCantidad, maxCantidad } = d.condiciones;
-        if (
-          minCantidad &&
-          cantidad >= minCantidad &&
-          (!maxCantidad || cantidad <= maxCantidad)
-        ) {
-          descuentos.push({
-            porcentaje: Number(d.porcentaje),
-            monto: d.monto ? Number(d.monto) : null,
-            tipo: d.tipo,
-            motivo: `Descuento por volumen: ${cantidad} piezas`,
-            prioridad: d.prioridad,
-          });
-        }
-      }
-
-      if (
-        d.tipo === DescuentoTipo.LABORATORIO &&
-        d.laboratorioId === laboratorioId
-      ) {
-        const dentroRangoFechas =
-          (!d.fechaInicio && !d.fechaFin) ||
-          (d.fechaInicio &&
-            d.fechaFin &&
-            d.fechaInicio <= new Date() &&
-            d.fechaFin >= new Date());
-        if (dentroRangoFechas) {
-          descuentos.push({
-            porcentaje: Number(d.porcentaje),
-            monto: d.monto ? Number(d.monto) : null,
-            tipo: d.tipo,
-            motivo: `Promoción de laboratorio`,
-            prioridad: d.prioridad,
-          });
-        }
-      }
-
-      if (
-        d.tipo === DescuentoTipo.CATEGORIA &&
-        d.categoriaClienteId === categoriaClienteId
-      ) {
-        descuentos.push({
-          porcentaje: Number(d.porcentaje),
-          monto: d.monto ? Number(d.monto) : null,
-          tipo: d.tipo,
-          motivo: `Descuento por categoría de cliente`,
-          prioridad: d.prioridad,
-        });
-      }
-
-      if (
-        d.tipo === DescuentoTipo.CADUCIDAD &&
-        d.condiciones &&
-        fechaCaducidad
-      ) {
-        const { diasPrevios } = d.condiciones;
-        const hoy = new Date();
-        const diasHastaCaducidad = Math.floor(
-          (fechaCaducidad.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        if (
-          diasPrevios &&
-          diasHastaCaducidad <= diasPrevios &&
-          diasHastaCaducidad >= 0
-        ) {
-          descuentos.push({
-            porcentaje: Number(d.porcentaje),
-            monto: d.monto ? Number(d.monto) : null,
-            tipo: d.tipo,
-            motivo: `Descuento por caducidad próxima: ${diasHastaCaducidad} días`,
-            prioridad: d.prioridad,
-          });
-        }
-      }
-    }
+    this.logger.warn(`[DEPRECATED] calcularMejorDescuento llamado para producto ${productoId}`);
+    const descuentos = (await this.evaluarDescuentosDisponibles({
+      productoId, cantidad, laboratorioId, categoriaClienteId, fechaCaducidad,
+    })).map(({ descuentoId, acumulable, ...rest }) => rest);
 
     if (descuentos.length === 0) {
       return {
@@ -508,17 +490,6 @@ export class DescuentosService {
       }
       return b.prioridad - a.prioridad;
     });
-
-    const calcularPrecioConDescuento = (
-      porcentaje: number,
-      monto: number | null,
-      subtotal: number,
-    ) => {
-      if (monto && monto > 0) {
-        return Math.max(0, subtotal - monto);
-      }
-      return Math.max(0, subtotal - (subtotal * porcentaje) / 100);
-    };
 
     const mejor = descuentos[0];
     const alternativas = descuentos.slice(1, 5).map((d) => ({
@@ -557,6 +528,7 @@ export class DescuentosService {
     margen: number,
     laboratorioId: string,
     categoriaClienteId?: string,
+    fechaCaducidad?: Date,
   ): Promise<{
     tieneDescuento: boolean;
     precioOriginal: number;
@@ -582,7 +554,7 @@ export class DescuentosService {
       cantidad,
       laboratorioId,
       categoriaClienteId,
-      undefined,
+      fechaCaducidad,
       precioVenta,
     );
 

@@ -85,6 +85,7 @@ export const getDatabaseConfig = (
     password: configService.get<string>('DATABASE_PASSWORD'),
     database: configService.get<string>('DATABASE_NAME'),
     timezone: 'America/Mexico_City',
+    uuidExtension: 'pgcrypto',
     entities: databaseEntities,
     ssl: useSsl
       ? {

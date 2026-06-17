@@ -14,6 +14,7 @@ export const dataSourceOptions: DataSourceOptions = {
   password: process.env.DATABASE_PASSWORD || 'postgres',
   database: process.env.DATABASE_NAME || 'almacen_db',
   timezone: 'America/Mexico_City',
+  uuidExtension: 'pgcrypto',
   entities: databaseEntities,
   migrations: ['src/migrations/*.ts'],
   ssl: useSsl

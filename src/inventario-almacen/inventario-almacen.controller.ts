@@ -144,6 +144,7 @@ export class InventarioAlmacenController {
       }[];
       almacenOrigen: number;
       almacenDestino: number;
+      observaciones?: string;
       metadata?: {
         turno?: string;
         caja?: string;
@@ -151,6 +152,7 @@ export class InventarioAlmacenController {
         sessionId?: string;
         origenOperacion?: string;
         referenciaExterna?: string;
+        observaciones?: string;
       };
     },
     @Req() req: any,
@@ -168,7 +170,7 @@ export class InventarioAlmacenController {
       body.almacenOrigen as AlmacenTipo,
       body.almacenDestino as AlmacenTipo,
       userId,
-      metadata,
+      { ...(metadata || {}), observaciones: metadata?.observaciones || body.observaciones },
     );
   }
 

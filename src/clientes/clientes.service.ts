@@ -108,12 +108,10 @@ export class ClientesService {
     }
 
     Object.assign(cliente, updateClienteDto);
-    await this.clientesRepository.save(cliente);
-
     if (updateClienteDto.categoriaClienteId !== undefined) {
-      cliente.categoriaCliente = undefined as any;
-      await this.clientesRepository.save(cliente);
+      cliente.categoriaCliente = null as any;
     }
+    await this.clientesRepository.save(cliente);
 
     return this.findOne(id);
   }

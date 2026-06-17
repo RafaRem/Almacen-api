@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
@@ -10,6 +11,7 @@ import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import {
   SYSTEM_USER_ID,
   TipoMovimiento,
@@ -24,10 +26,13 @@ export interface MovimientoMetadata {
   sessionId?: string;
   origenOperacion?: OrigenOperacion;
   referenciaExterna?: string;
+  observaciones?: string;
 }
 
 @Injectable()
 export class InventarioAlmacenService {
+  private readonly logger = new Logger(InventarioAlmacenService.name);
+
   constructor(
     @InjectRepository(InventarioAlmacen)
     private inventarioRepository: Repository<InventarioAlmacen>,
@@ -132,6 +137,16 @@ export class InventarioAlmacenService {
       }
     }
 
+    for (const item of resultado) {
+      if (!item.precioVenta && item.precioUnitarioLote > 0) {
+        item.precioVenta = this.calcularPrecioVenta(
+          item.precioUnitarioLote,
+          item.ivaCfdi,
+          item.producto?.margenRecomendado,
+        );
+      }
+    }
+
     return resultado;
   }
 
@@ -143,8 +158,11 @@ export class InventarioAlmacenService {
     ivaCfdi?: number | null,
     precioUnitarioLote?: number | null,
     managerArg?: EntityManager,
+    tipoMovimiento?: string,
+    userId?: string,
   ): Promise<InventarioAlmacen> {
     const repo = managerArg ? managerArg.getRepository(InventarioAlmacen) : this.inventarioRepository;
+    const movimientoRepo = managerArg ? managerArg.getRepository(MovimientoAlmacen) : this.movimientoRepository;
 
     let inventario = await repo.findOne({
       where: { productoId, loteId, almacenTipo },
@@ -158,7 +176,24 @@ export class InventarioAlmacenService {
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
       }
-      return repo.save(inventario);
+      const saved = await repo.save(inventario);
+      if (tipoMovimiento) {
+        const movimiento = movimientoRepo.create({
+          productoId,
+          loteId,
+          almacenOrigen: almacenTipo,
+          almacenDestino: almacenTipo,
+          cantidad,
+          userId: userId || SYSTEM_USER_ID,
+          observaciones: `Entrada por ${tipoMovimiento}`,
+          tipoMovimiento,
+          origenOperacion: OrigenOperacion.API,
+        });
+        const savedMov = await movimientoRepo.save(movimiento);
+        saved.ultimoMovimientoId = savedMov.id;
+        await repo.save(saved);
+      }
+      return saved;
     } else {
       let precioLote = precioUnitarioLote;
       if (precioLote === undefined || precioLote === null || precioLote === 0) {
@@ -174,7 +209,26 @@ export class InventarioAlmacenService {
       });
     }
 
-    return repo.save(inventario);
+    const saved = await repo.save(inventario);
+
+    if (tipoMovimiento) {
+      const movimiento = movimientoRepo.create({
+        productoId,
+        loteId,
+        almacenOrigen: almacenTipo,
+        almacenDestino: almacenTipo,
+        cantidad,
+        userId: userId || SYSTEM_USER_ID,
+        observaciones: `Entrada por ${tipoMovimiento}`,
+        tipoMovimiento,
+        origenOperacion: OrigenOperacion.API,
+      });
+      const savedMov = await movimientoRepo.save(movimiento);
+      saved.ultimoMovimientoId = savedMov.id;
+      await repo.save(saved);
+    }
+
+    return saved;
   }
 
   calcularPrecioVenta(
@@ -471,6 +525,7 @@ export class InventarioAlmacenService {
     return this.dataSource.transaction(async (manager) => {
       const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
         where: { productoId, loteId, almacenTipo: almacenTipoOrigen },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!inventarioOrigen) {
@@ -492,6 +547,7 @@ export class InventarioAlmacenService {
 
       let inventarioDestino = await manager.findOne(InventarioAlmacen, {
         where: { productoId, loteId, almacenTipo: almacenTipoDestino },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (inventarioDestino) {
@@ -503,6 +559,10 @@ export class InventarioAlmacenService {
           loteId,
           almacenTipo: almacenTipoDestino,
           cantidadActual: cantidad,
+          precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
+          precioVenta: inventarioOrigen.precioVenta,
+          ivaCfdi: inventarioOrigen.ivaCfdi,
+          ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
         });
       }
 
@@ -526,6 +586,17 @@ export class InventarioAlmacenService {
       });
 
       const savedMovimiento = await manager.save(movimiento);
+
+      const detalleLoteRepo = manager.getRepository(DetalleLote);
+      await detalleLoteRepo.save(detalleLoteRepo.create({
+        productoId,
+        loteId,
+        cantidad,
+        precioUnitario: inventarioOrigen.precioUnitarioLote,
+        ivaCfdi: inventarioOrigen.ivaCfdi,
+        movimientoId: savedMovimiento.id,
+        almacenTipo: almacenTipoOrigen,
+      }));
 
       inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
       await manager.save(inventarioOrigen);
@@ -579,6 +650,7 @@ export class InventarioAlmacenService {
               loteId: item.loteId,
               almacenTipo: almacenTipoOrigen,
             },
+            lock: { mode: 'pessimistic_write' },
           });
 
           if (!inventarioOrigen) {
@@ -604,6 +676,7 @@ export class InventarioAlmacenService {
               loteId: item.loteId,
               almacenTipo: almacenTipoDestino,
             },
+            lock: { mode: 'pessimistic_write' },
           });
 
           if (inventarioDestino) {
@@ -615,6 +688,10 @@ export class InventarioAlmacenService {
               loteId: item.loteId,
               almacenTipo: almacenTipoDestino,
               cantidadActual: item.cantidad,
+              precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
+              precioVenta: inventarioOrigen.precioVenta,
+              ivaCfdi: inventarioOrigen.ivaCfdi,
+              ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
             });
           }
 
@@ -632,12 +709,23 @@ export class InventarioAlmacenService {
             almacenDestino: almacenTipoDestino,
             cantidad: item.cantidad,
             userId,
-            observaciones: `Transferencia batch ${almacenTipoOrigen} -> ${almacenTipoDestino}`,
+            observaciones: metadata?.observaciones || `Transferencia batch ${almacenTipoOrigen} -> ${almacenTipoDestino}`,
             tipoMovimiento,
             origenOperacion: metadata?.origenOperacion || OrigenOperacion.ADMIN,
           });
 
           const savedMovimiento = await manager.save(movimiento);
+
+          const detalleLoteRepo = manager.getRepository(DetalleLote);
+          await detalleLoteRepo.save(detalleLoteRepo.create({
+            productoId: item.productoId,
+            loteId: item.loteId,
+            cantidad: item.cantidad,
+            precioUnitario: inventarioOrigen.precioUnitarioLote,
+            ivaCfdi: inventarioOrigen.ivaCfdi,
+            movimientoId: savedMovimiento.id,
+            almacenTipo: almacenTipoOrigen,
+          }));
 
           inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
           await manager.save(inventarioOrigen);
@@ -658,6 +746,10 @@ export class InventarioAlmacenService {
           moved++;
         } catch (error) {
           const errorMessage = error.message || 'Error desconocido';
+          this.logger.error(
+            `Batch item failed — productoId=${item.productoId}, loteId=${item.loteId}, cantidad=${item.cantidad}: ${errorMessage}`,
+            error.stack,
+          );
           errors.push(
             `Producto ${item.productoId} (Lote ${item.loteId}): ${errorMessage}`,
           );
@@ -717,6 +809,7 @@ export class InventarioAlmacenService {
     return this.inventarioRepository.findOne({
       where: { productoId },
       relations: ['lote'],
+      order: { createdAt: 'DESC' },
     });
   }
 

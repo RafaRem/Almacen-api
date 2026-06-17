@@ -3,12 +3,15 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { Laboratorio } from '../../laboratorios/entities/laboratorio.entity';
+import { Recepcion } from '../../recepciones/entities/recepcion.entity';
+import { InventarioAlmacen } from '../../inventario-almacen/entities/inventario-almacen.entity';
 
 @Entity('lotes')
 export class Lote {
@@ -28,6 +31,13 @@ export class Lote {
   @JoinColumn({ name: 'laboratorioId' })
   laboratorio: Laboratorio;
 
+  @Column({ nullable: true })
+  recepcionId: string;
+
+  @ManyToOne(() => Recepcion, { nullable: true })
+  @JoinColumn({ name: 'recepcionId' })
+  recepcion: Recepcion;
+
   @Column({
     type: 'enum',
     enum: StatusId,
@@ -40,4 +50,7 @@ export class Lote {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => InventarioAlmacen, inv => inv.lote)
+  inventarioAlmacen: InventarioAlmacen[];
 }

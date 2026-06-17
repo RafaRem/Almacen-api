@@ -15,7 +15,7 @@ export class CreateCategoriaClienteDto {
   nombre: string;
 
   @IsNumber()
-  @Min(2)
+  @Min(0)
   @Max(5)
   descuento: number;
 }
@@ -27,7 +27,7 @@ export class UpdateCategoriaClienteDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(2)
+  @Min(0)
   @Max(5)
   descuento?: number;
 

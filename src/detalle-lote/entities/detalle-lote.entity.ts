@@ -10,9 +10,9 @@ import {
 } from 'typeorm';
 import { Producto } from '../../productos/entities/producto.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
+import { MovimientoAlmacen } from '../../movimientos-almacen/entities/movimiento-almacen.entity';
 
 @Entity('detalle_lote')
-@Index('uq_detalle_lote_producto_lote', ['productoId', 'loteId'], { unique: true })
 export class DetalleLote {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -45,6 +45,16 @@ export class DetalleLote {
     nullable: true,
   })
   ivaCfdi: number | null;
+
+  @Column({ type: 'uuid', name: 'movimientoid', nullable: true })
+  movimientoId: string;
+
+  @ManyToOne(() => MovimientoAlmacen)
+  @JoinColumn({ name: 'movimientoid' })
+  movimiento: MovimientoAlmacen;
+
+  @Column({ name: 'almacen_tipo', type: 'int', nullable: true })
+  almacenTipo: number;
 
   @CreateDateColumn()
   createdAt: Date;

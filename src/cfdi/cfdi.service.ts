@@ -6,7 +6,10 @@ import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
+import { ProveedoresService } from '../proveedores/proveedores.service';
+import { RecepcionesService } from '../recepciones/recepciones.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { TipoMovimiento } from '../common/constants';
 import {
   CfdiPreviewDto,
   RecepcionConfirmadaDto,
@@ -24,6 +27,8 @@ export class CfdiService {
     private laboratorioRepository: Repository<Laboratorio>,
     private inventarioAlmacenService: InventarioAlmacenService,
     private detalleLoteService: DetalleLoteService,
+    private proveedoresService: ProveedoresService,
+    private recepcionesService: RecepcionesService,
   ) {}
 
   async parseXmlToPreview(xmlContent: string): Promise<CfdiPreviewDto> {
@@ -50,19 +55,41 @@ export class CfdiService {
     const xml = this.removeXmlDeclaration(dto.xmlContent);
     const cfdiData = this.extractCfdiData(xml);
 
-    const result = await this.processLaboratorio(cfdiData.emisor);
+    const labResult = await this.processLaboratorio(cfdiData.emisor);
+
+    let proveedor = await this.proveedoresService.findByRfc(cfdiData.emisor.rfc);
+    if (!proveedor) {
+      proveedor = await this.proveedoresService.create({
+        nombre: cfdiData.emisor.nombre,
+        rfc: cfdiData.emisor.rfc,
+      });
+    }
+
+    const recepcion = await this.recepcionesService.create({
+      serie: cfdiData.serie,
+      folio: cfdiData.folio,
+      fecha: cfdiData.fecha ? new Date(cfdiData.fecha) : undefined,
+      emisorRfc: cfdiData.emisor.rfc,
+      emisorNombre: cfdiData.emisor.nombre,
+      subtotal: cfdiData.subtotal,
+      total: cfdiData.total,
+      proveedorId: proveedor.id,
+      xmlContent: dto.xmlContent,
+    });
+
     const { productosCreados, productosExistentes } =
       await this.processProductos(
         dto.productos,
         cfdiData.conceptos,
         userId,
-        result.laboratorioId,
+        labResult.laboratorioId,
         cfdiData.serie,
         cfdiData.folio,
+        recepcion.id,
       );
 
     const mensaje = this.generarMensaje(
-      result.esNuevo,
+      labResult.esNuevo,
       cfdiData.emisor.rfc,
       cfdiData.emisor.nombre,
       productosCreados.length,
@@ -73,7 +100,7 @@ export class CfdiService {
       laboratorio: {
         rfc: cfdiData.emisor.rfc,
         nombre: cfdiData.emisor.nombre,
-        esNuevo: result.esNuevo,
+        esNuevo: labResult.esNuevo,
       },
       productosCreados,
       productosExistentes,
@@ -190,6 +217,7 @@ export class CfdiService {
     laboratorioId: string,
     serie: string,
     folio: string,
+    recepcionId: string,
   ): Promise<{
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
@@ -197,17 +225,16 @@ export class CfdiService {
     const productosCreados: { nombre: string; codigoBarras: string }[] = [];
     const productosExistentes: { nombre: string; codigoBarras: string }[] = [];
 
-    const numeroLoteUnico = `LOTE-${serie || 'X'}-${folio || '0'}`;
-    const fechaCaducidadGeneral = productosDto[0]?.fechaCaducidad;
-    const lote = await this.crearOLocalizarLote(
-      numeroLoteUnico,
-      fechaCaducidadGeneral,
-      laboratorioId,
-    );
-
     for (const prodDto of productosDto) {
       const concepto = conceptos.find(
         (c) => c.noIdentificacion === prodDto.productoId,
+      );
+
+      const lote = await this.crearOLocalizarLote(
+        `LOTE-${serie || 'X'}-${folio || '0'}-${prodDto.productoId}`,
+        prodDto.fechaCaducidad,
+        laboratorioId,
+        recepcionId,
       );
 
       let producto: Producto | null = null;
@@ -233,13 +260,16 @@ export class CfdiService {
         });
       }
 
-      await this.inventarioAlmacenService.agregarStock(
+      const inventario = await this.inventarioAlmacenService.agregarStock(
         producto.id,
         lote.id,
         AlmacenTipo.RECEPCION,
         prodDto.cantidad,
         concepto?.ivaCfdi,
         concepto?.valorUnitario || 0,
+        undefined,
+        TipoMovimiento.ENTRADA_BODEGA,
+        userId,
       );
 
       await this.detalleLoteService.create({
@@ -248,6 +278,8 @@ export class CfdiService {
         cantidad: prodDto.cantidad,
         precioUnitario: concepto?.valorUnitario || 0,
         ivaCfdi: concepto?.ivaCfdi || null,
+        movimientoId: inventario.ultimoMovimientoId || undefined,
+        almacenTipo: AlmacenTipo.RECEPCION,
       });
     }
 
@@ -278,12 +310,17 @@ export class CfdiService {
     numeroLote: string,
     fechaCaducidad: string | undefined,
     laboratorioId: string,
+    recepcionId?: string,
   ): Promise<Lote> {
     const loteExistente = await this.loteRepository.findOne({
       where: { numeroLote: numeroLote },
     });
 
     if (loteExistente) {
+      if (fechaCaducidad) {
+        loteExistente.fechaCaducidad = new Date(fechaCaducidad);
+        await this.loteRepository.save(loteExistente);
+      }
       return loteExistente;
     }
 
@@ -293,6 +330,7 @@ export class CfdiService {
         ? new Date(fechaCaducidad)
         : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       laboratorioId: laboratorioId,
+      recepcionId: recepcionId || undefined,
       statusId: 1,
     });
     return this.loteRepository.save(nuevoLote);

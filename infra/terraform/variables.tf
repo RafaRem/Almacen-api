@@ -8,6 +8,12 @@ variable "subscription_id" {
   type        = string
 }
 
+variable "key_vault_secrets_officer_principal_id" {
+  description = "Stable Azure AD principal ID that receives Key Vault Secrets Officer for local secret management. Defaults to the caller only for one-off local bootstraps."
+  type        = string
+  default     = null
+}
+
 variable "project_name" {
   description = "Short project name used in Azure resource names."
   type        = string

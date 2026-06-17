@@ -95,7 +95,7 @@ resource "azurerm_key_vault" "main" {
 resource "azurerm_role_assignment" "current_user_key_vault_secrets_officer" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = coalesce(var.key_vault_secrets_officer_principal_id, data.azurerm_client_config.current.object_id)
 }
 
 resource "azurerm_role_assignment" "container_apps_key_vault_secrets_user" {

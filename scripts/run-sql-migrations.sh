@@ -6,6 +6,12 @@ schema_migrations_table="${SCHEMA_MIGRATIONS_TABLE:-schema_migrations}"
 bootstrap_empty_database="${BOOTSTRAP_EMPTY_DATABASE:-false}"
 baseline_existing_database="${BASELINE_EXISTING_DATABASE:-false}"
 baseline_sql_migrations_on_bootstrap="${BASELINE_SQL_MIGRATIONS_ON_BOOTSTRAP:-true}"
+bootstrap_sql_files="${BOOTSTRAP_SQL_FILES:-migrations/001_add_precio_venta_trigger.sql}"
+
+if [[ ! "$schema_migrations_table" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  echo "Invalid schema migrations table name: $schema_migrations_table" >&2
+  exit 1
+fi
 
 require_env() {
   local name="$1"
@@ -67,6 +73,55 @@ CREATE TABLE IF NOT EXISTS ${schema_migrations_table} (
 SQL
 }
 
+insert_schema_migration() {
+  local filename="$1"
+  local checksum="$2"
+  local on_conflict="${3:-}"
+
+  "${psql_base[@]}" \
+    --set filename="$filename" \
+    --set checksum="$checksum" <<SQL
+INSERT INTO ${schema_migrations_table} (filename, checksum)
+VALUES (:'filename', :'checksum')
+${on_conflict};
+SQL
+}
+
+schema_migration_checksum() {
+  local filename="$1"
+
+  "${psql_base[@]}" \
+    --tuples-only \
+    --no-align \
+    --set filename="$filename" <<SQL
+SELECT checksum
+FROM ${schema_migrations_table}
+WHERE filename = :'filename';
+SQL
+}
+
+schema_migration_count() {
+  psql_scalar "SELECT count(*) FROM ${schema_migrations_table};"
+}
+
+run_bootstrap_sql_files() {
+  local file
+
+  if [[ -z "$bootstrap_sql_files" ]]; then
+    return 0
+  fi
+
+  for file in $bootstrap_sql_files; do
+    if [[ ! -f "$file" ]]; then
+      echo "Bootstrap SQL file not found: $file" >&2
+      exit 1
+    fi
+
+    echo "Applying bootstrap SQL file: $file"
+    "${psql_base[@]}" --single-transaction --file "$file"
+  done
+}
+
 baseline_sql_migrations() {
   local found_migrations=false
   local file filename checksum
@@ -77,10 +132,7 @@ baseline_sql_migrations() {
     checksum="$(checksum_file "$file")"
 
     echo "Baselining migration: $filename"
-    "${psql_base[@]}" \
-      --set filename="$filename" \
-      --set checksum="$checksum" \
-      --command "INSERT INTO ${schema_migrations_table} (filename, checksum) VALUES (:'filename', :'checksum') ON CONFLICT (filename) DO NOTHING;"
+    insert_schema_migration "$filename" "$checksum" "ON CONFLICT (filename) DO NOTHING"
   done < <(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' | sort)
 
   if [[ "$found_migrations" == false ]]; then
@@ -108,6 +160,7 @@ if [[ "$app_table_count" == "0" ]]; then
 
   echo "Database is empty; bootstrapping schema with TypeORM."
   npm run schema:sync
+  run_bootstrap_sql_files
   ensure_schema_migrations_table
 
   if [[ "$baseline_sql_migrations_on_bootstrap" == "true" ]]; then
@@ -133,19 +186,27 @@ fi
 
 ensure_schema_migrations_table
 
+applied_migration_count="$(schema_migration_count)"
+if [[ "$applied_migration_count" == "0" ]]; then
+  if [[ "$baseline_existing_database" != "true" && ! ( "$bootstrap_empty_database" == "true" && "$baseline_sql_migrations_on_bootstrap" == "true" ) ]]; then
+    echo "Database has application tables and an empty ${schema_migrations_table} table." >&2
+    echo "Refusing to replay historical SQL migrations. Set BASELINE_EXISTING_DATABASE=true once if this database is already up to date." >&2
+    exit 1
+  fi
+
+  run_bootstrap_sql_files
+  baseline_sql_migrations
+  echo "SQL migration baseline completed."
+  exit 0
+fi
+
 found_migrations=false
 
 while IFS= read -r file; do
   found_migrations=true
   filename="$(basename "$file")"
   checksum="$(checksum_file "$file")"
-  applied_checksum="$(
-    "${psql_base[@]}" \
-      --tuples-only \
-      --no-align \
-      --set filename="$filename" \
-      --command "SELECT checksum FROM ${schema_migrations_table} WHERE filename = :'filename';"
-  )"
+  applied_checksum="$(schema_migration_checksum "$filename")"
 
   if [[ -n "$applied_checksum" ]]; then
     if [[ "$applied_checksum" != "$checksum" ]]; then
@@ -165,10 +226,7 @@ while IFS= read -r file; do
     "${psql_base[@]}" --single-transaction --file "$file"
   fi
 
-  "${psql_base[@]}" \
-    --set filename="$filename" \
-    --set checksum="$checksum" \
-    --command "INSERT INTO ${schema_migrations_table} (filename, checksum) VALUES (:'filename', :'checksum');"
+  insert_schema_migration "$filename" "$checksum"
 done < <(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' | sort)
 
 if [[ "$found_migrations" == false ]]; then

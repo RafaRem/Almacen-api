@@ -73,7 +73,10 @@ export class FacturasService {
       );
       nuevoFolio = Number(result[0].folio);
     } catch {
-      nuevoFolio = 1;
+      const result = await this.facturaRepository.query(
+        `SELECT COALESCE(MAX(folio), 0) + 1 AS folio FROM facturas`,
+      );
+      nuevoFolio = Number(result[0].folio);
     }
 
     const detallesData = await this.calcularDetalles(productos);

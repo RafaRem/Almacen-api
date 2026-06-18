@@ -88,6 +88,37 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
+  async createTestUser(createUserDto: CreateUserDto): Promise<User> {
+    const existingUser = await this.usersRepository.findOne({
+      where: [
+        { email: createUserDto.email },
+        { username: createUserDto.username },
+      ],
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Email or username already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+
+    const userData: Partial<User> = {
+      ...createUserDto,
+      password: hashedPassword,
+      tipo: createUserDto.tipo || UserTipo.USER,
+    };
+
+    const user = this.usersRepository.create(userData);
+    const savedUser = await this.usersRepository.save(user);
+
+    await this.usersPermissionsService.createDefaultPermissions(
+      savedUser.id,
+      savedUser.tipo,
+    );
+
+    return savedUser;
+  }
+
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
     await this.usersPermissionsService.deletePermissionsForUser(id);

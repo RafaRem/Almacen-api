@@ -1,5 +1,7 @@
 import { Controller, Post, Body, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { CreateUserDto } from '../users/dto/create-user.dto';
+import { UsersService } from '../users/users.service';
 
 interface LoginDto {
   emailOrUsername: string;
@@ -8,7 +10,10 @@ interface LoginDto {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private usersService: UsersService,
+  ) {}
 
   @Post('login')
   async login(@Body() body: LoginDto) {
@@ -31,4 +36,9 @@ export class AuthController {
     }
     return this.authService.refreshToken(refreshToken);
   }
+
+  // @Post('test-create-user')
+  // async testCreateUser(@Body() createUserDto: CreateUserDto) {
+  //   return this.usersService.createTestUser(createUserDto);
+  // }
 }

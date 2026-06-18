@@ -36,6 +36,9 @@ import { DetalleVentaLote } from '../ventas/entities/detalle-venta-lote.entity';
 export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
+  const sslEnabled = configService.get<string>('DATABASE_SSL') === 'true'
+  const sslRejectUnauthorized = configService.get<string>('DATABASE_SSL_REJECT_UNAUTHORIZED') !== 'false'
+
   return {
     type: 'postgres',
     host: configService.get<string>('DATABASE_HOST'),
@@ -43,6 +46,10 @@ export const getDatabaseConfig = (
     username: configService.get<string>('DATABASE_USER'),
     password: configService.get<string>('DATABASE_PASSWORD'),
     database: configService.get<string>('DATABASE_NAME'),
+    ...(sslEnabled && {
+      ssl: { rejectUnauthorized: sslRejectUnauthorized },
+      extra: { ssl: { rejectUnauthorized: sslRejectUnauthorized } },
+    }),
     timezone: 'America/Mexico_City',
     entities: [
       User,
@@ -80,5 +87,7 @@ export const getDatabaseConfig = (
       DetalleVentaLote,
     ],
     synchronize: false,
+    migrationsRun: false,
+    migrations: [],
   } as any;
 };

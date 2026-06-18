@@ -1,0 +1,260 @@
+name: Deploy Production
+run-name: Deploy production from ${{ github.event.release.tag_name }}
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: acrnuevaeraprod2xg97h
+  ACR_LOGIN_SERVER: acrnuevaeraprod2xg97h.azurecr.io
+  IMAGE_NAME: almacen-api
+  KEY_VAULT_NAME: kv-nueva-era-prod-2xg97h
+  POSTGRES_SECRET_NAME: postgres-admin-password
+  TERRAFORM_DIR: infra/terraform
+
+jobs:
+  prepare:
+    name: Prepare release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      sha_tag: ${{ steps.meta.outputs.sha_tag }}
+    steps:
+      - name: Resolve image tags
+        id: meta
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" != "release" || -z "$RELEASE_TAG" ]]; then
+            echo "Production deploys must be triggered by publishing a GitHub Release." >&2
+            exit 1
+          fi
+
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            echo "Pre-releases do not deploy to production. Publish a normal release when ready." >&2
+            exit 1
+          fi
+
+          image_tag="$(printf '%s' "$RELEASE_TAG" | tr '/:' '--' | tr -cd 'A-Za-z0-9_.-')"
+          sha_tag="sha-${GITHUB_SHA::12}"
+
+          if [[ -z "$image_tag" ]]; then
+            echo "Could not resolve a Docker image tag." >&2
+            exit 1
+          fi
+
+          {
+            echo "release_tag=$RELEASE_TAG"
+            echo "image_tag=$image_tag"
+            echo "sha_tag=$sha_tag"
+          } >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Build and smoke test
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Health smoke test
+        run: npm run test:smoke
+
+  build:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    needs: [prepare, validate]
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: 8c188447-4769-4b0a-924a-d89592cf51e0
+          tenant-id: 19767c7d-34c4-415c-9a1d-45ccfb89a3dd
+          subscription-id: 5e3f35c0-0fe2-40db-a778-723c73670c4c
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Azure Container Registry
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build and push release image
+        env:
+          IMAGE_TAG: ${{ needs.prepare.outputs.image_tag }}
+          SHA_TAG: ${{ needs.prepare.outputs.sha_tag }}
+        run: |
+          set -euo pipefail
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --push \
+            --tag "$ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG" \
+            --tag "$ACR_LOGIN_SERVER/$IMAGE_NAME:$SHA_TAG" \
+            --tag "$ACR_LOGIN_SERVER/$IMAGE_NAME:latest" \
+            .
+
+  migrate:
+    name: Run database migrations
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: 8c188447-4769-4b0a-924a-d89592cf51e0
+          tenant-id: 19767c7d-34c4-415c-9a1d-45ccfb89a3dd
+          subscription-id: 5e3f35c0-0fe2-40db-a778-723c73670c4c
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Run SQL migrations
+        env:
+          DATABASE_HOST: psql-nueva-era-prod-eastus2-2xg97h.postgres.database.azure.com
+          DATABASE_PORT: "5432"
+          DATABASE_USER: almacenadmin
+          DATABASE_NAME: almacen
+          DATABASE_SSL: "true"
+          DATABASE_SSL_REJECT_UNAUTHORIZED: "false"
+          PGSSLMODE: require
+          BOOTSTRAP_EMPTY_DATABASE: "true"
+        run: |
+          set -euo pipefail
+
+          export DATABASE_PASSWORD="$(
+            az keyvault secret show \
+              --vault-name "$KEY_VAULT_NAME" \
+              --name "$POSTGRES_SECRET_NAME" \
+              --query value \
+              --output tsv
+          )"
+
+          ./scripts/run-sql-migrations.sh
+
+  deploy:
+    name: Deploy Container App
+    runs-on: ubuntu-latest
+    needs: [prepare, migrate]
+    environment: prod
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: 8c188447-4769-4b0a-924a-d89592cf51e0
+      ARM_TENANT_ID: 19767c7d-34c4-415c-9a1d-45ccfb89a3dd
+      ARM_SUBSCRIPTION_ID: 5e3f35c0-0fe2-40db-a778-723c73670c4c
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: 8c188447-4769-4b0a-924a-d89592cf51e0
+          tenant-id: 19767c7d-34c4-415c-9a1d-45ccfb89a3dd
+          subscription-id: 5e3f35c0-0fe2-40db-a778-723c73670c4c
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform init -reconfigure
+
+      - name: Terraform apply
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          IMAGE_TAG: ${{ needs.prepare.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          export TF_VAR_postgres_admin_password="$(
+            az keyvault secret show \
+              --vault-name "$KEY_VAULT_NAME" \
+              --name "$POSTGRES_SECRET_NAME" \
+              --query value \
+              --output tsv
+          )"
+
+          terraform apply \
+            -auto-approve \
+            -var "backend_image_tag=$IMAGE_TAG"
+
+      - name: Verify public health
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          set -euo pipefail
+
+          fqdn="$(terraform output -raw container_app_fqdn)"
+          health_url="https://${fqdn}/health"
+
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error "$health_url"; then
+              exit 0
+            fi
+
+            echo "Waiting for healthy Container App revision ($attempt/20)..."
+            sleep 10
+          done
+
+          curl -i "$health_url"
+          exit 1

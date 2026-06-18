@@ -37,11 +37,19 @@ lerna-debug.log*
 
 # dotenv environment variable files
 .env
+.env.*
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
 .env.dev
+
+# Terraform local state and plans
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/tfplan
+**/*.tfplan
 
 # temp directory
 .temp

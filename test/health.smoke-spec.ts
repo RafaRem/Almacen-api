@@ -5,10 +5,10 @@ import { App } from 'supertest/types';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 
-describe('AppController (e2e)', () => {
+describe('Health smoke', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
       providers: [AppService],
@@ -18,15 +18,19 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await app.close();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
-  });
+  it('responds to GET /health with an ok payload', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health')
+      .expect(200);
 
+    expect(response.body).toEqual({
+      status: 'ok',
+      uptime: expect.any(Number),
+      timestamp: expect.any(String),
+    });
+  });
 });

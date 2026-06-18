@@ -61,10 +61,17 @@ export class VentasService {
   }
 
   private async getNextFolio(): Promise<number> {
-    const result = await this.ventasRepository.query(
-      `SELECT nextval('ventas_folio_seq') AS folio`,
-    );
-    return Number(result[0].folio);
+    try {
+      const result = await this.ventasRepository.query(
+        `SELECT nextval('ventas_folio_seq') AS folio`,
+      );
+      return Number(result[0].folio);
+    } catch {
+      const result = await this.ventasRepository.query(
+        `SELECT COALESCE(MAX(folio), 0) + 1 AS folio FROM ventas`,
+      );
+      return Number(result[0].folio);
+    }
   }
 
   async create(

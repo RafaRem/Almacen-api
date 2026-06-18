@@ -75,7 +75,8 @@ export const databaseEntities = [
 export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
-  const useSsl = configService.get<string>('DATABASE_SSL') === 'true';
+  const sslEnabled = configService.get<string>('DATABASE_SSL') === 'true'
+  const sslRejectUnauthorized = configService.get<string>('DATABASE_SSL_REJECT_UNAUTHORIZED') !== 'false'
 
   return {
     type: 'postgres',
@@ -84,16 +85,14 @@ export const getDatabaseConfig = (
     username: configService.get<string>('DATABASE_USER'),
     password: configService.get<string>('DATABASE_PASSWORD'),
     database: configService.get<string>('DATABASE_NAME'),
+    ...(sslEnabled && {
+      ssl: { rejectUnauthorized: sslRejectUnauthorized },
+      extra: { ssl: { rejectUnauthorized: sslRejectUnauthorized } },
+    }),
     timezone: 'America/Mexico_City',
-    uuidExtension: 'pgcrypto',
     entities: databaseEntities,
-    ssl: useSsl
-      ? {
-          rejectUnauthorized:
-            configService.get<string>('DATABASE_SSL_REJECT_UNAUTHORIZED') !==
-            'false',
-        }
-      : undefined,
-    synchronize: configService.get<string>('DATABASE_SYNCHRONIZE') === 'true',
+    synchronize: false,
+    migrationsRun: false,
+    migrations: [],
   } as any;
 };

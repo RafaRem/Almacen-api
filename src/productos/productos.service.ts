@@ -127,13 +127,26 @@ export class ProductosService {
 
   async checkExistence(
     codigosBarras: string[],
-  ): Promise<{ codigoBarras: string; existe: boolean; nombre?: string }[]> {
+  ): Promise<{ codigoBarras: string; existe: boolean; nombre?: string; tieneInventario: boolean }[]> {
     const productos = await this.productosRepository
       .createQueryBuilder('producto')
       .where('producto.codigoBarras IN (:...codigosBarras)')
       .setParameter('codigosBarras', codigosBarras)
-      .select(['producto.codigoBarras', 'producto.nombre'])
+      .select(['producto.codigoBarras', 'producto.nombre', 'producto.id'])
       .getMany();
+
+    let inventorySet = new Set<string>();
+    if (productos.length > 0) {
+      const ids = productos.map((p) => p.id);
+      const inventoryRows = await this.productosRepository.manager
+        .createQueryBuilder()
+        .select('inv."productoId"')
+        .from('inventario_almacen', 'inv')
+        .where('inv."productoId" IN (:...ids)', { ids })
+        .groupBy('inv."productoId"')
+        .getRawMany();
+      inventoryRows.forEach((r) => inventorySet.add(r.productoId));
+    }
 
     return codigosBarras.map((codigo) => {
       const existente = productos.find((p) => p.codigoBarras === codigo);
@@ -141,6 +154,7 @@ export class ProductosService {
         codigoBarras: codigo,
         existe: !!existente,
         nombre: existente?.nombre,
+        tieneInventario: existente ? inventorySet.has(existente.id) : false,
       };
     });
   }

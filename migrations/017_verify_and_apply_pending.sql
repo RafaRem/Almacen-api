@@ -107,7 +107,7 @@ SELECT 'typeorm' as migration,
 -- Example:
 -- -- 015: indices
 -- CREATE INDEX IF NOT EXISTS idx_inventario_almacen_productoId ON inventario_almacen ("productoId");
--- CREATE INDEX IF NOT EXISTS idx_inventario_almacen_producto_almacen ON inventario_almacen ("productoId", "almacenId");
+-- CREATE INDEX IF NOT EXISTS idx_inventario_almacen_producto_almacen ON inventario_almacen ("productoId", "almacenTipo");
 --
 -- 016: sequences
 -- CREATE SEQUENCE IF NOT EXISTS public.ventas_folio_seq START 1;

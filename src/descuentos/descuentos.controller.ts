@@ -20,6 +20,7 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { UserModule } from '../common/enums/user-module.enum';
 import { ClientesService } from '../clientes/clientes.service';
+import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 
 @Controller('descuentos')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -27,6 +28,7 @@ export class DescuentosController {
   constructor(
     private readonly descuentosService: DescuentosService,
     private readonly clientesService: ClientesService,
+    private readonly inventarioAlmacenService: InventarioAlmacenService,
   ) {}
 
   @Post()
@@ -63,12 +65,20 @@ export class DescuentosController {
       } catch {}
     }
     const fechaCad = fechaCaducidad ? new Date(fechaCaducidad) : undefined;
+    let precioVenta: number | undefined;
+    try {
+      const inventario = await this.inventarioAlmacenService.findByProductoId(productoId);
+      if (inventario?.precioVenta) {
+        precioVenta = Number(inventario.precioVenta);
+      }
+    } catch {}
     return this.descuentosService.calcularDescuentosAcumulables(
       productoId,
       Number(cantidad),
       laboratorioId || '',
       categoriaClienteId,
       fechaCad,
+      precioVenta,
     );
   }
 

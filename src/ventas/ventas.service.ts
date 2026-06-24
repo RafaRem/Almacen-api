@@ -773,7 +773,9 @@ export class VentasService {
           descuentoCategoriaInfo.monto = descuentoCategoriaMonto;
         }
 
-        descuentoLinea = descuentoProductoMonto + descuentoCategoriaMonto;
+        descuentoLinea = calculo.excedeLimite
+          ? calculo.descuentoTotal
+          : descuentoProductoMonto + descuentoCategoriaMonto;
 
         preciosAlternativos = [];
       } catch (error) {

@@ -691,8 +691,8 @@ export class InventarioAlmacenService {
               precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
               precioVenta: inventarioOrigen.precioVenta,
               ivaCfdi: inventarioOrigen.ivaCfdi,
-              ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
-            });
+          ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
+        });
           }
 
           const savedDestino = await manager.save(inventarioDestino);
@@ -807,7 +807,7 @@ export class InventarioAlmacenService {
 
   async findByProductoId(productoId: string): Promise<InventarioAlmacen | null> {
     return this.inventarioRepository.findOne({
-      where: { productoId },
+      where: { productoId, almacenTipo: AlmacenTipo.VENTAS },
       relations: ['lote'],
       order: { createdAt: 'DESC' },
     });

@@ -128,10 +128,22 @@ describe('ProductosService', () => {
         {
           codigoBarras: producto.codigoBarras,
           nombre: producto.nombre,
+          id: producto.id,
         },
       ]),
     };
     repository.createQueryBuilder?.mockReturnValue(queryBuilder);
+
+    const managerQB = {
+      select: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([{ productoId: producto.id }]),
+    };
+    (repository as any).manager = {
+      createQueryBuilder: jest.fn(() => managerQB),
+    };
 
     await expect(
       service.checkExistence([producto.codigoBarras, 'missing-code']),
@@ -140,8 +152,9 @@ describe('ProductosService', () => {
         codigoBarras: producto.codigoBarras,
         existe: true,
         nombre: producto.nombre,
+        tieneInventario: true,
       },
-      { codigoBarras: 'missing-code', existe: false, nombre: undefined },
+      { codigoBarras: 'missing-code', existe: false, nombre: undefined, tieneInventario: false },
     ]);
   });
 });

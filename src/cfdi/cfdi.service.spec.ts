@@ -58,10 +58,19 @@ describe('CfdiService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CfdiService,
-        { provide: getRepositoryToken(Producto), useValue: mockProductoRepository },
+        {
+          provide: getRepositoryToken(Producto),
+          useValue: mockProductoRepository,
+        },
         { provide: getRepositoryToken(Lote), useValue: mockLoteRepository },
-        { provide: getRepositoryToken(Laboratorio), useValue: mockLaboratorioRepository },
-        { provide: InventarioAlmacenService, useValue: mockInventarioAlmacenService },
+        {
+          provide: getRepositoryToken(Laboratorio),
+          useValue: mockLaboratorioRepository,
+        },
+        {
+          provide: InventarioAlmacenService,
+          useValue: mockInventarioAlmacenService,
+        },
         { provide: DetalleLoteService, useValue: mockDetalleLoteService },
         { provide: ProveedoresService, useValue: mockProveedoresService },
         { provide: RecepcionesService, useValue: mockRecepcionesService },
@@ -96,11 +105,14 @@ describe('CfdiService', () => {
       const xml = '<cfdi:Comprobante><cfdi:Emisor Rfc="X"/></cfdi:Comprobante>';
       const result = await service.validarXml(xml);
       expect(result.valido).toBe(false);
-      expect(result.errores).toContain('El CFDI no contiene conceptos (productos)');
+      expect(result.errores).toContain(
+        'El CFDI no contiene conceptos (productos)',
+      );
     });
 
     it('should return error when no emisor RFC', async () => {
-      const xml = '<cfdi:Comprobante><cfdi:Conceptos><cfdi:Concepto/></cfdi:Conceptos></cfdi:Comprobante>';
+      const xml =
+        '<cfdi:Comprobante><cfdi:Conceptos><cfdi:Concepto/></cfdi:Conceptos></cfdi:Comprobante>';
       const result = await service.validarXml(xml);
       expect(result.valido).toBe(false);
       expect(result.errores.some((e) => e.includes('RFC'))).toBe(true);

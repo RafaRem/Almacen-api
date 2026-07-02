@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual, Between, ILike } from 'typeorm';
+import {
+  Repository,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Between,
+  ILike,
+} from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { DocumentoCliente } from '../uploads/entities/documento-cliente.entity';
@@ -32,7 +38,6 @@ export interface ResumenClientesFilters {
 
 @Injectable()
 export class ReportesService {
-
   constructor(
     @InjectRepository(Producto)
     private productosRepository: Repository<Producto>,
@@ -68,9 +73,12 @@ export class ReportesService {
       ])
       .where('venta.statusId = :statusId', { statusId: 1 });
     if (filters?.clienteNombre) {
-      queryBuilder.andWhere('LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)', {
-        clienteNombre: `%${filters.clienteNombre}%`,
-      });
+      queryBuilder.andWhere(
+        'LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)',
+        {
+          clienteNombre: `%${filters.clienteNombre}%`,
+        },
+      );
     }
     if (filters?.fechaFrom) {
       queryBuilder.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
@@ -91,7 +99,10 @@ export class ReportesService {
       fechaVenta: r.fecha_venta,
       producto: r.producto_nombre,
       cantidad: parseInt(r.cantidad, 10) || 0,
-      precioVenta: parseInt(r.cantidad, 10) > 0 ? (parseFloat(r.importe_bruto) / parseInt(r.cantidad, 10)) : 0,
+      precioVenta:
+        parseInt(r.cantidad, 10) > 0
+          ? parseFloat(r.importe_bruto) / parseInt(r.cantidad, 10)
+          : 0,
       total: parseFloat(r.importe_bruto) || 0,
     }));
   }
@@ -115,12 +126,17 @@ export class ReportesService {
         fechaFrom: new Date(filters.fechaFrom + 'T00:00:00.000Z'),
         fechaTo: new Date(filters.fechaTo + 'T23:59:59.999Z'),
       })
-      .groupBy('cliente.id, cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno, cliente.rfc, categoria.nombre');
+      .groupBy(
+        'cliente.id, cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno, cliente.rfc, categoria.nombre',
+      );
 
     if (filters.clienteNombre) {
-      qb.andWhere("LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, ''))) LIKE :clienteNombre", {
-        clienteNombre: `%${filters.clienteNombre.toLowerCase()}%`,
-      });
+      qb.andWhere(
+        "LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, ''))) LIKE :clienteNombre",
+        {
+          clienteNombre: `%${filters.clienteNombre.toLowerCase()}%`,
+        },
+      );
     }
     if (filters.rfc) {
       qb.andWhere('LOWER(cliente.rfc) LIKE :rfc', {
@@ -139,7 +155,10 @@ export class ReportesService {
       const clientIds = resumen.map((r) => r.cliente_id);
       const ultimasCompras = await this.ventasRepository
         .createQueryBuilder('venta')
-        .select(['venta.clienteId AS cliente_id', 'MAX(venta.createdAt) AS ultima_compra'])
+        .select([
+          'venta.clienteId AS cliente_id',
+          'MAX(venta.createdAt) AS ultima_compra',
+        ])
         .where('venta.clienteId IN (:...clientIds)', { clientIds })
         .andWhere('venta.statusId = :statusActivo', { statusActivo: 1 })
         .groupBy('venta.clienteId')
@@ -154,19 +173,29 @@ export class ReportesService {
         const uc = ultimaCompraMap.get(row.cliente_id);
         row.ultima_compra = uc || null;
         row.dias_sin_comprar = uc
-          ? Math.floor((ahora.getTime() - new Date(uc).getTime()) / (1000 * 60 * 60 * 24))
+          ? Math.floor(
+              (ahora.getTime() - new Date(uc).getTime()) /
+                (1000 * 60 * 60 * 24),
+            )
           : null;
       }
     }
 
-    const totalCompras = resumen.reduce((s, r) => s + Number(r.cantidad_compras), 0);
+    const totalCompras = resumen.reduce(
+      (s, r) => s + Number(r.cantidad_compras),
+      0,
+    );
     const ventaTotal = resumen.reduce((s, r) => s + Number(r.total_vendido), 0);
     const clienteMayorCompra = resumen.reduce(
-      (best, r) => (Number(r.total_vendido) > Number(best?.total_vendido || 0) ? r : best),
+      (best, r) =>
+        Number(r.total_vendido) > Number(best?.total_vendido || 0) ? r : best,
       null,
     );
     const clienteMasFrecuente = resumen.reduce(
-      (best, r) => (Number(r.cantidad_compras) > Number(best?.cantidad_compras || 0) ? r : best),
+      (best, r) =>
+        Number(r.cantidad_compras) > Number(best?.cantidad_compras || 0)
+          ? r
+          : best,
       null,
     );
     const diasInact = filters.diasInactividad ?? 90;
@@ -192,10 +221,16 @@ export class ReportesService {
         ventaTotal,
         ticketPromedioGlobal: totalCompras > 0 ? ventaTotal / totalCompras : 0,
         clienteMayorCompra: clienteMayorCompra
-          ? { nombre: clienteMayorCompra.cliente_nombre, totalVendido: Number(clienteMayorCompra.total_vendido) }
+          ? {
+              nombre: clienteMayorCompra.cliente_nombre,
+              totalVendido: Number(clienteMayorCompra.total_vendido),
+            }
           : null,
         clienteMasFrecuente: clienteMasFrecuente
-          ? { nombre: clienteMasFrecuente.cliente_nombre, cantidadCompras: Number(clienteMasFrecuente.cantidad_compras) }
+          ? {
+              nombre: clienteMasFrecuente.cliente_nombre,
+              cantidadCompras: Number(clienteMasFrecuente.cantidad_compras),
+            }
           : null,
         clientesInactivos,
         diasInactividad: diasInact,
@@ -218,9 +253,12 @@ export class ReportesService {
       .where('venta.statusId = :statusId', { statusId: 1 })
       .groupBy('producto.id, producto.nombre, lote.numeroLote');
     if (filters?.productoNombre) {
-      queryBuilder.andWhere('LOWER(producto.nombre) LIKE LOWER(:productoNombre)', {
-        productoNombre: `%${filters.productoNombre}%`,
-      });
+      queryBuilder.andWhere(
+        'LOWER(producto.nombre) LIKE LOWER(:productoNombre)',
+        {
+          productoNombre: `%${filters.productoNombre}%`,
+        },
+      );
     }
     if (filters?.folioVenta) {
       const folioNum = parseInt(filters.folioVenta, 10);
@@ -254,14 +292,20 @@ export class ReportesService {
       .createQueryBuilder('inventario')
       .leftJoinAndSelect('inventario.lote', 'lote')
       .where('inventario.productoId = :productoId', { productoId })
-      .andWhere('inventario.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
+      .andWhere('inventario.almacenTipo = :almacenTipo', {
+        almacenTipo: AlmacenTipo.VENTAS,
+      })
       .getMany();
 
     const stockTotal = inventarios.reduce(
-      (sum, inv) => sum + Number(inv.cantidadActual || 0), 0,
+      (sum, inv) => sum + Number(inv.cantidadActual || 0),
+      0,
     );
 
-    const precioMap = new Map<string, { precioUnitarioLote: number; precioVenta: number }>();
+    const precioMap = new Map<
+      string,
+      { precioUnitarioLote: number; precioVenta: number }
+    >();
     for (const inv of inventarios) {
       precioMap.set(inv.loteId, {
         precioUnitarioLote: inv.precioUnitarioLote || 0,
@@ -281,10 +325,11 @@ export class ReportesService {
       .orderBy('venta.createdAt', 'DESC')
       .getMany();
     const trazabilidad = detalles.map((d) => {
-      const precios = precioMap.get(d.loteId) || precioMap.get(d.lote?.id) || {
-        precioUnitarioLote: 0,
-        precioVenta: 0,
-      };
+      const precios = precioMap.get(d.loteId) ||
+        precioMap.get(d.lote?.id) || {
+          precioUnitarioLote: 0,
+          precioVenta: 0,
+        };
       return {
         folioVenta: d.venta?.folio,
         fechaVenta: d.venta?.createdAt,
@@ -369,9 +414,13 @@ export class ReportesService {
         'laboratorio.nombre AS laboratorio',
         'SUM(inv.cantidadActual) AS "stockTotal"',
       ])
-      .where('inv.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS })
+      .where('inv.almacenTipo = :almacenTipo', {
+        almacenTipo: AlmacenTipo.VENTAS,
+      })
       .andWhere('producto.statusId = :statusId', { statusId: 1 })
-      .groupBy('"producto"."id", "producto"."nombre", "producto"."codigoBarras", "producto"."stockMinimo", "producto"."stockMaximo", "laboratorio"."nombre"')
+      .groupBy(
+        '"producto"."id", "producto"."nombre", "producto"."codigoBarras", "producto"."stockMinimo", "producto"."stockMaximo", "laboratorio"."nombre"',
+      )
       .having('SUM(inv.cantidadActual) <= "producto"."stockMinimo"')
       .orderBy('"stockTotal"', 'ASC')
       .getRawMany();

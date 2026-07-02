@@ -70,7 +70,9 @@ export class UpdateClienteDto {
   @IsString()
   rfc?: string;
 
-  @ValidateIf((o) => o.categoriaClienteId !== null && o.categoriaClienteId !== undefined)
+  @ValidateIf(
+    (o) => o.categoriaClienteId !== null && o.categoriaClienteId !== undefined,
+  )
   @IsUUID()
   categoriaClienteId?: string | null;
 

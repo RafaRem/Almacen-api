@@ -57,7 +57,9 @@ export class CfdiService {
 
     const labResult = await this.processLaboratorio(cfdiData.emisor);
 
-    let proveedor = await this.proveedoresService.findByRfc(cfdiData.emisor.rfc);
+    let proveedor = await this.proveedoresService.findByRfc(
+      cfdiData.emisor.rfc,
+    );
     if (!proveedor) {
       proveedor = await this.proveedoresService.create({
         nombre: cfdiData.emisor.nombre,

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Proveedor } from './entities/proveedor.entity';
@@ -31,7 +35,9 @@ export class ProveedoresService {
   }
 
   async findOne(id: string): Promise<Proveedor> {
-    const proveedor = await this.proveedoresRepository.findOne({ where: { id } });
+    const proveedor = await this.proveedoresRepository.findOne({
+      where: { id },
+    });
     if (!proveedor) {
       throw new NotFoundException(`Proveedor with ID ${id} not found`);
     }
@@ -42,7 +48,10 @@ export class ProveedoresService {
     return this.proveedoresRepository.findOne({ where: { rfc } });
   }
 
-  async update(id: string, updateProveedorDto: UpdateProveedorDto): Promise<Proveedor> {
+  async update(
+    id: string,
+    updateProveedorDto: UpdateProveedorDto,
+  ): Promise<Proveedor> {
     const proveedor = await this.findOne(id);
 
     if (updateProveedorDto.rfc && updateProveedorDto.rfc !== proveedor.rfc) {

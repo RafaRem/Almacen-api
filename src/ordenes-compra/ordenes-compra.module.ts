@@ -10,7 +10,13 @@ import { Producto } from '../productos/entities/producto.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OrdenCompra, DetalleOrdenCompra, Lote, InventarioAlmacen, Producto]),
+    TypeOrmModule.forFeature([
+      OrdenCompra,
+      DetalleOrdenCompra,
+      Lote,
+      InventarioAlmacen,
+      Producto,
+    ]),
   ],
   controllers: [OrdenesCompraController],
   providers: [OrdenesCompraService],

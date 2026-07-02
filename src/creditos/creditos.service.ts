@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { IsNumber, IsOptional } from 'class-validator';
 import { Credito } from './entities/credito.entity';
-import { MovimientoCredito, TipoMovimientoCredito } from './entities/movimiento-credito.entity';
+import {
+  MovimientoCredito,
+  TipoMovimientoCredito,
+} from './entities/movimiento-credito.entity';
 
 export class CreateCreditoDto {
   @IsNumber()
@@ -44,15 +47,23 @@ export class CreditosService {
   ): Promise<Credito> {
     const existente = await this.findByCliente(clienteId);
     if (existente) {
-      const anterior = { limite: Number(existente.limite), saldoActual: Number(existente.saldoActual) };
+      const anterior = {
+        limite: Number(existente.limite),
+        saldoActual: Number(existente.saldoActual),
+      };
       Object.assign(existente, createDto);
       const saved = await this.creditoRepository.save(existente);
-      await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.ACTUALIZACION, {
-        limiteAnterior: anterior.limite,
-        limiteNuevo: Number(saved.limite),
-        saldoActualAnterior: anterior.saldoActual,
-        saldoActualNuevo: Number(saved.saldoActual),
-      });
+      await this.registrarMovimiento(
+        clienteId,
+        usuarioId,
+        TipoMovimientoCredito.ACTUALIZACION,
+        {
+          limiteAnterior: anterior.limite,
+          limiteNuevo: Number(saved.limite),
+          saldoActualAnterior: anterior.saldoActual,
+          saldoActualNuevo: Number(saved.saldoActual),
+        },
+      );
       return saved;
     }
 
@@ -64,10 +75,15 @@ export class CreditosService {
       fechaDeCorte: createDto.fechaDeCorte ?? 15,
     });
     const saved = await this.creditoRepository.save(credito);
-    await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.CREACION, {
-      limiteNuevo: Number(saved.limite),
-      saldoActualNuevo: Number(saved.saldoActual),
-    });
+    await this.registrarMovimiento(
+      clienteId,
+      usuarioId,
+      TipoMovimientoCredito.CREACION,
+      {
+        limiteNuevo: Number(saved.limite),
+        saldoActualNuevo: Number(saved.saldoActual),
+      },
+    );
     return saved;
   }
 
@@ -83,15 +99,23 @@ export class CreditosService {
       );
     }
 
-    const anterior = { limite: Number(credito.limite), saldoActual: Number(credito.saldoActual) };
+    const anterior = {
+      limite: Number(credito.limite),
+      saldoActual: Number(credito.saldoActual),
+    };
     Object.assign(credito, updateDto);
     const saved = await this.creditoRepository.save(credito);
-    await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.ACTUALIZACION, {
-      limiteAnterior: anterior.limite,
-      limiteNuevo: Number(saved.limite),
-      saldoActualAnterior: anterior.saldoActual,
-      saldoActualNuevo: Number(saved.saldoActual),
-    });
+    await this.registrarMovimiento(
+      clienteId,
+      usuarioId,
+      TipoMovimientoCredito.ACTUALIZACION,
+      {
+        limiteAnterior: anterior.limite,
+        limiteNuevo: Number(saved.limite),
+        saldoActualAnterior: anterior.saldoActual,
+        saldoActualNuevo: Number(saved.saldoActual),
+      },
+    );
     return saved;
   }
 
@@ -115,11 +139,16 @@ export class CreditosService {
     const saldoAnterior = Number(credito.saldoActual);
     credito.saldoActual = saldoAnterior + monto;
     const saved = await this.creditoRepository.save(credito);
-    await this.registrarMovimiento(clienteId, usuarioId, TipoMovimientoCredito.USO, {
-      saldoActualAnterior: saldoAnterior,
-      saldoActualNuevo: Number(saved.saldoActual),
-      observaciones: `Uso de crédito por $${monto.toFixed(2)}`,
-    });
+    await this.registrarMovimiento(
+      clienteId,
+      usuarioId,
+      TipoMovimientoCredito.USO,
+      {
+        saldoActualAnterior: saldoAnterior,
+        saldoActualNuevo: Number(saved.saldoActual),
+        observaciones: `Uso de crédito por $${monto.toFixed(2)}`,
+      },
+    );
     return saved;
   }
 

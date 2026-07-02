@@ -265,7 +265,10 @@ export class FacturasService {
         where: { facturaId: id },
       });
 
-      const subtotal = detalles.reduce((sum, d) => sum + Number(d.importeBruto), 0);
+      const subtotal = detalles.reduce(
+        (sum, d) => sum + Number(d.importeBruto),
+        0,
+      );
       const descuentoTotal = detalles.reduce(
         (sum, d) => sum + Number(d.descuento),
         0,

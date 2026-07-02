@@ -31,7 +31,7 @@ describe('PermissionsGuard', () => {
   it('should allow access when no required module', async () => {
     mockReflector.getAllAndOverride.mockReturnValue(undefined);
 
-    const result = await guard.canActivate(mockContext as any);
+    const result = await guard.canActivate(mockContext);
 
     expect(result).toBe(true);
   });
@@ -40,7 +40,7 @@ describe('PermissionsGuard', () => {
     mockReflector.getAllAndOverride.mockReturnValue(UserModule.INVOICES);
     mockContext.switchToHttp().getRequest.mockReturnValue({});
 
-    await expect(guard.canActivate(mockContext as any)).rejects.toThrow(
+    await expect(guard.canActivate(mockContext)).rejects.toThrow(
       ForbiddenException,
     );
   });
@@ -51,7 +51,7 @@ describe('PermissionsGuard', () => {
       user: { id: 'admin-1', tipo: 'admin' },
     });
 
-    const result = await guard.canActivate(mockContext as any);
+    const result = await guard.canActivate(mockContext);
 
     expect(result).toBe(true);
     expect(mockPermissionsService.getPermissionsForUser).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe('PermissionsGuard', () => {
       { module: UserModule.PUNTO_VENTA, canView: true },
     ]);
 
-    await expect(guard.canActivate(mockContext as any)).rejects.toThrow(
+    await expect(guard.canActivate(mockContext)).rejects.toThrow(
       ForbiddenException,
     );
   });
@@ -80,7 +80,7 @@ describe('PermissionsGuard', () => {
       { module: UserModule.INVOICES, canView: true },
     ]);
 
-    const result = await guard.canActivate(mockContext as any);
+    const result = await guard.canActivate(mockContext);
 
     expect(result).toBe(true);
     expect(mockPermissionsService.getPermissionsForUser).toHaveBeenCalledWith(
@@ -97,7 +97,7 @@ describe('PermissionsGuard', () => {
       { module: UserModule.DISCOUNTS, canView: true },
     ]);
 
-    const result = await guard.canActivate(mockContext as any);
+    const result = await guard.canActivate(mockContext);
 
     expect(result).toBe(true);
   });

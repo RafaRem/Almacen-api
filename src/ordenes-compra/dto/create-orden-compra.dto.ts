@@ -1,4 +1,15 @@
-import { IsString, IsUUID, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsInt, Min, IsNumber, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsUUID,
+  IsNotEmpty,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+  IsInt,
+  Min,
+  IsNumber,
+  IsDateString,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateDetalleDto {

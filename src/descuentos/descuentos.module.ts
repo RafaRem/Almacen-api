@@ -10,7 +10,12 @@ import { ClientesModule } from '../clientes/clientes.module';
 import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almacen.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Descuento, DescuentoProducto, CategoriaCliente]), CommonModule, ClientesModule, InventarioAlmacenModule],
+  imports: [
+    TypeOrmModule.forFeature([Descuento, DescuentoProducto, CategoriaCliente]),
+    CommonModule,
+    ClientesModule,
+    InventarioAlmacenModule,
+  ],
   controllers: [DescuentosController],
   providers: [DescuentosService],
   exports: [DescuentosService],

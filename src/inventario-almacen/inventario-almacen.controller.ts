@@ -170,7 +170,10 @@ export class InventarioAlmacenController {
       body.almacenOrigen as AlmacenTipo,
       body.almacenDestino as AlmacenTipo,
       userId,
-      { ...(metadata || {}), observaciones: metadata?.observaciones || body.observaciones },
+      {
+        ...(metadata || {}),
+        observaciones: metadata?.observaciones || body.observaciones,
+      },
     );
   }
 

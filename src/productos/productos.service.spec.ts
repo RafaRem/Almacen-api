@@ -7,14 +7,17 @@ import {
   MockRepository,
 } from '../test-utils/mock-repository';
 import { Producto } from './entities/producto.entity';
+import { Lote } from '../lotes/entities/lote.entity';
 import { ProductosService } from './productos.service';
 
 describe('ProductosService', () => {
   let service: ProductosService;
   let repository: MockRepository<Producto>;
+  let loteRepository: MockRepository<Lote>;
   let inventarioService: {
     findByProducto: jest.Mock;
     actualizarPrecioVenta: jest.Mock;
+    agregarStock: jest.Mock;
   };
 
   const producto: Producto = {
@@ -38,7 +41,10 @@ describe('ProductosService', () => {
     inventarioService = {
       findByProducto: jest.fn().mockResolvedValue([]),
       actualizarPrecioVenta: jest.fn().mockResolvedValue(undefined),
+      agregarStock: jest.fn().mockResolvedValue({ id: 'inv-1' }),
     };
+
+    const mockLoteRepo = createMockRepository<Lote>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -46,6 +52,10 @@ describe('ProductosService', () => {
         {
           provide: getRepositoryToken(Producto),
           useValue: createMockRepository<Producto>(),
+        },
+        {
+          provide: getRepositoryToken(Lote),
+          useValue: mockLoteRepo,
         },
         {
           provide: InventarioAlmacenService,
@@ -56,6 +66,7 @@ describe('ProductosService', () => {
 
     service = module.get(ProductosService);
     repository = module.get(getRepositoryToken(Producto));
+    loteRepository = module.get(getRepositoryToken(Lote));
   });
 
   it('creates a product when codigoBarras is available', async () => {
@@ -68,7 +79,6 @@ describe('ProductosService', () => {
         nombre: producto.nombre,
         codigoBarras: producto.codigoBarras,
         laboratorioId: producto.laboratorioId,
-        loteId: 'lote-1',
       }),
     ).resolves.toEqual(producto);
 
@@ -85,7 +95,6 @@ describe('ProductosService', () => {
         nombre: producto.nombre,
         codigoBarras: producto.codigoBarras,
         laboratorioId: producto.laboratorioId,
-        loteId: 'lote-1',
       }),
     ).rejects.toThrow(ConflictException);
   });
@@ -154,7 +163,12 @@ describe('ProductosService', () => {
         nombre: producto.nombre,
         tieneInventario: true,
       },
-      { codigoBarras: 'missing-code', existe: false, nombre: undefined, tieneInventario: false },
+      {
+        codigoBarras: 'missing-code',
+        existe: false,
+        nombre: undefined,
+        tieneInventario: false,
+      },
     ]);
   });
 });

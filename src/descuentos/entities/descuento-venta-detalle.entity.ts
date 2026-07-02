@@ -46,7 +46,12 @@ export class DescuentoVentaDetalle {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'monto' })
   monto: number;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'motivoGenerado' })
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    name: 'motivoGenerado',
+  })
   motivoGenerado: string;
 
   @CreateDateColumn({ name: 'createdAt' })

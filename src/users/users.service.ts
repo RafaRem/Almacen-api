@@ -22,7 +22,10 @@ export class UsersService {
     private usersPermissionsService: UsersPermissionsService,
   ) {}
 
-  async create(createUserDto: CreateUserDto, currentUser?: User): Promise<User> {
+  async create(
+    createUserDto: CreateUserDto,
+    currentUser?: User,
+  ): Promise<User> {
     const existingUser = await this.usersRepository.findOne({
       where: [
         { email: createUserDto.email },

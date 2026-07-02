@@ -67,7 +67,8 @@ export class DescuentosController {
     const fechaCad = fechaCaducidad ? new Date(fechaCaducidad) : undefined;
     let precioVenta: number | undefined;
     try {
-      const inventario = await this.inventarioAlmacenService.findByProductoId(productoId);
+      const inventario =
+        await this.inventarioAlmacenService.findByProductoId(productoId);
       if (inventario?.precioVenta) {
         precioVenta = Number(inventario.precioVenta);
       }
@@ -83,9 +84,7 @@ export class DescuentosController {
   }
 
   @Post('preview-product')
-  async previewProductDiscount(
-    @Body() dto: PreviewProductDiscountDto,
-  ) {
+  async previewProductDiscount(@Body() dto: PreviewProductDiscountDto) {
     let categoriaClienteId: string | undefined;
     if (dto.clienteId) {
       try {
@@ -93,7 +92,9 @@ export class DescuentosController {
         categoriaClienteId = cliente?.categoriaClienteId;
       } catch {}
     }
-    const fechaCaducidad = dto.fechaCaducidad ? new Date(dto.fechaCaducidad) : undefined;
+    const fechaCaducidad = dto.fechaCaducidad
+      ? new Date(dto.fechaCaducidad)
+      : undefined;
     return this.descuentosService.previewProductDiscount(
       dto.productoId,
       dto.cantidad,

@@ -75,8 +75,9 @@ export const databaseEntities = [
 export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
-  const sslEnabled = configService.get<string>('DATABASE_SSL') === 'true'
-  const sslRejectUnauthorized = configService.get<string>('DATABASE_SSL_REJECT_UNAUTHORIZED') !== 'false'
+  const sslEnabled = configService.get<string>('DATABASE_SSL') === 'true';
+  const sslRejectUnauthorized =
+    configService.get<string>('DATABASE_SSL_REJECT_UNAUTHORIZED') !== 'false';
 
   return {
     type: 'postgres',

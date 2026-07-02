@@ -50,12 +50,22 @@ export class UploadsService {
       );
     }
 
-    await this.desactivarDocumentosAnteriores(createDto.clienteId, createDto.tipoDocumento);
+    await this.desactivarDocumentosAnteriores(
+      createDto.clienteId,
+      createDto.tipoDocumento,
+    );
 
     const useUploadsDir = fs.existsSync('/uploads');
     const uploadsDir = useUploadsDir
       ? path.join('/uploads', 'clientes', createDto.clienteId)
-      : path.join(__dirname, '..', '..', 'uploads', 'clientes', createDto.clienteId);
+      : path.join(
+          __dirname,
+          '..',
+          '..',
+          'uploads',
+          'clientes',
+          createDto.clienteId,
+        );
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
@@ -124,20 +134,40 @@ export class UploadsService {
 
   async getFilePath(id: string): Promise<string> {
     const documento = await this.findOne(id);
-    const basePath = fs.existsSync('/uploads') ? '/uploads' : path.join(__dirname, '..', '..');
+    const basePath = fs.existsSync('/uploads')
+      ? '/uploads'
+      : path.join(__dirname, '..', '..');
 
-    let fullPath = path.join(basePath, documento.rutaArchivo);
-    console.log('[getFilePath] Initial path:', fullPath, 'exists:', fs.existsSync(fullPath));
+    const fullPath = path.join(basePath, documento.rutaArchivo);
+    console.log(
+      '[getFilePath] Initial path:',
+      fullPath,
+      'exists:',
+      fs.existsSync(fullPath),
+    );
 
-    if (!fs.existsSync(fullPath) && documento.rutaArchivo.startsWith('uploads/')) {
+    if (
+      !fs.existsSync(fullPath) &&
+      documento.rutaArchivo.startsWith('uploads/')
+    ) {
       const altPath = path.join(basePath, documento.rutaArchivo.slice(7));
-      console.log('[getFilePath] Trying alt path:', altPath, 'exists:', fs.existsSync(altPath));
+      console.log(
+        '[getFilePath] Trying alt path:',
+        altPath,
+        'exists:',
+        fs.existsSync(altPath),
+      );
       if (fs.existsSync(altPath)) {
         console.log('[getFilePath] Using alt path:', altPath);
         return altPath;
       }
       const oldPath = path.join(basePath, 'uploads', documento.rutaArchivo);
-      console.log('[getFilePath] Trying old path:', oldPath, 'exists:', fs.existsSync(oldPath));
+      console.log(
+        '[getFilePath] Trying old path:',
+        oldPath,
+        'exists:',
+        fs.existsSync(oldPath),
+      );
       if (fs.existsSync(oldPath)) {
         console.log('[getFilePath] Using old path:', oldPath);
         return oldPath;

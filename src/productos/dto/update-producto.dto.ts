@@ -2,7 +2,6 @@ import {
   IsString,
   IsOptional,
   IsNumber,
-  IsUUID,
   IsEnum,
 } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
@@ -21,16 +20,8 @@ export class UpdateProductoDto {
   codigoBarras?: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   laboratorioId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  loteId?: string;
-
-  @IsOptional()
-  @IsNumber()
-  stock?: number;
 
   @IsOptional()
   @IsNumber()

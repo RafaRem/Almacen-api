@@ -2,7 +2,7 @@
 -- MIGRATION: Add precio_venta column and triggers
 -- Description: Add precio_venta to inventario_almacen and create triggers
 --              for automatic calculation based on formula:
---              precioVenta = (precioUnitarioLote + (precioUnitarioLote * ivaCfdi / 100)) * (1 + margen / 100)
+--              precioVenta = precioUnitarioLote * (1 + ivaCfdi / 100) + precioUnitarioLote * (margen / 100)
 -- =============================================
 
 -- =============================================
@@ -31,7 +31,7 @@ BEGIN
     END IF;
 
     RETURN ROUND(
-        (p_precio_unitario + (p_precio_unitario * v_iva / 100)) * (1 + v_margen / 100)
+        p_precio_unitario * (1 + v_iva / 100) + p_precio_unitario * (v_margen / 100)
     , 2)::decimal;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;

@@ -89,343 +89,375 @@ export class VentasService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-    this.logger.log(`Venta create: ${createVentaDto.productos.length} producto(s)`);
-    
-    const seenProductos = new Set<string>();
-
-    let subtotal = 0;
-    let descuentoTotal = 0;
-    const detalles: Partial<DetalleVenta>[] = [];
-    const movimientosLotes: {
-      productoId: string;
-      loteId: string;
-      numeroLote: string;
-      cantidad: number;
-      movimientoId: string;
-    }[] = [];
-    const descuentosInfo: DescuentoInfoEntry[] = [];
-
-    let categoriaClienteId: string | undefined;
-    if (createVentaDto.clienteId) {
-      try {
-        const cliente = await this.clientesService.findOne(
-          createVentaDto.clienteId,
-        );
-        categoriaClienteId = cliente?.categoriaClienteId;
-      } catch {
-        this.logger.error('Error fetching cliente en create');
-      }
-    }
-
-    for (const productoVenta of createVentaDto.productos) {
-      if (seenProductos.has(productoVenta.productoId)) {
-        throw new BadRequestException(
-          `Producto ${productoVenta.productoId} duplicado en la misma venta`,
-        );
-      }
-      seenProductos.add(productoVenta.productoId);
-
-      if (productoVenta.cantidad == null || productoVenta.cantidad <= 0) {
-        throw new BadRequestException(
-          `Cantidad debe ser mayor a 0 para producto ${productoVenta.productoId}`,
-        );
-      }
-
-      const producto = await this.productosService.findOne(
-        productoVenta.productoId,
+      this.logger.log(
+        `Venta create: ${createVentaDto.productos.length} producto(s)`,
       );
 
-      if (!producto) {
-        throw new BadRequestException(
-          `Producto ${productoVenta.productoId} no encontrado`,
-        );
-      }
+      const seenProductos = new Set<string>();
 
-      const stockDisponible = await this.inventarioAlmacenService.getStockTotal(
-        productoVenta.productoId,
-        AlmacenTipo.VENTAS,
-      );
+      let subtotal = 0;
+      let descuentoTotal = 0;
+      const detalles: Partial<DetalleVenta>[] = [];
+      const movimientosLotes: {
+        productoId: string;
+        loteId: string;
+        numeroLote: string;
+        cantidad: number;
+        movimientoId: string;
+      }[] = [];
+      const descuentosInfo: DescuentoInfoEntry[] = [];
 
-      if (!productoVenta.cantidad || productoVenta.cantidad <= 0) {
-        throw new BadRequestException(
-          `Cantidad inválida para ${producto.nombre}. Cantidad: ${productoVenta.cantidad}`,
-        );
-      }
-
-      if (stockDisponible < productoVenta.cantidad) {
-        throw new BadRequestException(
-          `Stock insuficiente para ${producto.nombre}. Disponible: ${stockDisponible}, Solicitado: ${productoVenta.cantidad}`,
-        );
-      }
-
-      const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(
-        productoVenta.productoId,
-      );
-      if (!inventarioProducto?.precioVenta) {
-        throw new BadRequestException(
-          `Producto ${producto.nombre} no tiene precio de venta asignado. Configure precioVenta en Inventario.`,
-        );
-      }
-
-      const resultadoFEPU =
-        await this.inventarioAlmacenService.reducirStockFIFO(
-          productoVenta.productoId,
-          productoVenta.cantidad,
-          AlmacenTipo.VENTAS,
-          usuarioId,
-          undefined,
-          manager,
-        );
-
-      if (!resultadoFEPU.success) {
-        throw new BadRequestException(resultadoFEPU.message);
-      }
-
-      for (const loteInfo of resultadoFEPU.lotsUsed) {
-        movimientosLotes.push({
-          productoId: productoVenta.productoId,
-          loteId: loteInfo.loteId,
-          numeroLote: loteInfo.numeroLote,
-          cantidad: loteInfo.cantidad,
-          movimientoId: resultadoFEPU.movimientoId!,
-        });
-      }
-
-      const totalPrecio = resultadoFEPU.lotsUsed.reduce(
-        (sum, l) => sum + l.precio * l.cantidad, 0,
-      );
-      const totalCantidad = resultadoFEPU.lotsUsed.reduce(
-        (sum, l) => sum + l.cantidad, 0,
-      );
-      const precioUnitario = totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
-
-      const precioVenta = inventarioProducto.precioVenta;
-
-      const fechaCaducidad = parseDate(inventarioProducto?.lote?.fechaCaducidad);
-
-      let descuentoLinea = 0;
-      let montoProductoLinea = 0;
-      try {
-        const calculo = await this.descuentosService.calcularDescuentosAcumulables(
-          productoVenta.productoId,
-          productoVenta.cantidad,
-          producto.laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
-          precioVenta,
-        );
-
-        descuentoLinea = calculo.descuentoTotal;
-
-        if (
-          calculo.descuentoProducto
-        ) {
-          montoProductoLinea = Number((calculo.descuentoProducto.monto || 0).toFixed(2));
-          if (calculo.descuentoProducto.descuentoId) {
-            descuentosInfo.push({
-              productoId: productoVenta.productoId,
-              descuentoId: calculo.descuentoProducto.descuentoId,
-              tipo: calculo.descuentoProducto.tipo,
-              porcentaje: calculo.descuentoProducto.porcentaje,
-              monto: montoProductoLinea,
-              motivo: calculo.descuentoProducto.motivo,
-            });
-          }
+      let categoriaClienteId: string | undefined;
+      if (createVentaDto.clienteId) {
+        try {
+          const cliente = await this.clientesService.findOne(
+            createVentaDto.clienteId,
+          );
+          categoriaClienteId = cliente?.categoriaClienteId;
+        } catch {
+          this.logger.error('Error fetching cliente en create');
         }
-        if (calculo.descuentoCategoria) {
-          const montoCategoria = Number((calculo.descuentoCategoria.monto || 0).toFixed(2));
-          descuentosInfo.push({
+      }
+
+      for (const productoVenta of createVentaDto.productos) {
+        if (seenProductos.has(productoVenta.productoId)) {
+          throw new BadRequestException(
+            `Producto ${productoVenta.productoId} duplicado en la misma venta`,
+          );
+        }
+        seenProductos.add(productoVenta.productoId);
+
+        if (productoVenta.cantidad == null || productoVenta.cantidad <= 0) {
+          throw new BadRequestException(
+            `Cantidad debe ser mayor a 0 para producto ${productoVenta.productoId}`,
+          );
+        }
+
+        const producto = await this.productosService.findOne(
+          productoVenta.productoId,
+        );
+
+        if (!producto) {
+          throw new BadRequestException(
+            `Producto ${productoVenta.productoId} no encontrado`,
+          );
+        }
+
+        const stockDisponible =
+          await this.inventarioAlmacenService.getStockTotal(
+            productoVenta.productoId,
+            AlmacenTipo.VENTAS,
+          );
+
+        if (!productoVenta.cantidad || productoVenta.cantidad <= 0) {
+          throw new BadRequestException(
+            `Cantidad inválida para ${producto.nombre}. Cantidad: ${productoVenta.cantidad}`,
+          );
+        }
+
+        if (stockDisponible < productoVenta.cantidad) {
+          throw new BadRequestException(
+            `Stock insuficiente para ${producto.nombre}. Disponible: ${stockDisponible}, Solicitado: ${productoVenta.cantidad}`,
+          );
+        }
+
+        const inventarioProducto =
+          await this.inventarioAlmacenService.findByProductoId(
+            productoVenta.productoId,
+          );
+        if (!inventarioProducto?.precioVenta) {
+          throw new BadRequestException(
+            `Producto ${producto.nombre} no tiene precio de venta asignado. Configure precioVenta en Inventario.`,
+          );
+        }
+
+        const resultadoFEPU =
+          await this.inventarioAlmacenService.reducirStockFIFO(
+            productoVenta.productoId,
+            productoVenta.cantidad,
+            AlmacenTipo.VENTAS,
+            usuarioId,
+            undefined,
+            manager,
+          );
+
+        if (!resultadoFEPU.success) {
+          throw new BadRequestException(resultadoFEPU.message);
+        }
+
+        for (const loteInfo of resultadoFEPU.lotsUsed) {
+          movimientosLotes.push({
             productoId: productoVenta.productoId,
-            descuentoId: calculo.descuentoCategoria.descuentoId,
-            tipo: calculo.descuentoCategoria.tipo,
-            porcentaje: calculo.descuentoCategoria.porcentaje,
-            monto: montoCategoria,
-            motivo: calculo.descuentoCategoria.motivo,
+            loteId: loteInfo.loteId,
+            numeroLote: loteInfo.numeroLote,
+            cantidad: loteInfo.cantidad,
+            movimientoId: resultadoFEPU.movimientoId!,
           });
         }
-      } catch (e) {
-        this.logger.error(`Error calculando descuentos para producto ${productoVenta.productoId}: ${e.message}`);
-      }
 
-      if (createVentaDto.descuentosPreview?.descuentoPorProducto) {
-        const dp = createVentaDto.descuentosPreview.descuentoPorProducto.find(
-          d => d.productoId === productoVenta.productoId,
+        const totalPrecio = resultadoFEPU.lotsUsed.reduce(
+          (sum, l) => sum + l.precio * l.cantidad,
+          0,
+        );
+        const totalCantidad = resultadoFEPU.lotsUsed.reduce(
+          (sum, l) => sum + l.cantidad,
+          0,
+        );
+        const precioUnitario =
+          totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
+
+        const precioVenta = inventarioProducto.precioVenta;
+
+        const fechaCaducidad = parseDate(
+          inventarioProducto?.lote?.fechaCaducidad,
         );
 
-        if (dp) {
-          const tolerancia = 0.01;
-          const diferencia = Math.abs(dp.descuento - descuentoLinea);
-
-          if (diferencia > tolerancia) {
-            this.logger.warn(
-              `Descuento no coincide, se actualiza por mejor descuento: calculado ${descuentoLinea} vs preview ${dp.descuento}`,
+        let descuentoLinea = 0;
+        let montoProductoLinea = 0;
+        try {
+          const calculo =
+            await this.descuentosService.calcularDescuentosAcumulables(
+              productoVenta.productoId,
+              productoVenta.cantidad,
+              producto.laboratorioId,
+              categoriaClienteId,
+              fechaCaducidad,
+              precioVenta,
             );
-          } else {
-            // Eliminar entradas existentes para este producto del array (reemplazar con preview)
-            const idxToRemove = descuentosInfo.findIndex(d => d.productoId === productoVenta.productoId);
-            if (idxToRemove !== -1) {
-              descuentosInfo.splice(idxToRemove, 2); // Elimina hasta 2 entradas (producto + categoria)
-            }
 
-            if (dp.mejorDescuento?.descuentoId && dp.mejorDescuento.tipo !== 'NINGUNO') {
+          descuentoLinea = calculo.descuentoTotal;
+
+          if (calculo.descuentoProducto) {
+            montoProductoLinea = Number(
+              (calculo.descuentoProducto.monto || 0).toFixed(2),
+            );
+            if (calculo.descuentoProducto.descuentoId) {
               descuentosInfo.push({
                 productoId: productoVenta.productoId,
-                descuentoId: dp.mejorDescuento.descuentoId,
-                tipo: dp.mejorDescuento.tipo,
-                porcentaje: dp.mejorDescuento.porcentaje,
-                monto: dp.descuentoProducto,
-                motivo: dp.mejorDescuento.motivo,
-              });
-            }
-
-            if (dp.descuentoCategoriaInfo) {
-              descuentosInfo.push({
-                productoId: productoVenta.productoId,
-                descuentoId: dp.descuentoCategoriaInfo.descuentoId ?? null,
-                tipo: dp.descuentoCategoriaInfo.tipo,
-                porcentaje: dp.descuentoCategoriaInfo.porcentaje,
-                monto: dp.descuentoCategoria,
-                motivo: dp.descuentoCategoriaInfo.motivo,
+                descuentoId: calculo.descuentoProducto.descuentoId,
+                tipo: calculo.descuentoProducto.tipo,
+                porcentaje: calculo.descuentoProducto.porcentaje,
+                monto: montoProductoLinea,
+                motivo: calculo.descuentoProducto.motivo,
               });
             }
           }
+          if (calculo.descuentoCategoria) {
+            const montoCategoria = Number(
+              (calculo.descuentoCategoria.monto || 0).toFixed(2),
+            );
+            descuentosInfo.push({
+              productoId: productoVenta.productoId,
+              descuentoId: calculo.descuentoCategoria.descuentoId,
+              tipo: calculo.descuentoCategoria.tipo,
+              porcentaje: calculo.descuentoCategoria.porcentaje,
+              monto: montoCategoria,
+              motivo: calculo.descuentoCategoria.motivo,
+            });
+          }
+        } catch (e) {
+          this.logger.error(
+            `Error calculando descuentos para producto ${productoVenta.productoId}: ${e.message}`,
+          );
+        }
+
+        if (createVentaDto.descuentosPreview?.descuentoPorProducto) {
+          const dp = createVentaDto.descuentosPreview.descuentoPorProducto.find(
+            (d) => d.productoId === productoVenta.productoId,
+          );
+
+          if (dp) {
+            const tolerancia = 0.01;
+            const diferencia = Math.abs(dp.descuento - descuentoLinea);
+
+            if (diferencia > tolerancia) {
+              this.logger.warn(
+                `Descuento no coincide, se actualiza por mejor descuento: calculado ${descuentoLinea} vs preview ${dp.descuento}`,
+              );
+            } else {
+              // Eliminar entradas existentes para este producto del array (reemplazar con preview)
+              const idxToRemove = descuentosInfo.findIndex(
+                (d) => d.productoId === productoVenta.productoId,
+              );
+              if (idxToRemove !== -1) {
+                descuentosInfo.splice(idxToRemove, 2); // Elimina hasta 2 entradas (producto + categoria)
+              }
+
+              if (
+                dp.mejorDescuento?.descuentoId &&
+                dp.mejorDescuento.tipo !== 'NINGUNO'
+              ) {
+                descuentosInfo.push({
+                  productoId: productoVenta.productoId,
+                  descuentoId: dp.mejorDescuento.descuentoId,
+                  tipo: dp.mejorDescuento.tipo,
+                  porcentaje: dp.mejorDescuento.porcentaje,
+                  monto: dp.descuentoProducto,
+                  motivo: dp.mejorDescuento.motivo,
+                });
+              }
+
+              if (dp.descuentoCategoriaInfo) {
+                descuentosInfo.push({
+                  productoId: productoVenta.productoId,
+                  descuentoId: dp.descuentoCategoriaInfo.descuentoId ?? null,
+                  tipo: dp.descuentoCategoriaInfo.tipo,
+                  porcentaje: dp.descuentoCategoriaInfo.porcentaje,
+                  monto: dp.descuentoCategoria,
+                  motivo: dp.descuentoCategoriaInfo.motivo,
+                });
+              }
+            }
+          }
+        }
+
+        const importeBruto = precioVenta * productoVenta.cantidad;
+        const subtotalLinea = importeBruto - descuentoLinea;
+
+        subtotal += importeBruto;
+        descuentoTotal += descuentoLinea;
+
+        const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || '';
+
+        detalles.push({
+          productoId: productoVenta.productoId,
+          loteId: primerLoteId,
+          cantidad: productoVenta.cantidad,
+          precioUnitario,
+          descuentoLinea,
+          subtotal: subtotalLinea,
+          importeBruto,
+        });
+      }
+
+      const ivaRate = await this.getIvaRate();
+      const iva = (subtotal - descuentoTotal) * ivaRate;
+      const total = subtotal - descuentoTotal + iva;
+
+      let pagosData: {
+        formaPago: FormaPago;
+        monto: number;
+        referencia?: string;
+      }[] = [];
+
+      if (createVentaDto.pagos && createVentaDto.pagos.length > 0) {
+        const sumaPagos = createVentaDto.pagos.reduce(
+          (sum, p) => sum + Number(p.monto),
+          0,
+        );
+        if (sumaPagos < total - 0.01) {
+          throw new BadRequestException(
+            `La suma de pagos (${sumaPagos.toFixed(2)}) es menor al total (${total.toFixed(2)})`,
+          );
+        }
+        pagosData = createVentaDto.pagos.map((p) => ({
+          formaPago: p.formaPago,
+          monto: Number(p.monto),
+          referencia: p.referencia || undefined,
+        }));
+      } else if (createVentaDto.metodoPago) {
+        pagosData = [
+          {
+            formaPago: this.convertirMetodoPago(createVentaDto.metodoPago),
+            monto: total,
+          },
+        ];
+      } else {
+        throw new BadRequestException('Debe especificar método de pago');
+      }
+
+      const metodoPagoLegacy =
+        pagosData.length === 1
+          ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
+          : MetodoPago.EFECTIVO;
+
+      const nextFolio = await this.getNextFolio();
+
+      const venta = this.ventasRepository.create({
+        folio: nextFolio,
+        clienteId: createVentaDto.clienteId,
+        usuarioId,
+        subtotal,
+        descuentoAplicado: descuentoTotal,
+        iva,
+        total,
+        metodoPago: metodoPagoLegacy,
+        observaciones: createVentaDto.observaciones,
+      });
+
+      const savedVenta = await manager.save(Venta, venta);
+
+      for (const detalle of detalles) {
+        detalle.ventaId = savedVenta.id;
+      }
+      const savedDetalles = await manager.save(DetalleVenta, detalles);
+
+      for (const detalle of savedDetalles) {
+        const lotesDeProducto = movimientosLotes.filter(
+          (ml) => ml.productoId === detalle.productoId,
+        );
+        for (const loteInfo of lotesDeProducto) {
+          const detalleLote = this.detallesRepository.manager.create(
+            DetalleVentaLote,
+            {
+              detalleVentaId: detalle.id,
+              loteId: loteInfo.loteId,
+              cantidad: loteInfo.cantidad,
+              movimientoId: loteInfo.movimientoId,
+            },
+          );
+          await manager.save(DetalleVentaLote, detalleLote);
         }
       }
 
-      const importeBruto = precioVenta * productoVenta.cantidad;
-      const subtotalLinea = importeBruto - descuentoLinea;
+      for (const pago of pagosData) {
+        const pagoVenta = this.pagosRepository.create({
+          ventaId: savedVenta.id,
+          formaPago: pago.formaPago,
+          monto: pago.monto,
+          referencia: pago.referencia,
+        });
+        await manager.save(PagoVenta, pagoVenta);
+      }
 
-      subtotal += importeBruto;
-      descuentoTotal += descuentoLinea;
-
-      const primerLoteId =
-        resultadoFEPU.lotsUsed[0]?.loteId || '';
-
-      detalles.push({
-        productoId: productoVenta.productoId,
-        loteId: primerLoteId,
-        cantidad: productoVenta.cantidad,
-        precioUnitario,
-        descuentoLinea,
-        subtotal: subtotalLinea,
-        importeBruto,
-      });
-    }
-
-    const ivaRate = await this.getIvaRate();
-    const iva = (subtotal - descuentoTotal) * ivaRate;
-    const total = subtotal - descuentoTotal + iva;
-
-    let pagosData: {
-      formaPago: FormaPago;
-      monto: number;
-      referencia?: string;
-    }[] = [];
-
-    if (createVentaDto.pagos && createVentaDto.pagos.length > 0) {
-      const sumaPagos = createVentaDto.pagos.reduce(
-        (sum, p) => sum + Number(p.monto),
-        0,
-      );
-      if (sumaPagos < total - 0.01) {
-        throw new BadRequestException(
-          `La suma de pagos (${sumaPagos.toFixed(2)}) es menor al total (${total.toFixed(2)})`,
+      for (const descuentoInfo of descuentosInfo) {
+        const detalle = savedDetalles.find(
+          (d) => d.productoId === descuentoInfo.productoId,
         );
+        if (
+          detalle &&
+          (descuentoInfo.descuentoId || descuentoInfo.tipo === 'CATEGORIA')
+        ) {
+          this.logger.log(
+            `Descuento aplicado por ${descuentoInfo.tipo}: ${descuentoInfo.monto}`,
+          );
+          const descuentoVentaDetalle =
+            this.descuentosVentaDetalleRepository.create({
+              detalleVentaId: detalle.id,
+              descuentoId: descuentoInfo.descuentoId,
+              productoId: descuentoInfo.productoId,
+              tipo: descuentoInfo.tipo as any,
+              porcentaje: descuentoInfo.porcentaje,
+              monto: descuentoInfo.monto,
+              motivoGenerado: descuentoInfo.motivo,
+            });
+          await manager.save(DescuentoVentaDetalle, descuentoVentaDetalle);
+        } else {
+          // Sin descuentoId o detalle, se omite
+        }
       }
-      pagosData = createVentaDto.pagos.map((p) => ({
-        formaPago: p.formaPago,
-        monto: Number(p.monto),
-        referencia: p.referencia || undefined,
-      }));
-    } else if (createVentaDto.metodoPago) {
-      pagosData = [
-        {
-          formaPago: this.convertirMetodoPago(createVentaDto.metodoPago),
-          monto: total,
-        },
-      ];
-    } else {
-      throw new BadRequestException('Debe especificar método de pago');
-    }
 
-    const metodoPagoLegacy =
-      pagosData.length === 1
-        ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
-        : MetodoPago.EFECTIVO;
-
-    const nextFolio = await this.getNextFolio();
-
-    const venta = this.ventasRepository.create({
-      folio: nextFolio,
-      clienteId: createVentaDto.clienteId,
-      usuarioId,
-      subtotal,
-      descuentoAplicado: descuentoTotal,
-      iva,
-      total,
-      metodoPago: metodoPagoLegacy,
-      observaciones: createVentaDto.observaciones,
-    });
-
-    const savedVenta = await manager.save(Venta, venta);
-
-    for (const detalle of detalles) {
-      detalle.ventaId = savedVenta.id;
-    }
-    const savedDetalles = await manager.save(DetalleVenta, detalles);
-
-    for (const detalle of savedDetalles) {
-      const lotesDeProducto = movimientosLotes.filter(
-        (ml) => ml.productoId === detalle.productoId,
-      );
-      for (const loteInfo of lotesDeProducto) {
-        const detalleLote = this.detallesRepository.manager.create(DetalleVentaLote, {
-          detalleVentaId: detalle.id,
-          loteId: loteInfo.loteId,
-          cantidad: loteInfo.cantidad,
-          movimientoId: loteInfo.movimientoId,
-        });
-        await manager.save(DetalleVentaLote, detalleLote);
-      }
-    }
-
-    for (const pago of pagosData) {
-      const pagoVenta = this.pagosRepository.create({
-        ventaId: savedVenta.id,
-        formaPago: pago.formaPago,
-        monto: pago.monto,
-        referencia: pago.referencia,
+      const detallesConRelaciones = await manager.find(DetalleVenta, {
+        where: { ventaId: savedVenta.id },
+        relations: ['producto', 'lote'],
       });
-      await manager.save(PagoVenta, pagoVenta);
-    }
 
-    for (const descuentoInfo of descuentosInfo) {
-      const detalle = savedDetalles.find(
-        (d) => d.productoId === descuentoInfo.productoId,
-      );
-      if (detalle && (descuentoInfo.descuentoId || descuentoInfo.tipo === 'CATEGORIA')) {
-        this.logger.log(`Descuento aplicado por ${descuentoInfo.tipo}: ${descuentoInfo.monto}`);
-        const descuentoVentaDetalle = this.descuentosVentaDetalleRepository.create({
-          detalleVentaId: detalle.id,
-          descuentoId: descuentoInfo.descuentoId,
-          productoId: descuentoInfo.productoId,
-          tipo: descuentoInfo.tipo as any,
-          porcentaje: descuentoInfo.porcentaje,
-          monto: descuentoInfo.monto,
-          motivoGenerado: descuentoInfo.motivo,
-        });
-        await manager.save(DescuentoVentaDetalle, descuentoVentaDetalle);
-      } else {
-        // Sin descuentoId o detalle, se omite
-      }
-    }
-
-    const detallesConRelaciones = await manager.find(DetalleVenta, {
-      where: { ventaId: savedVenta.id },
-      relations: ['producto', 'lote'],
-    });
-
-    return { ...savedVenta, detalles: detallesConRelaciones, pagos: pagosData, descuentos: descuentosInfo };
+      return {
+        ...savedVenta,
+        detalles: detallesConRelaciones,
+        pagos: pagosData,
+        descuentos: descuentosInfo,
+      };
     });
   }
 
@@ -480,7 +512,9 @@ export class VentasService {
 
   async findOne(
     id: string,
-  ): Promise<Venta & { detalles: DetalleVenta[]; pagos: any[]; descuentos: any[] }> {
+  ): Promise<
+    Venta & { detalles: DetalleVenta[]; pagos: any[]; descuentos: any[] }
+  > {
     const venta = await this.ventasRepository.findOne({
       where: { id },
       relations: ['cliente', 'usuario'],
@@ -499,7 +533,7 @@ export class VentasService {
       where: { ventaId: id },
     });
 
-    const detalleIds = detalles.map(d => d.id);
+    const detalleIds = detalles.map((d) => d.id);
     let descuentos: any[] = [];
     if (detalleIds.length > 0) {
       descuentos = await this.descuentosVentaDetalleRepository.find({
@@ -507,35 +541,35 @@ export class VentasService {
       });
     }
 
-    const detallesConvertidos = detalles.map(d => ({
+    const detallesConvertidos = detalles.map((d) => ({
       ...d,
       cantidad: Number(d.cantidad) || 0,
       precioUnitario: Number(d.precioUnitario) || 0,
       descuentoLinea: Number(d.descuentoLinea) || 0,
       subtotal: Number(d.subtotal) || 0,
       importeBruto: Number(d.importeBruto) || 0,
-    }))
+    }));
 
-    const pagosConvertidos = pagos.map(p => ({
+    const pagosConvertidos = pagos.map((p) => ({
       ...p,
       monto: Number(p.monto) || 0,
-    }))
+    }));
 
-    const descuentosConvertidos = descuentos.map(d => ({
+    const descuentosConvertidos = descuentos.map((d) => ({
       ...d,
       monto: Number(d.monto) || 0,
       porcentaje: Number(d.porcentaje) || 0,
-    }))
+    }));
 
-    return { 
-      ...venta, 
+    return {
+      ...venta,
       subtotal: Number(venta.subtotal) || 0,
       descuentoAplicado: Number(venta.descuentoAplicado) || 0,
       iva: Number(venta.iva) || 0,
       total: Number(venta.total) || 0,
-      detalles: detallesConvertidos, 
-      pagos: pagosConvertidos, 
-      descuentos: descuentosConvertidos 
+      detalles: detallesConvertidos,
+      pagos: pagosConvertidos,
+      descuentos: descuentosConvertidos,
     };
   }
 
@@ -572,10 +606,20 @@ export class VentasService {
     return query.getOne();
   }
 
-  async cancel(id: string, usuarioId?: string, motivo?: string): Promise<Venta> {
+  async cancel(
+    id: string,
+    usuarioId?: string,
+    motivo?: string,
+  ): Promise<Venta> {
     const venta = await this.ventasRepository.findOne({
       where: { id },
-      relations: ['detalles', 'detalles.lote', 'detalles.producto', 'detalles.lotesUtilizados', 'detalles.lotesUtilizados.lote'],
+      relations: [
+        'detalles',
+        'detalles.lote',
+        'detalles.producto',
+        'detalles.lotesUtilizados',
+        'detalles.lotesUtilizados.lote',
+      ],
     });
 
     if (!venta) {
@@ -593,7 +637,13 @@ export class VentasService {
       for (const detalle of venta.detalles) {
         const lotesUtilizados = detalle.lotesUtilizados?.length
           ? detalle.lotesUtilizados
-          : [{ loteId: detalle.loteId, cantidad: detalle.cantidad, lote: detalle.lote }];
+          : [
+              {
+                loteId: detalle.loteId,
+                cantidad: detalle.cantidad,
+                lote: detalle.lote,
+              },
+            ];
         for (const loteUso of lotesUtilizados) {
           const cantidad = Number(loteUso.cantidad);
           if (cantidad <= 0) continue;
@@ -713,7 +763,10 @@ export class VentasService {
         continue;
       }
 
-      const inventarioProducto = await this.inventarioAlmacenService.findByProductoId(productoVenta.productoId);
+      const inventarioProducto =
+        await this.inventarioAlmacenService.findByProductoId(
+          productoVenta.productoId,
+        );
       const precioVenta = inventarioProducto?.precioVenta || 0;
       const precioUnitario = inventarioProducto?.precioUnitarioLote || 0;
       const subtotalLinea = precioVenta * productoVenta.cantidad;
@@ -752,24 +805,34 @@ export class VentasService {
       }[] = [];
 
       try {
-        const fechaCaducidad = parseDate(inventarioProducto?.lote?.fechaCaducidad);
-        const calculo = await this.descuentosService.calcularDescuentosAcumulables(
-          productoVenta.productoId,
-          productoVenta.cantidad,
-          producto.laboratorioId,
-          categoriaClienteId,
-          fechaCaducidad,
-          precioVenta,
+        const fechaCaducidad = parseDate(
+          inventarioProducto?.lote?.fechaCaducidad,
         );
+        const calculo =
+          await this.descuentosService.calcularDescuentosAcumulables(
+            productoVenta.productoId,
+            productoVenta.cantidad,
+            producto.laboratorioId,
+            categoriaClienteId,
+            fechaCaducidad,
+            precioVenta,
+          );
 
         if (calculo.descuentoProducto) {
-          descuentoProductoMonto = Number((calculo.descuentoProducto.monto || 0).toFixed(2));
-          mejorDescuentoInfo = { ...calculo.descuentoProducto, monto: descuentoProductoMonto };
+          descuentoProductoMonto = Number(
+            (calculo.descuentoProducto.monto || 0).toFixed(2),
+          );
+          mejorDescuentoInfo = {
+            ...calculo.descuentoProducto,
+            monto: descuentoProductoMonto,
+          };
         }
 
         if (calculo.descuentoCategoria) {
           descuentoCategoriaInfo = calculo.descuentoCategoria;
-          descuentoCategoriaMonto = Number(calculo.descuentoCategoria.monto.toFixed(2));
+          descuentoCategoriaMonto = Number(
+            calculo.descuentoCategoria.monto.toFixed(2),
+          );
           descuentoCategoriaInfo.monto = descuentoCategoriaMonto;
         }
 

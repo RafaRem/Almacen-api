@@ -52,30 +52,32 @@ describe('DescuentosService', () => {
     }).compile();
 
     service = module.get<DescuentosService>(DescuentosService);
-    repository = module.get<Repository<Descuento>>(getRepositoryToken(Descuento));
+    repository = module.get<Repository<Descuento>>(
+      getRepositoryToken(Descuento),
+    );
     jest.resetAllMocks();
     mockDescuentoProductoRepository.find.mockResolvedValue([]);
   });
 
   const createDescuento = (overrides: Partial<Descuento> = {}): Descuento => ({
-      id: 'desc-' + Math.random().toString(36).substr(2, 9),
-      nombre: undefined,
-      descripcion: undefined,
-      tipo: DescuentoTipo.VOLUMEN,
-      porcentaje: 0,
-      monto: null,
-      condiciones: null,
-      prioridad: 1,
-      acumulable: false,
-      statusId: 1,
-      laboratorioId: null,
-      categoriaClienteId: null,
-      fechaInicio: null,
-      fechaFin: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...overrides,
-    });
+    id: 'desc-' + Math.random().toString(36).substr(2, 9),
+    nombre: undefined,
+    descripcion: undefined,
+    tipo: DescuentoTipo.VOLUMEN,
+    porcentaje: 0,
+    monto: null,
+    condiciones: null,
+    prioridad: 1,
+    acumulable: false,
+    statusId: 1,
+    laboratorioId: null,
+    categoriaClienteId: null,
+    fechaInicio: null,
+    fechaFin: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
 
   describe('calcularDescuentosAcumulables', () => {
     const laboratorioId = 'lab-123';
@@ -94,12 +96,16 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const resultLessThan5 = await service.calcularDescuentosAcumulables(
-          'prod-1', 3, laboratorioId,
+          'prod-1',
+          3,
+          laboratorioId,
         );
         expect(resultLessThan5.descuentoProducto).toBeNull();
 
         const resultExactly5 = await service.calcularDescuentosAcumulables(
-          'prod-1', 5, laboratorioId,
+          'prod-1',
+          5,
+          laboratorioId,
         );
         expect(resultExactly5.descuentoProducto?.porcentaje).toBe(10);
       });
@@ -116,12 +122,16 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const resultWithinRange = await service.calcularDescuentosAcumulables(
-          'prod-1', 5, laboratorioId,
+          'prod-1',
+          5,
+          laboratorioId,
         );
         expect(resultWithinRange.descuentoProducto?.porcentaje).toBe(10);
 
         const resultAboveMax = await service.calcularDescuentosAcumulables(
-          'prod-1', 15, laboratorioId,
+          'prod-1',
+          15,
+          laboratorioId,
         );
         expect(resultAboveMax.descuentoProducto).toBeNull();
       });
@@ -138,7 +148,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -166,7 +181,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 5, laboratorioId, undefined, undefined, 100,
+          'prod-1',
+          5,
+          laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -192,7 +212,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 5, laboratorioId, undefined, undefined, 100,
+          'prod-1',
+          5,
+          laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -223,7 +248,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, within30Days, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          within30Days,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -243,7 +273,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, outside30Days, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          outside30Days,
+          100,
         );
 
         expect(result.descuentoProducto).toBeNull();
@@ -261,7 +296,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, pastDate, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          pastDate,
+          100,
         );
 
         expect(result.descuentoProducto).toBeNull();
@@ -288,7 +328,12 @@ describe('DescuentosService', () => {
         nearExpiry.setDate(nearExpiry.getDate() + 10);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, nearExpiry, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          nearExpiry,
+          100,
         );
 
         expect(result.descuentoProducto?.tipo).toBe(DescuentoTipo.VOLUMEN);
@@ -309,7 +354,9 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
         expect(result.descuentoProducto).toBeNull();
       });
@@ -326,7 +373,9 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
         expect(result.descuentoProducto?.porcentaje).toBe(5);
       });
@@ -370,7 +419,9 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -392,7 +443,9 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
         expect(result.descuentoProducto?.porcentaje).toBe(5);
       });
@@ -426,7 +479,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 5, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          5,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -446,7 +504,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoCategoria).not.toBeNull();
@@ -460,7 +523,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
         expect(result.descuentoCategoria).toBeNull();
       });
@@ -476,7 +544,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
         expect(result.descuentoCategoria).toBeNull();
       });
@@ -485,7 +558,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
         expect(result.descuentoCategoria).toBeNull();
         expect(mockCatRepository.findOne).not.toHaveBeenCalled();
@@ -513,7 +591,9 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId,
+            'prod-1',
+            1,
+            laboratorioId,
           );
 
           expect(result.descuentoProducto).not.toBeNull();
@@ -539,7 +619,9 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId,
+            'prod-1',
+            1,
+            laboratorioId,
           );
 
           expect(result.descuentoProducto).toBeNull();
@@ -564,7 +646,9 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId,
+            'prod-1',
+            1,
+            laboratorioId,
           );
 
           expect(result.descuentoProducto).toBeNull();
@@ -584,7 +668,9 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId,
+            'prod-1',
+            1,
+            laboratorioId,
           );
 
           expect(result.descuentoProducto).not.toBeNull();
@@ -615,7 +701,12 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId, undefined, within30Days, 100,
+            'prod-1',
+            1,
+            laboratorioId,
+            undefined,
+            within30Days,
+            100,
           );
 
           expect(result.descuentoProducto).not.toBeNull();
@@ -641,7 +732,12 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId, undefined, within30Days, 100,
+            'prod-1',
+            1,
+            laboratorioId,
+            undefined,
+            within30Days,
+            100,
           );
 
           expect(result.descuentoProducto).toBeNull();
@@ -675,7 +771,12 @@ describe('DescuentosService', () => {
           mockRepository.find.mockResolvedValue(descuentos);
 
           const result = await service.calcularDescuentosAcumulables(
-            'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+            'prod-1',
+            1,
+            laboratorioId,
+            categoriaClienteId,
+            undefined,
+            100,
           );
 
           expect(result.descuentoCategoria).not.toBeNull();
@@ -712,7 +813,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoTotal).toBe(30);
@@ -743,7 +849,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoTotal).toBeCloseTo(23.5, 1);
@@ -768,7 +879,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -804,14 +920,21 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentosAplicables).toHaveLength(2);
         expect(result.descuentosAplicables[0].esProducto).toBe(true);
         expect(result.descuentosAplicables[1].esProducto).toBe(false);
         expect(result.descuentosAplicables[0].tipo).toBe(DescuentoTipo.VOLUMEN);
-        expect(result.descuentosAplicables[1].tipo).toBe(DescuentoTipo.CATEGORIA);
+        expect(result.descuentosAplicables[1].tipo).toBe(
+          DescuentoTipo.CATEGORIA,
+        );
       });
 
       it('should populate porcentajeEfectivo correctly', async () => {
@@ -832,7 +955,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.porcentajeEfectivo).toBeCloseTo(23.5, 1);
@@ -844,7 +972,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 5, laboratorioId, undefined, undefined, 0,
+          'prod-1',
+          5,
+          laboratorioId,
+          undefined,
+          undefined,
+          0,
         );
 
         expect(result.precioOriginal).toBe(0);
@@ -866,7 +999,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, undefined, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          undefined,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -903,19 +1041,27 @@ describe('DescuentosService', () => {
         ];
         mockRepository.find.mockResolvedValue(descuentos);
 
-        const precioVenta = 61.20;
+        const precioVenta = 61.2;
         const cantidad = 5;
         const subtotal = precioVenta * cantidad;
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', cantidad, laboratorioId, categoriaClienteId, undefined, precioVenta,
+          'prod-1',
+          cantidad,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          precioVenta,
         );
 
         expect(result.precioOriginal).toBeCloseTo(306, 1);
         expect(result.descuentoProducto?.porcentaje).toBe(10);
         expect(result.descuentoCategoria?.porcentaje).toBe(15);
         expect(result.descuentoProducto?.monto).toBeCloseTo(30.6, 1);
-        expect(result.descuentoProducto?.precioConDescuento).toBeCloseTo(275.4, 1);
+        expect(result.descuentoProducto?.precioConDescuento).toBeCloseTo(
+          275.4,
+          1,
+        );
         expect(result.descuentoCategoria?.monto).toBeCloseTo(41.31, 1);
         expect(result.descuentoTotal).toBeCloseTo(71.91, 1);
         expect(result.precioFinal).toBeCloseTo(234.09, 1);
@@ -952,7 +1098,12 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -984,14 +1135,19 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue(descuentos);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId, categoriaClienteId, undefined, 100,
+          'prod-1',
+          1,
+          laboratorioId,
+          categoriaClienteId,
+          undefined,
+          100,
         );
 
         expect(result.descuentosAplicables).toHaveLength(2);
-        const labDesc = result.descuentosAplicables.find(d => d.esProducto);
+        const labDesc = result.descuentosAplicables.find((d) => d.esProducto);
         expect(labDesc?.tipo).toBe(DescuentoTipo.LABORATORIO);
         expect(labDesc?.porcentaje).toBe(5);
-        const catDesc = result.descuentosAplicables.find(d => !d.esProducto);
+        const catDesc = result.descuentosAplicables.find((d) => !d.esProducto);
         expect(catDesc?.tipo).toBe(DescuentoTipo.CATEGORIA);
         expect(catDesc?.porcentaje).toBe(15);
       });
@@ -1013,7 +1169,9 @@ describe('DescuentosService', () => {
         ]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
 
         expect(result.descuentoProducto).toBeNull();
@@ -1034,7 +1192,9 @@ describe('DescuentosService', () => {
         ]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -1054,7 +1214,9 @@ describe('DescuentosService', () => {
         mockDescuentoProductoRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
 
         expect(result.descuentoProducto).not.toBeNull();
@@ -1067,7 +1229,9 @@ describe('DescuentosService', () => {
         mockRepository.find.mockResolvedValue([]);
 
         const result = await service.calcularDescuentosAcumulables(
-          'prod-1', 1, laboratorioId,
+          'prod-1',
+          1,
+          laboratorioId,
         );
 
         expect(result.descuentoProducto).toBeNull();
@@ -1082,7 +1246,12 @@ describe('DescuentosService', () => {
       mockRepository.find.mockResolvedValue([]);
 
       const result = await service.previewProductDiscount(
-        'prod-1', 1, 100, 16, 20, 'lab-x',
+        'prod-1',
+        1,
+        100,
+        16,
+        20,
+        'lab-x',
       );
 
       expect(result).toBeNull();
@@ -1118,7 +1287,13 @@ describe('DescuentosService', () => {
       mockRepository.find.mockResolvedValue(descuentos);
 
       const result = await service.previewProductDiscount(
-        'prod-1', 5, 45, 16, 20, 'lab-x', 'cat-5',
+        'prod-1',
+        5,
+        45,
+        16,
+        20,
+        'lab-x',
+        'cat-5',
       );
 
       expect(result).not.toBeNull();
@@ -1137,7 +1312,13 @@ describe('DescuentosService', () => {
       mockRepository.find.mockResolvedValue([]);
 
       const result = await service.previewProductDiscount(
-        'prod-1', 1, 100, 16, 20, 'lab-x', 'cat-5',
+        'prod-1',
+        1,
+        100,
+        16,
+        20,
+        'lab-x',
+        'cat-5',
       );
 
       expect(result).not.toBeNull();
@@ -1173,7 +1354,14 @@ describe('DescuentosService', () => {
       mockRepository.find.mockResolvedValue(descuentos);
 
       const result = await service.previewProductDiscount(
-        'prod-1', 1, 100, 16, 20, 'lab-x', undefined, nearExpiry,
+        'prod-1',
+        1,
+        100,
+        16,
+        20,
+        'lab-x',
+        undefined,
+        nearExpiry,
       );
 
       expect(result).not.toBeNull();
@@ -1209,7 +1397,14 @@ describe('DescuentosService', () => {
       mockRepository.find.mockResolvedValue(descuentos);
 
       const result = await service.previewProductDiscount(
-        'prod-1', 1, 100, 16, 20, 'lab-x', undefined, farExpiry,
+        'prod-1',
+        1,
+        100,
+        16,
+        20,
+        'lab-x',
+        undefined,
+        farExpiry,
       );
 
       expect(result).toBeNull();
@@ -1272,13 +1467,17 @@ describe('DescuentosService', () => {
         const result = await service.findOne('desc-1');
 
         expect(result).toEqual(mockDescuento);
-        expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: 'desc-1' } });
+        expect(mockRepository.findOne).toHaveBeenCalledWith({
+          where: { id: 'desc-1' },
+        });
       });
 
       it('should throw NotFoundException when not found', async () => {
         mockRepository.findOne.mockResolvedValue(null);
 
-        await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
+        await expect(service.findOne('nonexistent')).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
 
@@ -1309,7 +1508,9 @@ describe('DescuentosService', () => {
       it('should throw NotFoundException when removing nonexistent', async () => {
         mockRepository.findOne.mockResolvedValue(null);
 
-        await expect(service.remove('nonexistent')).rejects.toThrow(NotFoundException);
+        await expect(service.remove('nonexistent')).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
 

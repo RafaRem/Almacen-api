@@ -17,7 +17,11 @@ import { Lote } from '../../lotes/entities/lote.entity';
  * See migration: 003_add_unique_constraint_inventario_almacen.sql
  */
 @Entity('inventario_almacen')
-@Index('uq_producto_lote_almacentipo', ['productoId', 'loteId', 'almacenTipo'], { unique: true })
+@Index(
+  'uq_producto_lote_almacentipo',
+  ['productoId', 'loteId', 'almacenTipo'],
+  { unique: true },
+)
 export class InventarioAlmacen {
   @PrimaryGeneratedColumn('uuid')
   id: string;

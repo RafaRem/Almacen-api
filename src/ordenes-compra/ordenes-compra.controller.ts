@@ -1,6 +1,19 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { OrdenesCompraService } from './ordenes-compra.service';
-import { CreateOrdenCompraDto, RecibirOrdenCompraDto } from './dto/create-orden-compra.dto';
+import {
+  CreateOrdenCompraDto,
+  RecibirOrdenCompraDto,
+} from './dto/create-orden-compra.dto';
 import { UpdateOrdenCompraDto } from './dto/update-orden-compra.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -45,14 +58,22 @@ export class OrdenesCompraController {
   @UseGuards(JwtAuthGuard)
   addDetalle(
     @Param('id') id: string,
-    @Body() detalleData: { productoId: string; cantidad: number; precioEstimado?: number },
+    @Body()
+    detalleData: {
+      productoId: string;
+      cantidad: number;
+      precioEstimado?: number;
+    },
   ) {
     return this.ordenesCompraService.addDetalle(id, detalleData);
   }
 
   @Delete(':id/detalles/:detalleId')
   @UseGuards(JwtAuthGuard)
-  removeDetalle(@Param('id') id: string, @Param('detalleId') detalleId: string) {
+  removeDetalle(
+    @Param('id') id: string,
+    @Param('detalleId') detalleId: string,
+  ) {
     return this.ordenesCompraService.removeDetalle(id, detalleId);
   }
 

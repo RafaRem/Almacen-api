@@ -138,7 +138,7 @@ export class InventarioAlmacenService {
     }
 
     for (const item of resultado) {
-      if (!item.precioVenta && item.precioUnitarioLote > 0) {
+      if (item.precioUnitarioLote > 0) {
         item.precioVenta = this.calcularPrecioVenta(
           item.precioUnitarioLote,
           item.ivaCfdi,
@@ -161,8 +161,12 @@ export class InventarioAlmacenService {
     tipoMovimiento?: string,
     userId?: string,
   ): Promise<InventarioAlmacen> {
-    const repo = managerArg ? managerArg.getRepository(InventarioAlmacen) : this.inventarioRepository;
-    const movimientoRepo = managerArg ? managerArg.getRepository(MovimientoAlmacen) : this.movimientoRepository;
+    const repo = managerArg
+      ? managerArg.getRepository(InventarioAlmacen)
+      : this.inventarioRepository;
+    const movimientoRepo = managerArg
+      ? managerArg.getRepository(MovimientoAlmacen)
+      : this.movimientoRepository;
 
     let inventario = await repo.findOne({
       where: { productoId, loteId, almacenTipo },
@@ -195,7 +199,7 @@ export class InventarioAlmacenService {
       }
       return saved;
     } else {
-      let precioLote = precioUnitarioLote;
+      const precioLote = precioUnitarioLote;
       if (precioLote === undefined || precioLote === null || precioLote === 0) {
         throw new Error('precioUnitarioLote es requerido para agregar stock');
       }
@@ -295,7 +299,8 @@ export class InventarioAlmacenService {
       totalDisponible += Number(inv.cantidadActual);
     }
 
-    const lotsSelected: { inventario: InventarioAlmacen; cantidad: number }[] = [];
+    const lotsSelected: { inventario: InventarioAlmacen; cantidad: number }[] =
+      [];
     let restante = cantidad;
 
     for (const inv of inventarios) {
@@ -337,7 +342,12 @@ export class InventarioAlmacenService {
 
     const executeReduce = async (manager: EntityManager) => {
       const { inventarios, totalDisponible, lotsSelected } =
-        await this.queryLotesPorFIFO(manager, productoId, cantidad, almacenTipoOrigen);
+        await this.queryLotesPorFIFO(
+          manager,
+          productoId,
+          cantidad,
+          almacenTipoOrigen,
+        );
 
       if (totalDisponible < cantidad) {
         return {
@@ -419,10 +429,20 @@ export class InventarioAlmacenService {
   }> {
     return this.dataSource.transaction(async (manager) => {
       const { inventarios, totalDisponible, lotsSelected } =
-        await this.queryLotesPorFIFO(manager, productoId, cantidad, almacenTipo);
+        await this.queryLotesPorFIFO(
+          manager,
+          productoId,
+          cantidad,
+          almacenTipo,
+        );
 
       if (totalDisponible < cantidad) {
-        return { success: false, lotsUsed: [], precioPromedio: 0, precioVentaTotal: 0 };
+        return {
+          success: false,
+          lotsUsed: [],
+          precioPromedio: 0,
+          precioVentaTotal: 0,
+        };
       }
 
       const lotsUsed: {
@@ -445,9 +465,13 @@ export class InventarioAlmacenService {
         });
       }
 
-      const totalPrecio = lotsUsed.reduce((sum, l) => sum + l.precio * l.cantidad, 0);
+      const totalPrecio = lotsUsed.reduce(
+        (sum, l) => sum + l.precio * l.cantidad,
+        0,
+      );
       const totalCantidad = lotsUsed.reduce((sum, l) => sum + l.cantidad, 0);
-      const precioPromedio = totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
+      const precioPromedio =
+        totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
 
       return {
         success: true,
@@ -588,15 +612,17 @@ export class InventarioAlmacenService {
       const savedMovimiento = await manager.save(movimiento);
 
       const detalleLoteRepo = manager.getRepository(DetalleLote);
-      await detalleLoteRepo.save(detalleLoteRepo.create({
-        productoId,
-        loteId,
-        cantidad,
-        precioUnitario: inventarioOrigen.precioUnitarioLote,
-        ivaCfdi: inventarioOrigen.ivaCfdi,
-        movimientoId: savedMovimiento.id,
-        almacenTipo: almacenTipoOrigen,
-      }));
+      await detalleLoteRepo.save(
+        detalleLoteRepo.create({
+          productoId,
+          loteId,
+          cantidad,
+          precioUnitario: inventarioOrigen.precioUnitarioLote,
+          ivaCfdi: inventarioOrigen.ivaCfdi,
+          movimientoId: savedMovimiento.id,
+          almacenTipo: almacenTipoOrigen,
+        }),
+      );
 
       inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
       await manager.save(inventarioOrigen);
@@ -691,8 +717,8 @@ export class InventarioAlmacenService {
               precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
               precioVenta: inventarioOrigen.precioVenta,
               ivaCfdi: inventarioOrigen.ivaCfdi,
-          ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
-        });
+              ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
+            });
           }
 
           const savedDestino = await manager.save(inventarioDestino);
@@ -709,7 +735,9 @@ export class InventarioAlmacenService {
             almacenDestino: almacenTipoDestino,
             cantidad: item.cantidad,
             userId,
-            observaciones: metadata?.observaciones || `Transferencia batch ${almacenTipoOrigen} -> ${almacenTipoDestino}`,
+            observaciones:
+              metadata?.observaciones ||
+              `Transferencia batch ${almacenTipoOrigen} -> ${almacenTipoDestino}`,
             tipoMovimiento,
             origenOperacion: metadata?.origenOperacion || OrigenOperacion.ADMIN,
           });
@@ -717,15 +745,17 @@ export class InventarioAlmacenService {
           const savedMovimiento = await manager.save(movimiento);
 
           const detalleLoteRepo = manager.getRepository(DetalleLote);
-          await detalleLoteRepo.save(detalleLoteRepo.create({
-            productoId: item.productoId,
-            loteId: item.loteId,
-            cantidad: item.cantidad,
-            precioUnitario: inventarioOrigen.precioUnitarioLote,
-            ivaCfdi: inventarioOrigen.ivaCfdi,
-            movimientoId: savedMovimiento.id,
-            almacenTipo: almacenTipoOrigen,
-          }));
+          await detalleLoteRepo.save(
+            detalleLoteRepo.create({
+              productoId: item.productoId,
+              loteId: item.loteId,
+              cantidad: item.cantidad,
+              precioUnitario: inventarioOrigen.precioUnitarioLote,
+              ivaCfdi: inventarioOrigen.ivaCfdi,
+              movimientoId: savedMovimiento.id,
+              almacenTipo: almacenTipoOrigen,
+            }),
+          );
 
           inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
           await manager.save(inventarioOrigen);
@@ -805,7 +835,9 @@ export class InventarioAlmacenService {
     return this.inventarioRepository.save(inventario);
   }
 
-  async findByProductoId(productoId: string): Promise<InventarioAlmacen | null> {
+  async findByProductoId(
+    productoId: string,
+  ): Promise<InventarioAlmacen | null> {
     return this.inventarioRepository.findOne({
       where: { productoId, almacenTipo: AlmacenTipo.VENTAS },
       relations: ['lote'],

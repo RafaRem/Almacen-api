@@ -1,6 +1,6 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common'
-import { DashboardService } from './dashboard.service'
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
+import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { DashboardService } from './dashboard.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('dashboard')
 export class DashboardController {
@@ -9,6 +9,6 @@ export class DashboardController {
   @Get()
   @UseGuards(JwtAuthGuard)
   getSummary(@Request() req) {
-    return this.dashboardService.getSummary(req.user)
+    return this.dashboardService.getSummary(req.user);
   }
 }

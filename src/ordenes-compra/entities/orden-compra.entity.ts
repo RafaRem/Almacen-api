@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Proveedor } from '../../proveedores/entities/proveedor.entity';
 import { DetalleOrdenCompra } from './detalle-orden-compra.entity';
 
@@ -29,7 +38,9 @@ export class OrdenCompra {
   @Column({ nullable: true })
   observaciones: string;
 
-  @OneToMany(() => DetalleOrdenCompra, (detalle) => detalle.ordenCompra, { cascade: true })
+  @OneToMany(() => DetalleOrdenCompra, (detalle) => detalle.ordenCompra, {
+    cascade: true,
+  })
   detalles: DetalleOrdenCompra[];
 
   @CreateDateColumn()

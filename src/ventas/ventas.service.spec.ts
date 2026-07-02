@@ -110,12 +110,24 @@ describe('VentasService', () => {
         { provide: 'VentaRepository', useValue: mockVentasRepository },
         { provide: 'DetalleVentaRepository', useValue: mockDetallesRepository },
         { provide: 'PagoVentaRepository', useValue: mockPagosRepository },
-        { provide: 'DescuentoVentaDetalleRepository', useValue: mockDescuentosVentaDetalleRepository },
+        {
+          provide: 'DescuentoVentaDetalleRepository',
+          useValue: mockDescuentosVentaDetalleRepository,
+        },
         { provide: ProductosService, useValue: mockProductosService },
         { provide: DescuentosService, useValue: mockDescuentosService },
-        { provide: InventarioAlmacenService, useValue: mockInventarioAlmacenService },
-        { provide: MovimientosAlmacenService, useValue: mockMovimientosAlmacenService },
-        { provide: ConfiguracionesService, useValue: mockConfiguracionesService },
+        {
+          provide: InventarioAlmacenService,
+          useValue: mockInventarioAlmacenService,
+        },
+        {
+          provide: MovimientosAlmacenService,
+          useValue: mockMovimientosAlmacenService,
+        },
+        {
+          provide: ConfiguracionesService,
+          useValue: mockConfiguracionesService,
+        },
         { provide: ClientesService, useValue: mockClientesService },
         { provide: LotesService, useValue: mockLotesService },
       ],
@@ -165,16 +177,24 @@ describe('VentasService', () => {
 
   describe('convertirFormaPagoAMetodoPago()', () => {
     it('should convert 01 to MetodoPago.EFECTIVO', () => {
-      expect(service.convertirFormaPagoAMetodoPago('01')).toBe(MetodoPago.EFECTIVO);
+      expect(service.convertirFormaPagoAMetodoPago('01')).toBe(
+        MetodoPago.EFECTIVO,
+      );
     });
     it('should convert 04 to MetodoPago.TARJETA', () => {
-      expect(service.convertirFormaPagoAMetodoPago('04')).toBe(MetodoPago.TARJETA);
+      expect(service.convertirFormaPagoAMetodoPago('04')).toBe(
+        MetodoPago.TARJETA,
+      );
     });
     it('should convert 03 to MetodoPago.TRANSFERENCIA', () => {
-      expect(service.convertirFormaPagoAMetodoPago('03')).toBe(MetodoPago.TRANSFERENCIA);
+      expect(service.convertirFormaPagoAMetodoPago('03')).toBe(
+        MetodoPago.TRANSFERENCIA,
+      );
     });
     it('should default unknown to MetodoPago.TARJETA', () => {
-      expect(service.convertirFormaPagoAMetodoPago('99')).toBe(MetodoPago.TARJETA);
+      expect(service.convertirFormaPagoAMetodoPago('99')).toBe(
+        MetodoPago.TARJETA,
+      );
     });
   });
 
@@ -200,24 +220,28 @@ describe('VentasService', () => {
         fechaTo: '2024-12-31',
       });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'DATE(venta.createdAt) >= :fechaFrom', { fechaFrom: '2024-01-01' },
+        'DATE(venta.createdAt) >= :fechaFrom',
+        { fechaFrom: '2024-01-01' },
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'DATE(venta.createdAt) <= :fechaTo', { fechaTo: '2024-12-31' },
+        'DATE(venta.createdAt) <= :fechaTo',
+        { fechaTo: '2024-12-31' },
       );
     });
 
     it('should apply clienteId filter', async () => {
       await service.findAll(0, 20, { clienteId: 'cliente-1' });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.clienteId = :clienteId', { clienteId: 'cliente-1' },
+        'venta.clienteId = :clienteId',
+        { clienteId: 'cliente-1' },
       );
     });
 
     it('should apply usuarioId filter', async () => {
       await service.findAll(0, 20, { usuarioId: 'user-1' });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.usuarioId = :usuarioId', { usuarioId: 'user-1' },
+        'venta.usuarioId = :usuarioId',
+        { usuarioId: 'user-1' },
       );
     });
 
@@ -230,7 +254,8 @@ describe('VentasService', () => {
     it('should apply statusId filter as number', async () => {
       await service.findAll(0, 20, { statusId: '1' });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.statusId = :statusId', { statusId: 1 },
+        'venta.statusId = :statusId',
+        { statusId: 1 },
       );
     });
   });
@@ -269,7 +294,9 @@ describe('VentasService', () => {
       mockVentasRepository.findOne.mockResolvedValue(mockVenta);
       mockDetallesRepository.find.mockResolvedValue(mockDetalles);
       mockPagosRepository.find.mockResolvedValue(mockPagos);
-      mockDescuentosVentaDetalleRepository.find.mockResolvedValue(mockDescuentos);
+      mockDescuentosVentaDetalleRepository.find.mockResolvedValue(
+        mockDescuentos,
+      );
     });
 
     it('should return sale with full relations', async () => {
@@ -284,7 +311,9 @@ describe('VentasService', () => {
 
     it('should throw NotFoundException when venta not found', async () => {
       mockVentasRepository.findOne.mockResolvedValue(null);
-      await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should convert numeric fields', async () => {
@@ -341,20 +370,29 @@ describe('VentasService', () => {
       expect(result).not.toBeNull();
       expect(result.folio).toBe(42);
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        'venta.folio = :folio', { folio: 42 },
+        'venta.folio = :folio',
+        { folio: 42 },
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.usuarioId = :userId', { userId: 'user-1' },
+        'venta.usuarioId = :userId',
+        { userId: 'user-1' },
       );
     });
 
     it('should apply date range filters', async () => {
-      await service.findByFolioAndUserId(42, 'user-1', '2024-01-01', '2024-12-31');
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'DATE(venta.createdAt) >= :fechaFrom', { fechaFrom: '2024-01-01' },
+      await service.findByFolioAndUserId(
+        42,
+        'user-1',
+        '2024-01-01',
+        '2024-12-31',
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'DATE(venta.createdAt) <= :fechaTo', { fechaTo: '2024-12-31' },
+        'DATE(venta.createdAt) >= :fechaFrom',
+        { fechaFrom: '2024-01-01' },
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'DATE(venta.createdAt) <= :fechaTo',
+        { fechaTo: '2024-12-31' },
       );
     });
 
@@ -387,7 +425,13 @@ describe('VentasService', () => {
     };
 
     beforeEach(() => {
-      mockVentasRepository.findOne = async () => ({ ...baseVenta, detalles: baseVenta.detalles.map(d => ({ ...d, lotesUtilizados: d.lotesUtilizados.map(l => ({ ...l })) })) });
+      mockVentasRepository.findOne = async () => ({
+        ...baseVenta,
+        detalles: baseVenta.detalles.map((d) => ({
+          ...d,
+          lotesUtilizados: d.lotesUtilizados.map((l) => ({ ...l })),
+        })),
+      });
       mockDataSource.transaction = jest.fn((cb) => cb(mockManager));
       mockManager.save = jest.fn();
       mockManager.create = jest.fn().mockReturnValue({});
@@ -402,9 +446,17 @@ describe('VentasService', () => {
     it('should cancel and revert stock', async () => {
       const result = await service.cancel('venta-1', 'user-1', 'Test cancel');
 
-      expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledTimes(2);
+      expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledTimes(
+        2,
+      );
       expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledWith(
-        'prod-1', 'lote-1', 2, 3, undefined, undefined, mockManager,
+        'prod-1',
+        'lote-1',
+        2,
+        3,
+        undefined,
+        undefined,
+        mockManager,
       );
       expect(mockManager.create).toHaveBeenCalledTimes(2);
       expect(mockManager.save).toHaveBeenCalled();
@@ -416,8 +468,13 @@ describe('VentasService', () => {
     });
 
     it('should throw BadRequestException for already cancelled venta', async () => {
-      mockVentasRepository.findOne = async () => ({ ...baseVenta, statusId: 2 });
-      await expect(service.cancel('venta-1')).rejects.toThrow(BadRequestException);
+      mockVentasRepository.findOne = async () => ({
+        ...baseVenta,
+        statusId: 2,
+      });
+      await expect(service.cancel('venta-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should use SYSTEM user when usuarioId not provided', async () => {
@@ -429,12 +486,14 @@ describe('VentasService', () => {
     it('should skip zero-cantidad lotes', async () => {
       const ventaWithZeroLotes = {
         ...baseVenta,
-        detalles: [{
-          ...baseVenta.detalles[0],
-          lotesUtilizados: [
-            { loteId: 'lote-1', cantidad: 0, lote: { id: 'lote-1' } },
-          ],
-        }],
+        detalles: [
+          {
+            ...baseVenta.detalles[0],
+            lotesUtilizados: [
+              { loteId: 'lote-1', cantidad: 0, lote: { id: 'lote-1' } },
+            ],
+          },
+        ],
       };
       mockVentasRepository.findOne = async () => ventaWithZeroLotes;
 
@@ -445,15 +504,19 @@ describe('VentasService', () => {
     it('should fallback to detalle.loteId when lotesUtilizados empty', async () => {
       const ventaWithoutLotesUtilizados = {
         ...baseVenta,
-        detalles: [{
-          ...baseVenta.detalles[0],
-          lotesUtilizados: [],
-        }],
+        detalles: [
+          {
+            ...baseVenta.detalles[0],
+            lotesUtilizados: [],
+          },
+        ],
       };
       mockVentasRepository.findOne = async () => ventaWithoutLotesUtilizados;
 
       await service.cancel('venta-1');
-      expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledTimes(1);
+      expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledTimes(
+        1,
+      );
     });
   });
 
@@ -466,12 +529,25 @@ describe('VentasService', () => {
     beforeEach(() => {
       mockConfiguracionesService.getIvaGlobal.mockResolvedValue(16);
       mockInventarioAlmacenService.findByProductoId.mockImplementation((id) => {
-        if (id === 'prod-1') return Promise.resolve({ precioUnitarioLote: 45, precioVenta: 61.2, almacenTipo: 2 });
-        if (id === 'prod-2') return Promise.resolve({ precioUnitarioLote: 183.65, precioVenta: 250.6, almacenTipo: 2 });
+        if (id === 'prod-1')
+          return Promise.resolve({
+            precioUnitarioLote: 45,
+            precioVenta: 61.2,
+            almacenTipo: 2,
+          });
+        if (id === 'prod-2')
+          return Promise.resolve({
+            precioUnitarioLote: 183.65,
+            precioVenta: 250.6,
+            almacenTipo: 2,
+          });
         return null;
       });
 
-      mockProductosService.findOne.mockResolvedValue({ id: 'prod-1', nombre: 'Producto Test' });
+      mockProductosService.findOne.mockResolvedValue({
+        id: 'prod-1',
+        nombre: 'Producto Test',
+      });
 
       mockClientesService.findOne.mockResolvedValue({
         id: 'cliente-1',
@@ -499,7 +575,10 @@ describe('VentasService', () => {
     });
 
     it('should generate descuentoPorProducto entries', async () => {
-      const result = await service.previewDescuento([productos[0]], 'cliente-1');
+      const result = await service.previewDescuento(
+        [productos[0]],
+        'cliente-1',
+      );
       const entry = result.descuentoPorProducto[0];
       expect(entry.productoId).toBe('prod-1');
       expect(entry.mejorDescuento).toBeDefined();
@@ -576,12 +655,19 @@ describe('VentasService', () => {
     };
 
     beforeEach(() => {
-      mockVentasRepository.create.mockImplementation((data: any) => ({ ...savedVenta, ...data }));
+      mockVentasRepository.create.mockImplementation((data: any) => ({
+        ...savedVenta,
+        ...data,
+      }));
       mockVentasRepository.query.mockResolvedValue([{ folio: 1001 }]);
       mockProductosService.findOne.mockResolvedValue(baseProducto);
       mockInventarioAlmacenService.getStockTotal.mockResolvedValue(50);
-      mockInventarioAlmacenService.findByProductoId.mockResolvedValue(baseInventario);
-      mockInventarioAlmacenService.reducirStockFIFO.mockResolvedValue(baseResultadoFEPU);
+      mockInventarioAlmacenService.findByProductoId.mockResolvedValue(
+        baseInventario,
+      );
+      mockInventarioAlmacenService.reducirStockFIFO.mockResolvedValue(
+        baseResultadoFEPU,
+      );
       mockDescuentosService.calcularDescuentosAcumulables.mockResolvedValue({
         descuentoProducto: null,
         descuentoCategoria: null,
@@ -593,16 +679,29 @@ describe('VentasService', () => {
         descuentosAplicables: [],
       });
       mockConfiguracionesService.getIvaGlobal.mockResolvedValue(16);
-      mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
+      mockDataSource.transaction.mockImplementation((cb: any) =>
+        cb(mockManager),
+      );
       mockManager.save.mockImplementation((entity: any, data: any) => {
-        if (Array.isArray(data)) return Promise.resolve(data.map((d: any) => ({ ...d, id: d.id || ('det-' + Math.random()) })));
+        if (Array.isArray(data))
+          return Promise.resolve(
+            data.map((d: any) => ({
+              ...d,
+              id: d.id || 'det-' + Math.random(),
+            })),
+          );
         if (data?.folio) return Promise.resolve(data);
-        if (data?.formaPago) return Promise.resolve({ ...data, id: 'pago-' + Math.random() });
-        if (data?.detalleVentaId) return Promise.resolve({ ...data, id: 'dl-' + Math.random() });
-        if (data?.productoId) return Promise.resolve({ ...data, id: 'det-' + Math.random() });
+        if (data?.formaPago)
+          return Promise.resolve({ ...data, id: 'pago-' + Math.random() });
+        if (data?.detalleVentaId)
+          return Promise.resolve({ ...data, id: 'dl-' + Math.random() });
+        if (data?.productoId)
+          return Promise.resolve({ ...data, id: 'det-' + Math.random() });
         return Promise.resolve({ id: 'new-id' });
       });
-      mockManager.find.mockResolvedValue([{ ...savedDetalle, producto: baseProducto, lote: { id: 'lote-1' } }]);
+      mockManager.find.mockResolvedValue([
+        { ...savedDetalle, producto: baseProducto, lote: { id: 'lote-1' } },
+      ]);
       mockDetallesRepository.manager.create.mockReturnValue({});
     });
 
@@ -616,9 +715,9 @@ describe('VentasService', () => {
       expect(result).toBeDefined();
       expect(result.folio).toBe(1001);
       expect(result.total).toBe(354.96);
-      expect(mockInventarioAlmacenService.reducirStockFIFO).toHaveBeenCalledWith(
-        'prod-1', 5, 2, usuarioId, undefined, mockManager,
-      );
+      expect(
+        mockInventarioAlmacenService.reducirStockFIFO,
+      ).toHaveBeenCalledWith('prod-1', 5, 2, usuarioId, undefined, mockManager);
     });
 
     it('should create a sale with multiple products', async () => {
@@ -637,17 +736,23 @@ describe('VentasService', () => {
       mockInventarioAlmacenService.reducirStockFIFO
         .mockResolvedValueOnce({
           success: true,
-          lotsUsed: [{ loteId: 'lote-1', numeroLote: 'L001', cantidad: 3, precio: 45 }],
+          lotsUsed: [
+            { loteId: 'lote-1', numeroLote: 'L001', cantidad: 3, precio: 45 },
+          ],
         })
         .mockResolvedValueOnce({
           success: true,
-          lotsUsed: [{ loteId: 'lote-2', numeroLote: 'L002', cantidad: 2, precio: 80 }],
+          lotsUsed: [
+            { loteId: 'lote-2', numeroLote: 'L002', cantidad: 2, precio: 80 },
+          ],
         });
 
       const result = await service.create(dto as any, usuarioId);
 
       expect(result).toBeDefined();
-      expect(mockInventarioAlmacenService.reducirStockFIFO).toHaveBeenCalledTimes(2);
+      expect(
+        mockInventarioAlmacenService.reducirStockFIFO,
+      ).toHaveBeenCalledTimes(2);
     });
 
     it('should create a sale with multi-payment (pagos array)', async () => {
@@ -789,9 +894,12 @@ describe('VentasService', () => {
 
       await service.create(dto as any, usuarioId);
 
-      expect(mockDescuentosService.calcularDescuentosAcumulables).toHaveBeenCalled();
+      expect(
+        mockDescuentosService.calcularDescuentosAcumulables,
+      ).toHaveBeenCalled();
       expect(mockManager.save).toHaveBeenCalledWith(
-        expect.anything(), expect.objectContaining({ descuentoAplicado: expect.any(Number) }),
+        expect.anything(),
+        expect.objectContaining({ descuentoAplicado: expect.any(Number) }),
       );
     });
 
@@ -816,17 +924,25 @@ describe('VentasService', () => {
 
     it('should handle concurrent sales with stock race condition', async () => {
       let stock = 5;
-      mockInventarioAlmacenService.getStockTotal.mockImplementation(async () => stock);
+      mockInventarioAlmacenService.getStockTotal.mockImplementation(
+        async () => stock,
+      );
       mockInventarioAlmacenService.reducirStockFIFO.mockImplementation(
         async (productoId, cantidad) => {
           if (cantidad > stock) {
-            return { success: false, message: 'Stock insuficiente', lotsUsed: [] };
+            return {
+              success: false,
+              message: 'Stock insuficiente',
+              lotsUsed: [],
+            };
           }
           stock -= cantidad;
           return {
             success: true,
             message: 'OK',
-            lotsUsed: [{ loteId: 'lote-1', numeroLote: 'L001', cantidad, precio: 45 }],
+            lotsUsed: [
+              { loteId: 'lote-1', numeroLote: 'L001', cantidad, precio: 45 },
+            ],
           };
         },
       );
@@ -850,9 +966,7 @@ describe('VentasService', () => {
 
       expect(successes.length).toBe(1);
       expect(failures.length).toBe(1);
-      expect((failures[0] as PromiseRejectedResult).reason).toBeInstanceOf(
-        BadRequestException,
-      );
+      expect(failures[0].reason).toBeInstanceOf(BadRequestException);
     });
 
     it('should assign unique folios on concurrent sales', async () => {

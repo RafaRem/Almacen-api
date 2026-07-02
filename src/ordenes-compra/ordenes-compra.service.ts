@@ -1,10 +1,18 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { OrdenCompra } from './entities/orden-compra.entity';
 import { DetalleOrdenCompra } from './entities/detalle-orden-compra.entity';
-import { CreateOrdenCompraDto, RecibirOrdenCompraDto } from './dto/create-orden-compra.dto';
+import {
+  CreateOrdenCompraDto,
+  RecibirOrdenCompraDto,
+} from './dto/create-orden-compra.dto';
 import { UpdateOrdenCompraDto } from './dto/update-orden-compra.dto';
 import { Lote } from '../lotes/entities/lote.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
@@ -80,7 +88,10 @@ export class OrdenesCompraService {
     return this.findOne(saved.id);
   }
 
-  async findAll(filters?: { status?: string; proveedorId?: string }): Promise<OrdenCompra[]> {
+  async findAll(filters?: {
+    status?: string;
+    proveedorId?: string;
+  }): Promise<OrdenCompra[]> {
     const qb = this.ordenesRepository
       .createQueryBuilder('oc')
       .leftJoinAndSelect('oc.proveedor', 'proveedor')
@@ -92,7 +103,9 @@ export class OrdenesCompraService {
       qb.andWhere('oc.status = :status', { status: filters.status });
     }
     if (filters?.proveedorId) {
-      qb.andWhere('oc.proveedorId = :proveedorId', { proveedorId: filters.proveedorId });
+      qb.andWhere('oc.proveedorId = :proveedorId', {
+        proveedorId: filters.proveedorId,
+      });
     }
 
     return qb.getMany();
@@ -109,7 +122,12 @@ export class OrdenesCompraService {
   async findOne(id: string): Promise<OrdenCompra> {
     const orden = await this.ordenesRepository.findOne({
       where: { id },
-      relations: ['proveedor', 'detalles', 'detalles.producto', 'detalles.producto.laboratorio'],
+      relations: [
+        'proveedor',
+        'detalles',
+        'detalles.producto',
+        'detalles.producto.laboratorio',
+      ],
     });
     if (!orden) {
       throw new NotFoundException(`OrdenCompra with ID ${id} not found`);
@@ -117,7 +135,10 @@ export class OrdenesCompraService {
     return orden;
   }
 
-  async update(id: string, updateDto: UpdateOrdenCompraDto): Promise<OrdenCompra> {
+  async update(
+    id: string,
+    updateDto: UpdateOrdenCompraDto,
+  ): Promise<OrdenCompra> {
     const orden = await this.findOne(id);
 
     if (orden.status !== 'BORRADOR') {
@@ -125,9 +146,12 @@ export class OrdenesCompraService {
     }
 
     if (updateDto.proveedorId) orden.proveedorId = updateDto.proveedorId;
-    if (updateDto.fechaOrden !== undefined) orden.fechaOrden = updateDto.fechaOrden;
-    if (updateDto.fechaEsperada !== undefined) orden.fechaEsperada = updateDto.fechaEsperada;
-    if (updateDto.observaciones !== undefined) orden.observaciones = updateDto.observaciones;
+    if (updateDto.fechaOrden !== undefined)
+      orden.fechaOrden = updateDto.fechaOrden;
+    if (updateDto.fechaEsperada !== undefined)
+      orden.fechaEsperada = updateDto.fechaEsperada;
+    if (updateDto.observaciones !== undefined)
+      orden.observaciones = updateDto.observaciones;
     if (updateDto.status) orden.status = updateDto.status;
 
     await this.ordenesRepository.save(orden);
@@ -146,11 +170,20 @@ export class OrdenesCompraService {
     return this.findOne(id);
   }
 
-  async addDetalle(ordenId: string, detalleData: { productoId: string; cantidad: number; precioEstimado?: number }): Promise<OrdenCompra> {
+  async addDetalle(
+    ordenId: string,
+    detalleData: {
+      productoId: string;
+      cantidad: number;
+      precioEstimado?: number;
+    },
+  ): Promise<OrdenCompra> {
     const orden = await this.findOne(ordenId);
 
     if (orden.status !== 'BORRADOR') {
-      throw new BadRequestException('Solo órdenes en BORRADOR pueden modificarse');
+      throw new BadRequestException(
+        'Solo órdenes en BORRADOR pueden modificarse',
+      );
     }
 
     const detalle = this.detallesRepository.create({
@@ -164,10 +197,15 @@ export class OrdenesCompraService {
     return this.findOne(ordenId);
   }
 
-  async removeDetalle(ordenId: string, detalleId: string): Promise<OrdenCompra> {
+  async removeDetalle(
+    ordenId: string,
+    detalleId: string,
+  ): Promise<OrdenCompra> {
     const orden = await this.findOne(ordenId);
     if (orden.status !== 'BORRADOR') {
-      throw new BadRequestException('Solo órdenes en BORRADOR pueden modificarse');
+      throw new BadRequestException(
+        'Solo órdenes en BORRADOR pueden modificarse',
+      );
     }
     await this.detallesRepository.delete(detalleId);
     return this.findOne(ordenId);
@@ -184,7 +222,10 @@ export class OrdenesCompraService {
     return this.findOne(id);
   }
 
-  async recibir(id: string, recibirDto: RecibirOrdenCompraDto): Promise<OrdenCompra> {
+  async recibir(
+    id: string,
+    recibirDto: RecibirOrdenCompraDto,
+  ): Promise<OrdenCompra> {
     const orden = await this.findOne(id);
 
     if (orden.status === 'COMPLETADA') {
@@ -199,19 +240,26 @@ export class OrdenesCompraService {
     for (const detalleRecibido of recibirDto.detalles) {
       const detalle = detallesMap.get(detalleRecibido.detalleId);
       if (!detalle) {
-        throw new NotFoundException(`Detalle ${detalleRecibido.detalleId} no encontrado en la orden`);
+        throw new NotFoundException(
+          `Detalle ${detalleRecibido.detalleId} no encontrado en la orden`,
+        );
       }
 
-      const nuevaRecibida = detalle.cantidadRecibida + detalleRecibido.cantidadRecibida;
+      const nuevaRecibida =
+        detalle.cantidadRecibida + detalleRecibido.cantidadRecibida;
       if (nuevaRecibida > detalle.cantidad) {
         throw new BadRequestException(
           `Cantidad recibida (${nuevaRecibida}) excede la cantidad ordenada (${detalle.cantidad}) para el producto ${detalle.producto?.nombre || detalle.productoId}`,
         );
       }
 
-      const producto = await this.productoRepository.findOne({ where: { id: detalle.productoId } });
+      const producto = await this.productoRepository.findOne({
+        where: { id: detalle.productoId },
+      });
       if (!producto) {
-        throw new NotFoundException(`Producto ${detalle.productoId} no encontrado`);
+        throw new NotFoundException(
+          `Producto ${detalle.productoId} no encontrado`,
+        );
       }
 
       await this.entityManager.transaction(async (manager) => {
@@ -248,7 +296,8 @@ export class OrdenesCompraService {
 
         if (inventario) {
           inventario.cantidadActual =
-            Number(inventario.cantidadActual) + detalleRecibido.cantidadRecibida;
+            Number(inventario.cantidadActual) +
+            detalleRecibido.cantidadRecibida;
         } else {
           inventario = manager.create(InventarioAlmacen, {
             productoId: detalle.productoId,
@@ -261,11 +310,17 @@ export class OrdenesCompraService {
 
         inventario = await manager.save(InventarioAlmacen, inventario);
 
-        if (inventario.precioUnitarioLote && inventario.precioUnitarioLote > 0 && producto.margenRecomendado) {
+        if (
+          inventario.precioUnitarioLote &&
+          inventario.precioUnitarioLote > 0 &&
+          producto.margenRecomendado
+        ) {
           const iva = inventario.ivaCfdi ?? 16;
           const precioNeto = inventario.precioUnitarioLote * (1 + iva / 100);
-          const cantidadMargen = inventario.precioUnitarioLote * (producto.margenRecomendado / 100);
-          inventario.precioVenta = Math.round((precioNeto + cantidadMargen) * 100) / 100;
+          const cantidadMargen =
+            inventario.precioUnitarioLote * (producto.margenRecomendado / 100);
+          inventario.precioVenta =
+            Math.round((precioNeto + cantidadMargen) * 100) / 100;
           await manager.save(InventarioAlmacen, inventario);
         }
 
@@ -293,7 +348,9 @@ export class OrdenesCompraService {
   async remove(id: string): Promise<void> {
     const orden = await this.findOne(id);
     if (orden.status === 'COMPLETADA') {
-      throw new BadRequestException('No se puede eliminar una orden completada');
+      throw new BadRequestException(
+        'No se puede eliminar una orden completada',
+      );
     }
     orden.status = 'CANCELADA';
     await this.ordenesRepository.save(orden);

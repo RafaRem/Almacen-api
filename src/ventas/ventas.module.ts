@@ -17,7 +17,13 @@ import { ClientesModule } from '../clientes/clientes.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Venta, DetalleVenta, DetalleVentaLote, PagoVenta, DescuentoVentaDetalle]),
+    TypeOrmModule.forFeature([
+      Venta,
+      DetalleVenta,
+      DetalleVentaLote,
+      PagoVenta,
+      DescuentoVentaDetalle,
+    ]),
     ProductosModule,
     LotesModule,
     DescuentosModule,

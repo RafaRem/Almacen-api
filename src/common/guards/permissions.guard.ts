@@ -37,18 +37,15 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    const permissions = await this.usersPermissionsService.getPermissionsForUser(
-      user.id,
-    );
+    const permissions =
+      await this.usersPermissionsService.getPermissionsForUser(user.id);
 
     const hasPermission = permissions.some(
       (p) => p.module === requiredModule && p.canView,
     );
 
     if (!hasPermission) {
-      throw new ForbiddenException(
-        `Permiso requerido: ${requiredModule}`,
-      );
+      throw new ForbiddenException(`Permiso requerido: ${requiredModule}`);
     }
 
     return true;

@@ -34,7 +34,13 @@ export class DetalleLote {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   cantidad: number;
 
-  @Column({ name: 'precio_unitario', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({
+    name: 'precio_unitario',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
   precioUnitario: number;
 
   @Column({

@@ -8,11 +8,12 @@ import {
   Delete,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ProductosService } from './productos.service';
 import { CreateProductoDto } from './dto/create-producto.dto';
+import { CreateProductoConStockDto } from './dto/create-producto-con-stock.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
-import { ChangeLoteDto } from './dto/change-lote.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('productos')
@@ -23,6 +24,12 @@ export class ProductosController {
   @UseGuards(JwtAuthGuard)
   create(@Body() createProductoDto: CreateProductoDto) {
     return this.productosService.create(createProductoDto);
+  }
+
+  @Post('con-stock')
+  @UseGuards(JwtAuthGuard)
+  createConStock(@Body() dto: CreateProductoConStockDto, @Req() req) {
+    return this.productosService.createConStock(dto, req.user?.id);
   }
 
   @Post('check-existence')
@@ -62,12 +69,6 @@ export class ProductosController {
     @Body() updateProductoDto: UpdateProductoDto,
   ) {
     return this.productosService.update(id, updateProductoDto);
-  }
-
-  @Patch(':id/lote')
-  @UseGuards(JwtAuthGuard)
-  changeLote(@Param('id') id: string, @Body() changeLoteDto: ChangeLoteDto) {
-    return this.productosService.changeLote(id, changeLoteDto);
   }
 
   @Delete(':id')

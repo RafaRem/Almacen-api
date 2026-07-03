@@ -51,6 +51,6 @@ export class Lote {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @OneToMany(() => InventarioAlmacen, inv => inv.lote)
+  @OneToMany(() => InventarioAlmacen, (inv) => inv.lote)
   inventarioAlmacen: InventarioAlmacen[];
 }

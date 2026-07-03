@@ -41,11 +41,7 @@ HAVING COUNT(*) > 1;
 
 ALTER TABLE inventario_almacen
 ADD CONSTRAINT uq_producto_lote_almacentipo
-UNIQUE (producto_id, lote_id, almacen_tipo);
-
--- ============================================
--- STEP 4: Verify constraint was created
--- ============================================
+UNIQUE ("productoId", "loteId", "almacenTipo");
 
 SELECT conname, conindid::regclass as index_name
 FROM pg_constraint

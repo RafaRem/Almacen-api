@@ -33,6 +33,7 @@ import { TicketUploadsModule } from './ticket-uploads/ticket-uploads.module';
 import { CartSessionModule } from './cart-session/cart-session.module';
 import { DetalleLoteModule } from './detalle-lote/detalle-lote.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
 import { RecepcionModule } from './recepciones/recepcion.module';
 
@@ -40,7 +41,7 @@ import { RecepcionModule } from './recepciones/recepcion.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env', '.env.dev'],
+      envFilePath: ['.env.dev', '.env'],
     }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
@@ -80,6 +81,7 @@ import { RecepcionModule } from './recepciones/recepcion.module';
     ProveedoresModule,
     OrdenesCompraModule,
     RecepcionModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -42,7 +42,10 @@ export class DetalleLoteService {
     return this.detalleLoteRepository.save(detalleLote);
   }
 
-  async update(id: string, data: Partial<DetalleLote>): Promise<DetalleLote | null> {
+  async update(
+    id: string,
+    data: Partial<DetalleLote>,
+  ): Promise<DetalleLote | null> {
     await this.detalleLoteRepository.update(id, data);
     return this.findOne(id);
   }

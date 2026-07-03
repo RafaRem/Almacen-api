@@ -16,7 +16,10 @@ export class RecepcionesService {
   }
 
   async findAll(): Promise<Recepcion[]> {
-    return this.repo.find({ relations: ['proveedor', 'lotes'], order: { createdAt: 'DESC' } });
+    return this.repo.find({
+      relations: ['proveedor', 'lotes'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async findOne(id: string): Promise<Recepcion | null> {
@@ -26,7 +29,13 @@ export class RecepcionesService {
   async findByIdWithLotes(id: string): Promise<Recepcion | null> {
     return this.repo.findOne({
       where: { id },
-      relations: ['proveedor', 'lotes', 'lotes.laboratorio', 'lotes.inventarioAlmacen', 'lotes.inventarioAlmacen.producto'],
+      relations: [
+        'proveedor',
+        'lotes',
+        'lotes.laboratorio',
+        'lotes.inventarioAlmacen',
+        'lotes.inventarioAlmacen.producto',
+      ],
     });
   }
 }

@@ -3,9 +3,13 @@ import {
   IsNotEmpty,
   IsOptional,
   IsNumber,
+  IsUUID,
+  IsInt,
+  Min,
+  IsDateString,
 } from 'class-validator';
 
-export class CreateProductoDto {
+export class CreateProductoConStockDto {
   @IsString()
   @IsNotEmpty()
   nombre: string;
@@ -18,9 +22,29 @@ export class CreateProductoDto {
   @IsNotEmpty()
   codigoBarras: string;
 
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   laboratorioId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  numeroLote: string;
+
+  @IsOptional()
+  @IsDateString()
+  fechaCaducidad?: string;
+
+  @IsNumber()
+  @Min(0.01)
+  precioUnitarioLote: number;
+
+  @IsOptional()
+  @IsNumber()
+  ivaCfdi?: number;
+
+  @IsNumber()
+  @Min(1)
+  cantidad: number;
 
   @IsOptional()
   @IsNumber()
@@ -35,6 +59,6 @@ export class CreateProductoDto {
   margenRecomendado?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   statusId?: number;
 }

@@ -34,7 +34,9 @@ export class LotesService {
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0);
       if (fecha <= hoy) {
-        throw new BadRequestException('La fecha de caducidad debe ser posterior a hoy');
+        throw new BadRequestException(
+          'La fecha de caducidad debe ser posterior a hoy',
+        );
       }
     }
 
@@ -43,7 +45,13 @@ export class LotesService {
   }
 
   async findAll(): Promise<Lote[]> {
-    return this.lotesRepository.find({ relations: ['laboratorio', 'inventarioAlmacen', 'inventarioAlmacen.producto'] });
+    return this.lotesRepository.find({
+      relations: [
+        'laboratorio',
+        'inventarioAlmacen',
+        'inventarioAlmacen.producto',
+      ],
+    });
   }
 
   async findOne(id: string): Promise<Lote> {
@@ -62,7 +70,7 @@ export class LotesService {
       where: { productoId },
       relations: ['lote', 'lote.laboratorio'],
     });
-    return inventarios.map(inv => inv.lote).filter(Boolean);
+    return inventarios.map((inv) => inv.lote).filter(Boolean);
   }
 
   async update(id: string, updateLoteDto: UpdateLoteDto): Promise<Lote> {

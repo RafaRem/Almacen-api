@@ -21,10 +21,19 @@ describe('InventarioAlmacenService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventarioAlmacenService,
-        { provide: getRepositoryToken(InventarioAlmacen), useValue: mockInventarioRepository },
-        { provide: getRepositoryToken(Producto), useValue: mockProductoRepository },
+        {
+          provide: getRepositoryToken(InventarioAlmacen),
+          useValue: mockInventarioRepository,
+        },
+        {
+          provide: getRepositoryToken(Producto),
+          useValue: mockProductoRepository,
+        },
         { provide: getRepositoryToken(Lote), useValue: mockLoteRepository },
-        { provide: getRepositoryToken(MovimientoAlmacen), useValue: mockMovimientoRepository },
+        {
+          provide: getRepositoryToken(MovimientoAlmacen),
+          useValue: mockMovimientoRepository,
+        },
         { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
@@ -63,10 +72,18 @@ describe('InventarioAlmacenService', () => {
         // esperado: falla porque no hay inventario, pero el lock se configuró
       }
 
-      expect(mockCreateQueryBuilder).toHaveBeenCalledWith(InventarioAlmacen, 'inv');
+      expect(mockCreateQueryBuilder).toHaveBeenCalledWith(
+        InventarioAlmacen,
+        'inv',
+      );
       expect(mockInnerJoin).toHaveBeenCalledWith('inv.lote', 'lote');
-      expect(mockWhere).toHaveBeenCalledWith('inv.productoId = :productoId', { productoId: 'test-producto' });
-      expect(mockAndWhere).toHaveBeenCalledWith('inv.almacenTipo = :almacenTipo', { almacenTipo: AlmacenTipo.VENTAS });
+      expect(mockWhere).toHaveBeenCalledWith('inv.productoId = :productoId', {
+        productoId: 'test-producto',
+      });
+      expect(mockAndWhere).toHaveBeenCalledWith(
+        'inv.almacenTipo = :almacenTipo',
+        { almacenTipo: AlmacenTipo.VENTAS },
+      );
       expect(mockOrderBy).toHaveBeenCalledWith('lote.fechaCaducidad', 'ASC');
       expect(mockSetLock).toHaveBeenCalledWith('pessimistic_write');
     });

@@ -57,7 +57,11 @@ export class CreditosController {
     @Body() body: { monto: number },
     @Request() req,
   ): Promise<Credito> {
-    return this.creditosService.usarCredito(clienteId, body.monto, req.user?.id);
+    return this.creditosService.usarCredito(
+      clienteId,
+      body.monto,
+      req.user?.id,
+    );
   }
 
   @Delete('cliente/:clienteId')

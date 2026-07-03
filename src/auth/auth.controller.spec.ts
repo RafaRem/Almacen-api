@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserStatusId, UserTipo } from '../users/entities/user.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { UsersService } from '../users/users.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -31,7 +32,10 @@ describe('AuthController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: authService }],
+      providers: [
+        { provide: AuthService, useValue: authService },
+        { provide: UsersService, useValue: {} },
+      ],
     }).compile();
 
     controller = module.get(AuthController);

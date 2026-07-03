@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  CreateDateColumn,
+} from 'typeorm';
 import { Proveedor } from '../../proveedores/entities/proveedor.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
 
@@ -44,6 +52,6 @@ export class Recepcion {
   @CreateDateColumn()
   createdAt: Date;
 
-  @OneToMany(() => Lote, lote => lote.recepcion)
+  @OneToMany(() => Lote, (lote) => lote.recepcion)
   lotes: Lote[];
 }

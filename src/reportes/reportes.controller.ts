@@ -1,5 +1,10 @@
 import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
-import { ReportesService, VentasPorClienteFilters, KardexInventarioFilters, ResumenClientesFilters } from './reportes.service';
+import {
+  ReportesService,
+  VentasPorClienteFilters,
+  KardexInventarioFilters,
+  ResumenClientesFilters,
+} from './reportes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('reportes')
@@ -13,7 +18,11 @@ export class ReportesController {
     @Query('fechaFrom') fechaFrom: string,
     @Query('fechaTo') fechaTo: string,
   ) {
-    return this.reportesService.getVentasPorCliente({ clienteNombre, fechaFrom, fechaTo });
+    return this.reportesService.getVentasPorCliente({
+      clienteNombre,
+      fechaFrom,
+      fechaTo,
+    });
   }
 
   @Get('resumen-clientes')
@@ -42,7 +51,10 @@ export class ReportesController {
     @Query('productoNombre') productoNombre: string,
     @Query('folioVenta') folioVenta: string,
   ) {
-    return this.reportesService.getKardexInventario({ productoNombre, folioVenta });
+    return this.reportesService.getKardexInventario({
+      productoNombre,
+      folioVenta,
+    });
   }
 
   @Get('kardex-inventario/detalle/:productoId')

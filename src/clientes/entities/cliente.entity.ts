@@ -34,6 +34,9 @@ export class Cliente {
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
+  @Column({ type: 'varchar', length: 20, unique: true })
+  codigo: string;
+
   @Column({ type: 'varchar', length: 20, unique: true, nullable: true })
   rfc: string;
 

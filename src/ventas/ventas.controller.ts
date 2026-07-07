@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { VentasService } from './ventas.service';
 import { CreateVentaDto } from './dto/create-venta.dto';
+import { PreviewDescuentoDto } from './dto/preview-descuento.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('ventas')
@@ -45,14 +46,10 @@ export class VentasController {
     });
   }
 
-  @Get('preview-descuento')
+  @Post('preview-descuento')
   @UseGuards(JwtAuthGuard)
-  previewDescuento(
-    @Query('productos') productosJson: string,
-    @Query('clienteId') clienteId?: string,
-  ) {
-    const productos = JSON.parse(productosJson);
-    return this.ventasService.previewDescuento(productos, clienteId);
+  previewDescuento(@Body() dto: PreviewDescuentoDto) {
+    return this.ventasService.previewDescuento(dto.productos, dto.clienteId);
   }
 
   @Get('folio/:folio')

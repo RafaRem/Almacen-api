@@ -183,18 +183,6 @@ export class InventarioAlmacenController {
     return this.inventarioService.getCapasPorProducto(productoId);
   }
 
-  @Get('verify')
-  @UseGuards(JwtAuthGuard)
-  verifyInventory() {
-    return this.inventarioService.verifyInventory();
-  }
-
-  @Post('sync')
-  @UseGuards(JwtAuthGuard)
-  syncInventory() {
-    return this.inventarioService.syncInventory();
-  }
-
   @Get('proximos-a-vencer')
   @UseGuards(JwtAuthGuard)
   getProximosAVencer(

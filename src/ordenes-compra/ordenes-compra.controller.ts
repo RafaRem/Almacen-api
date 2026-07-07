@@ -15,6 +15,7 @@ import {
   RecibirOrdenCompraDto,
 } from './dto/create-orden-compra.dto';
 import { UpdateOrdenCompraDto } from './dto/update-orden-compra.dto';
+import { ReabastecerDto } from './dto/reabastecer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('ordenes-compra')
@@ -27,13 +28,21 @@ export class OrdenesCompraController {
     return this.ordenesCompraService.create(createDto);
   }
 
+  @Post('reabastecer')
+  @UseGuards(JwtAuthGuard)
+  reabastecer(@Body() dto: ReabastecerDto) {
+    return this.ordenesCompraService.reabastecer(dto);
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard)
   findAll(
     @Query('status') status?: string,
     @Query('proveedorId') proveedorId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
   ) {
-    return this.ordenesCompraService.findAll({ status, proveedorId });
+    return this.ordenesCompraService.findAll({ status, proveedorId, page, limit });
   }
 
   @Get('borradores')
@@ -62,7 +71,6 @@ export class OrdenesCompraController {
     detalleData: {
       productoId: string;
       cantidad: number;
-      precioEstimado?: number;
     },
   ) {
     return this.ordenesCompraService.addDetalle(id, detalleData);

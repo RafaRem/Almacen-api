@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { StatusId } from '../../common/enums/status-id.enum';
 import { Laboratorio } from '../../laboratorios/entities/laboratorio.entity';
+import { Proveedor } from '../../proveedores/entities/proveedor.entity';
 
 @Entity('productos')
 export class Producto {
@@ -45,6 +46,13 @@ export class Producto {
     nullable: true,
   })
   margenRecomendado: number | null;
+
+  @Column({ name: 'proveedor_preferido_id', nullable: true })
+  proveedorPreferidoId: string;
+
+  @ManyToOne(() => Proveedor, { nullable: true })
+  @JoinColumn({ name: 'proveedor_preferido_id' })
+  proveedorPreferido: Proveedor;
 
   @Column({ nullable: true })
   claveProdServ: string;

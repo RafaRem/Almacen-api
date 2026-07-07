@@ -35,6 +35,10 @@ export class CreateProductoDto {
   margenRecomendado?: number;
 
   @IsOptional()
+  @IsString()
+  proveedorPreferidoId?: string;
+
+  @IsOptional()
   @IsNumber()
   statusId?: number;
 }

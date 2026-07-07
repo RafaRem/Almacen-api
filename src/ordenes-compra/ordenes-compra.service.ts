@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
@@ -16,12 +17,16 @@ import {
 import { UpdateOrdenCompraDto } from './dto/update-orden-compra.dto';
 import { Lote } from '../lotes/entities/lote.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
+import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Proveedor } from '../proveedores/entities/proveedor.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { TipoMovimiento, OrigenOperacion, SYSTEM_USER_ID } from '../common/constants';
 
 @Injectable()
 export class OrdenesCompraService {
+  private readonly logger = new Logger(OrdenesCompraService.name);
+
   constructor(
     @InjectRepository(OrdenCompra)
     private ordenesRepository: Repository<OrdenCompra>,
@@ -31,6 +36,8 @@ export class OrdenesCompraService {
     private lotesRepository: Repository<Lote>,
     @InjectRepository(InventarioAlmacen)
     private inventarioRepository: Repository<InventarioAlmacen>,
+    @InjectRepository(MovimientoAlmacen)
+    private movimientoRepository: Repository<MovimientoAlmacen>,
     @InjectRepository(Producto)
     private productoRepository: Repository<Producto>,
     @InjectEntityManager()
@@ -79,7 +86,6 @@ export class OrdenesCompraService {
           ordenCompraId: saved.id,
           productoId: d.productoId,
           cantidad: d.cantidad,
-          precioEstimado: d.precioEstimado,
         }),
       );
       await this.detallesRepository.save(detalles);
@@ -91,13 +97,21 @@ export class OrdenesCompraService {
   async findAll(filters?: {
     status?: string;
     proveedorId?: string;
-  }): Promise<OrdenCompra[]> {
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: OrdenCompra[]; total: number; page: number; limit: number }> {
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 15;
+    const skip = (page - 1) * limit;
+
     const qb = this.ordenesRepository
       .createQueryBuilder('oc')
       .leftJoinAndSelect('oc.proveedor', 'proveedor')
       .leftJoinAndSelect('oc.detalles', 'detalles')
       .leftJoinAndSelect('detalles.producto', 'producto')
-      .orderBy('oc.createdAt', 'DESC');
+      .orderBy('oc.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
 
     if (filters?.status) {
       qb.andWhere('oc.status = :status', { status: filters.status });
@@ -108,7 +122,8 @@ export class OrdenesCompraService {
       });
     }
 
-    return qb.getMany();
+    const [data, total] = await qb.getManyAndCount();
+    return { data, total, page, limit };
   }
 
   async findBorradores(): Promise<OrdenCompra[]> {
@@ -156,13 +171,33 @@ export class OrdenesCompraService {
 
     await this.ordenesRepository.save(orden);
 
-    if (updateDto.detalles?.length) {
+    if (updateDto.detalles) {
+      const existingIds = orden.detalles
+        .filter((d) => d.id)
+        .map((d) => d.id);
+      const incomingIds = updateDto.detalles
+        .filter((d) => d.id)
+        .map((d) => d.id);
+
+      const toDelete = existingIds.filter(
+        (eid) => !incomingIds.includes(eid),
+      );
+      if (toDelete.length) {
+        await this.detallesRepository.delete(toDelete);
+      }
+
       for (const d of updateDto.detalles) {
-        if ((d as any).id) {
-          await this.detallesRepository.update((d as any).id, {
+        if (d.id) {
+          await this.detallesRepository.update(d.id, {
             cantidad: d.cantidad,
-            precioEstimado: d.precioEstimado,
           });
+        } else if (d.productoId) {
+          const detalle = this.detallesRepository.create({
+            ordenCompraId: id,
+            productoId: d.productoId,
+            cantidad: d.cantidad ?? 1,
+          });
+          await this.detallesRepository.save(detalle);
         }
       }
     }
@@ -175,7 +210,6 @@ export class OrdenesCompraService {
     detalleData: {
       productoId: string;
       cantidad: number;
-      precioEstimado?: number;
     },
   ): Promise<OrdenCompra> {
     const orden = await this.findOne(ordenId);
@@ -190,7 +224,6 @@ export class OrdenesCompraService {
       ordenCompraId: ordenId,
       productoId: detalleData.productoId,
       cantidad: detalleData.cantidad,
-      precioEstimado: detalleData.precioEstimado,
     });
     await this.detallesRepository.save(detalle);
 
@@ -209,6 +242,161 @@ export class OrdenesCompraService {
     }
     await this.detallesRepository.delete(detalleId);
     return this.findOne(ordenId);
+  }
+
+  async reabastecer(dto: {
+    productoId: string;
+    proveedorId?: string;
+    cantidad?: number;
+    preview?: boolean;
+  }): Promise<any> {
+    this.logger.log(`reabastecer llamado con productoId=${dto.productoId}, proveedorId=${dto.proveedorId || 'ninguno'}, cantidad=${dto.cantidad}, preview=${dto.preview}`);
+
+    const producto = await this.productoRepository.findOne({
+      where: { id: dto.productoId },
+      relations: ['proveedorPreferido'],
+    });
+    if (!producto) {
+      this.logger.warn(`Producto ${dto.productoId} no encontrado`);
+      throw new NotFoundException('Producto no encontrado');
+    }
+    this.logger.log(`Producto encontrado: ${producto.nombre}, proveedorPreferido: ${producto.proveedorPreferido?.id || 'NINGUNO'}`);
+
+    let proveedor = producto.proveedorPreferido;
+
+    // Si se pasa proveedorId explícito, usarlo y auto-asignar al producto
+    if (dto.proveedorId) {
+      const proveedorEncontrado = await this.entityManager.findOne(Proveedor, {
+        where: { id: dto.proveedorId },
+      });
+      if (!proveedorEncontrado) {
+        throw new BadRequestException('Proveedor no encontrado');
+      }
+      proveedor = proveedorEncontrado;
+      if (producto.proveedorPreferidoId !== dto.proveedorId) {
+        await this.productoRepository.update(producto.id, {
+          proveedorPreferidoId: dto.proveedorId,
+        });
+        this.logger.log(`Proveedor preferido actualizado a ${dto.proveedorId}`);
+      }
+    }
+
+    // Sin proveedor explícito ni preferido → intentar fallback
+    if (!proveedor) {
+      this.logger.warn(`Producto ${producto.nombre} sin proveedor preferido, buscando fallback por recepción`);
+
+      const fallbackRecepcion = await this.inventarioRepository
+        .createQueryBuilder('inv')
+        .leftJoin('inv.lote', 'lote')
+        .leftJoin('lote.recepcion', 'rec')
+        .where('inv.productoId = :productoId', {
+          productoId: dto.productoId,
+        })
+        .andWhere('inv.almacenTipo = :almacenTipo', {
+          almacenTipo: AlmacenTipo.VENTAS,
+        })
+        .andWhere('rec.proveedorId IS NOT NULL')
+        .select('rec.proveedorId', 'proveedorId')
+        .orderBy('rec.createdAt', 'DESC')
+        .getRawOne<{ proveedorId: string }>();
+
+      if (fallbackRecepcion) {
+        const proveedorFallback = await this.entityManager.findOne(Proveedor, {
+          where: { id: fallbackRecepcion.proveedorId },
+        });
+        if (proveedorFallback) {
+          proveedor = proveedorFallback;
+        }
+      }
+
+      // No hay proveedor disponible → pedir al usuario que seleccione uno
+      if (!proveedor) {
+        this.logger.warn(`No hay proveedor para ${producto.nombre}, solicitando selección`);
+        const proveedores = await this.entityManager.find(Proveedor, {
+          order: { nombre: 'ASC' },
+        });
+        return {
+          requiresProveedor: true,
+          proveedores,
+          producto: { id: producto.id, nombre: producto.nombre },
+        };
+      }
+    }
+
+    // Calcular stock
+    const stockResult = await this.inventarioRepository
+      .createQueryBuilder('inv')
+      .select('SUM(inv.cantidadActual)', 'total')
+      .where('inv.productoId = :productoId', {
+        productoId: dto.productoId,
+      })
+      .andWhere('inv.almacenTipo = :almacenTipo', {
+        almacenTipo: AlmacenTipo.VENTAS,
+      })
+      .getRawOne();
+    const stockActual = Number(stockResult?.total || 0);
+    this.logger.log(`Stock actual: ${stockActual}, stockMaximo: ${producto.stockMaximo}`);
+
+    const suggestedQuantity = Math.max(
+      0,
+      (producto.stockMaximo || 10) - stockActual,
+    );
+
+    // Preview mode — solo retornar información sin crear/modificar OC
+    if (dto.preview) {
+      return {
+        suggestedQuantity,
+        stockActual,
+        stockMaximo: producto.stockMaximo || 10,
+        stockMinimo: producto.stockMinimo,
+        producto: { id: producto.id, nombre: producto.nombre },
+      };
+    }
+
+    const cantidad = dto.cantidad ?? suggestedQuantity;
+    if (cantidad <= 0) {
+      this.logger.warn(`Stock suficiente: actual=${stockActual}, maximo=${producto.stockMaximo}, sugerida=${suggestedQuantity}`);
+      throw new BadRequestException('El producto tiene suficiente stock');
+    }
+    this.logger.log(`Cantidad a reabastecer: ${cantidad}`);
+
+    // Buscar OC BORRADOR del proveedor
+    const ocExistente = await this.ordenesRepository.findOne({
+      where: {
+        proveedorId: proveedor.id,
+        status: 'BORRADOR' as any,
+      },
+    });
+
+    if (ocExistente) {
+      // Verificar si el producto ya existe en los detalles
+      const detalleExistente = await this.detallesRepository.findOne({
+        where: {
+          ordenCompraId: ocExistente.id,
+          productoId: dto.productoId,
+        },
+      });
+
+      if (detalleExistente) {
+        detalleExistente.cantidad += cantidad;
+        await this.detallesRepository.save(detalleExistente);
+        const orden = await this.findOne(ocExistente.id);
+        return { orden, esNueva: false, cantidad, yaExistia: true };
+      }
+
+      await this.addDetalle(ocExistente.id, {
+        productoId: dto.productoId,
+        cantidad,
+      });
+      const orden = await this.findOne(ocExistente.id);
+      return { orden, esNueva: false, cantidad, yaExistia: false };
+    }
+
+    const orden = await this.create({
+      proveedorId: proveedor.id,
+      detalles: [{ productoId: dto.productoId, cantidad }],
+    });
+    return { orden, esNueva: true, cantidad, yaExistia: false };
   }
 
   async cambiarStatus(id: string, status: string): Promise<OrdenCompra> {
@@ -304,11 +492,24 @@ export class OrdenesCompraService {
             loteId: lote.id,
             almacenTipo: AlmacenTipo.VENTAS,
             cantidadActual: detalleRecibido.cantidadRecibida,
-            precioUnitarioLote: detalle.precioEstimado || 0,
+            precioUnitarioLote: 0,
           });
         }
 
         inventario = await manager.save(InventarioAlmacen, inventario);
+
+        const movimiento = manager.create(MovimientoAlmacen, {
+          productoId: detalle.productoId,
+          loteId: lote.id,
+          almacenOrigen: AlmacenTipo.VENTAS,
+          almacenDestino: AlmacenTipo.VENTAS,
+          cantidad: detalleRecibido.cantidadRecibida,
+          userId: SYSTEM_USER_ID,
+          observaciones: `Recepción OC ${orden.folio}`,
+          tipoMovimiento: TipoMovimiento.ENTRADA_BODEGA,
+          origenOperacion: OrigenOperacion.API,
+        });
+        await manager.save(MovimientoAlmacen, movimiento);
 
         if (
           inventario.precioUnitarioLote &&

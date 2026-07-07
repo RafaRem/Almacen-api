@@ -811,7 +811,11 @@ describe('VentasService', () => {
     });
 
     it('should throw error when stock insufficient', async () => {
-      mockInventarioAlmacenService.getStockTotal.mockResolvedValue(2);
+      mockInventarioAlmacenService.reducirStockFIFO.mockResolvedValue({
+        success: false,
+        message: 'Stock insuficiente',
+        lotsUsed: [],
+      });
 
       const dto = {
         productos: [{ productoId: 'prod-1', cantidad: 10 }],

@@ -9,6 +9,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DetalleLoteService } from './detalle-lote.service';
+import { CreateDetalleLoteDto } from './dto/create-detalle-lote.dto';
+import { UpdateDetalleLoteDto } from './dto/update-detalle-lote.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('detalle-lote')
@@ -37,13 +39,13 @@ export class DetalleLoteController {
   }
 
   @Post()
-  create(@Body() data: any) {
-    return this.detalleLoteService.create(data);
+  create(@Body() dto: CreateDetalleLoteDto) {
+    return this.detalleLoteService.create(dto);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.detalleLoteService.update(id, data);
+  update(@Param('id') id: string, @Body() dto: UpdateDetalleLoteDto) {
+    return this.detalleLoteService.update(id, dto);
   }
 
   @Delete(':id')

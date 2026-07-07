@@ -143,24 +143,6 @@ export class VentasService {
           );
         }
 
-        const stockDisponible =
-          await this.inventarioAlmacenService.getStockTotal(
-            productoVenta.productoId,
-            AlmacenTipo.VENTAS,
-          );
-
-        if (!productoVenta.cantidad || productoVenta.cantidad <= 0) {
-          throw new BadRequestException(
-            `Cantidad inválida para ${producto.nombre}. Cantidad: ${productoVenta.cantidad}`,
-          );
-        }
-
-        if (stockDisponible < productoVenta.cantidad) {
-          throw new BadRequestException(
-            `Stock insuficiente para ${producto.nombre}. Disponible: ${stockDisponible}, Solicitado: ${productoVenta.cantidad}`,
-          );
-        }
-
         const inventarioProducto =
           await this.inventarioAlmacenService.findByProductoId(
             productoVenta.productoId,

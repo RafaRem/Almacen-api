@@ -36,6 +36,10 @@ export class UpdateProductoDto {
   margenRecomendado?: number;
 
   @IsOptional()
+  @IsString()
+  proveedorPreferidoId?: string;
+
+  @IsOptional()
   @IsEnum(StatusId)
   statusId?: StatusId;
 }

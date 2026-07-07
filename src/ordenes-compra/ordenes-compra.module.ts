@@ -6,6 +6,7 @@ import { OrdenCompra } from './entities/orden-compra.entity';
 import { DetalleOrdenCompra } from './entities/detalle-orden-compra.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
+import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 
 @Module({
@@ -15,6 +16,7 @@ import { Producto } from '../productos/entities/producto.entity';
       DetalleOrdenCompra,
       Lote,
       InventarioAlmacen,
+      MovimientoAlmacen,
       Producto,
     ]),
   ],

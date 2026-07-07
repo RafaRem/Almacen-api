@@ -1,7 +1,7 @@
 ALTER TABLE clientes ADD COLUMN codigo VARCHAR(20);
 
 WITH numbered AS (
-  SELECT id, 'CLI-' || LPAD(CAST(row_number() OVER (ORDER BY created_at) AS TEXT), 4, '0') AS new_codigo
+  SELECT id, 'CLI-' || LPAD(CAST(row_number() OVER (ORDER BY createdat) AS TEXT), 4, '0') AS new_codigo
   FROM clientes
 )
 UPDATE clientes c SET codigo = n.new_codigo

@@ -16,6 +16,20 @@ export class ClientesService {
     private clientesRepository: Repository<Cliente>,
   ) {}
 
+  private async generarCodigo(): Promise<string> {
+    const ultimo = await this.clientesRepository
+      .createQueryBuilder('c')
+      .where('c.codigo LIKE :prefix', { prefix: 'CLI-%' })
+      .orderBy('c.codigo', 'DESC')
+      .getOne();
+    let next = 1;
+    if (ultimo) {
+      const sufijo = parseInt(ultimo.codigo.replace('CLI-', ''), 10);
+      if (!isNaN(sufijo)) next = sufijo + 1;
+    }
+    return `CLI-${String(next).padStart(4, '0')}`;
+  }
+
   async create(createClienteDto: CreateClienteDto): Promise<Cliente> {
     const existing = await this.clientesRepository.findOne({
       where: [{ email: createClienteDto.email }],
@@ -38,6 +52,7 @@ export class ClientesService {
       }
     }
 
+    (createClienteDto as any).codigo = await this.generarCodigo();
     const cliente = this.clientesRepository.create(createClienteDto);
     return this.clientesRepository.save(cliente);
   }

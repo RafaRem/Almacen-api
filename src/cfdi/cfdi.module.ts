@@ -7,6 +7,8 @@ import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
+import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
+import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almacen.module';
 import { DetalleLoteModule } from '../detalle-lote/detalle-lote.module';
 import { RecepcionModule } from '../recepciones/recepcion.module';
@@ -20,6 +22,8 @@ import { ProveedoresModule } from '../proveedores/proveedores.module';
       Laboratorio,
       MovimientoAlmacen,
       InventarioAlmacen,
+      OrdenCompra,
+      DetalleOrdenCompra,
     ]),
     InventarioAlmacenModule,
     DetalleLoteModule,

@@ -4,6 +4,8 @@ import { CfdiService } from './cfdi.service';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
+import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
+import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -36,6 +38,13 @@ const mockProveedoresService = {
 };
 const mockRecepcionesService = {
   create: jest.fn(),
+};
+const mockOrdenCompraRepository = {
+  findOne: jest.fn(),
+  save: jest.fn(),
+};
+const mockDetalleOrdenCompraRepository = {
+  update: jest.fn(),
 };
 
 const VALID_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -74,6 +83,14 @@ describe('CfdiService', () => {
         { provide: DetalleLoteService, useValue: mockDetalleLoteService },
         { provide: ProveedoresService, useValue: mockProveedoresService },
         { provide: RecepcionesService, useValue: mockRecepcionesService },
+        {
+          provide: getRepositoryToken(OrdenCompra),
+          useValue: mockOrdenCompraRepository,
+        },
+        {
+          provide: getRepositoryToken(DetalleOrdenCompra),
+          useValue: mockDetalleOrdenCompraRepository,
+        },
       ],
     }).compile();
 

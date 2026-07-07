@@ -7,7 +7,6 @@ import {
   ValidateNested,
   IsInt,
   Min,
-  IsNumber,
   IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -20,10 +19,6 @@ export class CreateDetalleDto {
   @IsInt()
   @Min(1)
   cantidad: number;
-
-  @IsOptional()
-  @IsNumber()
-  precioEstimado?: number;
 }
 
 export class CreateOrdenCompraDto {

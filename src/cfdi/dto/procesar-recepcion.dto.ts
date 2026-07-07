@@ -137,4 +137,8 @@ export class RecepcionConfirmadaDto {
   @IsString()
   @IsOptional()
   observaciones?: string;
+
+  @IsString()
+  @IsOptional()
+  ordenCompraId?: string;
 }

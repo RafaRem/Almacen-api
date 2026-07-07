@@ -1,9 +1,11 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
+import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
+import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -25,6 +27,10 @@ export class CfdiService {
     private loteRepository: Repository<Lote>,
     @InjectRepository(Laboratorio)
     private laboratorioRepository: Repository<Laboratorio>,
+    @InjectRepository(OrdenCompra)
+    private ordenCompraRepository: Repository<OrdenCompra>,
+    @InjectRepository(DetalleOrdenCompra)
+    private detalleOrdenCompraRepository: Repository<DetalleOrdenCompra>,
     private inventarioAlmacenService: InventarioAlmacenService,
     private detalleLoteService: DetalleLoteService,
     private proveedoresService: ProveedoresService,
@@ -51,6 +57,7 @@ export class CfdiService {
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
     mensaje: string;
+    ordenCompraVinculada?: { folio: string; status: string; productosVinculados: number };
   }> {
     const xml = this.removeXmlDeclaration(dto.xmlContent);
     const cfdiData = this.extractCfdiData(xml);
@@ -90,6 +97,14 @@ export class CfdiService {
         recepcion.id,
       );
 
+    let ordenCompraVinculada: { folio: string; status: string; productosVinculados: number } | undefined;
+    if (dto.ordenCompraId) {
+      ordenCompraVinculada = await this.vincularConOrdenCompra(
+        dto.ordenCompraId,
+        dto.productos,
+      );
+    }
+
     const mensaje = this.generarMensaje(
       labResult.esNuevo,
       cfdiData.emisor.rfc,
@@ -107,6 +122,7 @@ export class CfdiService {
       productosCreados,
       productosExistentes,
       mensaje,
+      ordenCompraVinculada,
     };
   }
 
@@ -360,6 +376,84 @@ export class CfdiService {
     }
 
     return mensaje.trim();
+  }
+
+  private async vincularConOrdenCompra(
+    ordenCompraId: string,
+    productos: {
+      productoId: string;
+      cantidad: number;
+    }[],
+  ): Promise<{ folio: string; status: string; productosVinculados: number }> {
+    const orden = await this.ordenCompraRepository.findOne({
+      where: { id: ordenCompraId },
+      relations: ['detalles'],
+    });
+
+    if (!orden) {
+      throw new NotFoundException(
+        `Orden de compra ${ordenCompraId} no encontrada`,
+      );
+    }
+
+    if (orden.status === 'COMPLETADA') {
+      throw new BadRequestException('La orden de compra ya está completada');
+    }
+    if (orden.status === 'CANCELADA') {
+      throw new BadRequestException('La orden de compra está cancelada');
+    }
+
+    const detallesMap = new Map(
+      orden.detalles.map((d) => [d.productoId, d]),
+    );
+
+    let productosVinculados = 0;
+    for (const producto of productos) {
+      const detalle = detallesMap.get(producto.productoId);
+      if (!detalle) continue;
+
+      const nuevaRecibida = detalle.cantidadRecibida + producto.cantidad;
+      if (nuevaRecibida > detalle.cantidad) {
+        throw new BadRequestException(
+          `Cantidad recibida (${nuevaRecibida}) excede la cantidad ordenada (${detalle.cantidad}) para el detalle del producto`,
+        );
+      }
+
+      await this.detalleOrdenCompraRepository.update(detalle.id, {
+        cantidadRecibida: nuevaRecibida,
+      });
+      productosVinculados++;
+    }
+
+    const ordenActualizada = await this.ordenCompraRepository.findOne({
+      where: { id: ordenCompraId },
+      relations: ['detalles'],
+    });
+
+    if (!ordenActualizada) {
+      throw new NotFoundException(
+        `Orden de compra ${ordenCompraId} no encontrada al actualizar`,
+      );
+    }
+
+    const todosCompletados = ordenActualizada.detalles.every(
+      (d) => d.cantidadRecibida >= d.cantidad,
+    );
+
+    const statusActual = ordenActualizada.status;
+    if (todosCompletados) {
+      ordenActualizada.status = 'COMPLETADA';
+      await this.ordenCompraRepository.save(ordenActualizada);
+    } else if (ordenActualizada.status === 'BORRADOR') {
+      ordenActualizada.status = 'PENDIENTE';
+      await this.ordenCompraRepository.save(ordenActualizada);
+    }
+
+    return {
+      folio: orden.folio,
+      status: todosCompletados ? 'COMPLETADA' : statusActual === 'BORRADOR' ? 'PENDIENTE' : statusActual,
+      productosVinculados,
+    };
   }
 
   async validarXml(

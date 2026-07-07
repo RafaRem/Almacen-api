@@ -7,19 +7,22 @@ import {
   ValidateNested,
   IsInt,
   Min,
-  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateDetalleDto {
   @IsOptional()
+  @IsUUID()
+  id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  productoId?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   cantidad?: number;
-
-  @IsOptional()
-  @IsNumber()
-  precioEstimado?: number;
 }
 
 export class UpdateOrdenCompraDto {

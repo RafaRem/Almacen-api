@@ -809,16 +809,17 @@ export class InventarioAlmacenService {
     productoId: string,
     almacenTipo?: AlmacenTipo,
   ): Promise<number> {
-    const where: any = { productoId };
+    const qb = this.inventarioRepository
+      .createQueryBuilder('inv')
+      .select('COALESCE(SUM(inv.cantidadActual), 0)', 'total')
+      .where('inv.productoId = :productoId', { productoId });
+
     if (almacenTipo !== undefined) {
-      where.almacenTipo = almacenTipo;
+      qb.andWhere('inv.almacenTipo = :almacenTipo', { almacenTipo });
     }
 
-    const inventarios = await this.inventarioRepository.find({ where });
-    return inventarios.reduce(
-      (sum, inv) => sum + Number(inv.cantidadActual),
-      0,
-    );
+    const result = await qb.getRawOne();
+    return Number(result?.total || 0);
   }
 
   async updateIvaPersonalizado(
@@ -890,83 +891,6 @@ export class InventarioAlmacenService {
       totalStock,
       costoTotal,
       capas,
-    };
-  }
-
-  async verifyInventory(): Promise<any> {
-    const productos = await this.productoRepository.find();
-    const resultados: any[] = [];
-    let consistentes = 0;
-    let inconsistentes = 0;
-
-    for (const producto of productos) {
-      const inventarios = await this.inventarioRepository.find({
-        where: { productoId: producto.id },
-      });
-
-      const stockInventario = inventarios.reduce(
-        (sum, inv) => sum + Number(inv.cantidadActual),
-        0,
-      );
-      const stockProducto = stockInventario;
-      const diferencia = 0;
-
-      const esConsistente = true;
-      if (esConsistente) {
-        consistentes++;
-      } else {
-        inconsistentes++;
-      }
-
-      resultados.push({
-        productoId: producto.id,
-        nombre: producto.nombre,
-        codigoBarras: producto.codigoBarras,
-        stockProducto,
-        stockInventario,
-        diferencia,
-        estado: 'CONSISTENTE',
-        numeroCapas: inventarios.length,
-      });
-    }
-
-    return {
-      productos: resultados,
-      resumen: {
-        total: productos.length,
-        consistentes,
-        inconsistentes,
-      },
-    };
-  }
-
-  async syncInventory(): Promise<any> {
-    const productos = await this.productoRepository.find();
-    const correcciones: any[] = [];
-
-    for (const producto of productos) {
-      const inventarios = await this.inventarioRepository.find({
-        where: { productoId: producto.id },
-      });
-
-      const stockInventario = inventarios.reduce(
-        (sum, inv) => sum + Number(inv.cantidadActual),
-        0,
-      );
-
-      correcciones.push({
-        productoId: producto.id,
-        nombre: producto.nombre,
-        stockActual: stockInventario,
-        stockNuevo: stockInventario,
-        diferencia: 0,
-      });
-    }
-
-    return {
-      mensaje: 'Sincronización completada',
-      correccionesRealizadas: correcciones.length,
-      detalles: correcciones,
     };
   }
 

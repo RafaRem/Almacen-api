@@ -1,11 +1,12 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
 import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
+import { Recepcion } from '../recepciones/entities/recepcion.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -35,6 +36,7 @@ export class CfdiService {
     private detalleLoteService: DetalleLoteService,
     private proveedoresService: ProveedoresService,
     private recepcionesService: RecepcionesService,
+    private dataSource: DataSource,
   ) {}
 
   async parseXmlToPreview(xmlContent: string): Promise<CfdiPreviewDto> {
@@ -62,75 +64,104 @@ export class CfdiService {
     const xml = this.removeXmlDeclaration(dto.xmlContent);
     const cfdiData = this.extractCfdiData(xml);
 
-    const labResult = await this.processLaboratorio(cfdiData.emisor);
+    if (cfdiData.uuidCfdi) {
+      const existente = await this.recepcionesService.findByUuid(cfdiData.uuidCfdi);
+      if (existente) {
+        throw new BadRequestException(
+          `El CFDI UUID ${cfdiData.uuidCfdi} ya fue procesado en la recepción ${existente.serie || ''}-${existente.folio || existente.id}`,
+        );
+      }
+    }
 
-    let proveedor = await this.proveedoresService.findByRfc(
-      cfdiData.emisor.rfc,
-    );
-    if (!proveedor) {
-      proveedor = await this.proveedoresService.create({
-        nombre: cfdiData.emisor.nombre,
-        rfc: cfdiData.emisor.rfc,
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const manager = queryRunner.manager;
+
+      const labResult = await this.processLaboratorio(cfdiData.emisor, manager);
+
+      let proveedor = await this.proveedoresService.findByRfc(cfdiData.emisor.rfc);
+      if (!proveedor) {
+        proveedor = await this.proveedoresService.create({
+          nombre: cfdiData.emisor.nombre,
+          rfc: cfdiData.emisor.rfc,
+        });
+      }
+
+      const recepcionRepo = manager.getRepository(Recepcion);
+      const recepcionEntity = recepcionRepo.create({
+        serie: cfdiData.serie,
+        folio: cfdiData.folio,
+        fecha: cfdiData.fecha ? new Date(cfdiData.fecha) : undefined,
+        emisorRfc: cfdiData.emisor.rfc,
+        emisorNombre: cfdiData.emisor.nombre,
+        subtotal: cfdiData.subtotal,
+        total: cfdiData.total,
+        proveedorId: proveedor.id,
+        uuidCfdi: cfdiData.uuidCfdi || undefined,
+        xmlContent: dto.xmlContent,
       });
-    }
+      const recepcion = await recepcionRepo.save(recepcionEntity);
 
-    const recepcion = await this.recepcionesService.create({
-      serie: cfdiData.serie,
-      folio: cfdiData.folio,
-      fecha: cfdiData.fecha ? new Date(cfdiData.fecha) : undefined,
-      emisorRfc: cfdiData.emisor.rfc,
-      emisorNombre: cfdiData.emisor.nombre,
-      subtotal: cfdiData.subtotal,
-      total: cfdiData.total,
-      proveedorId: proveedor.id,
-      xmlContent: dto.xmlContent,
-    });
+      const { productosCreados, productosExistentes } =
+        await this.processProductos(
+          dto.productos,
+          cfdiData.conceptos,
+          userId,
+          labResult.laboratorioId,
+          cfdiData.serie,
+          cfdiData.folio,
+          recepcion.id,
+          manager,
+        );
 
-    const { productosCreados, productosExistentes } =
-      await this.processProductos(
-        dto.productos,
-        cfdiData.conceptos,
-        userId,
-        labResult.laboratorioId,
-        cfdiData.serie,
-        cfdiData.folio,
-        recepcion.id,
+      let ordenCompraVinculada: { folio: string; status: string; productosVinculados: number } | undefined;
+      if (dto.ordenCompraId) {
+        ordenCompraVinculada = await this.vincularConOrdenCompra(
+          dto.ordenCompraId,
+          dto.productos,
+          manager,
+          cfdiData.emisor.rfc,
+          proveedor.id,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+
+      const mensaje = this.generarMensaje(
+        labResult.esNuevo,
+        cfdiData.emisor.rfc,
+        cfdiData.emisor.nombre,
+        productosCreados.length,
+        productosExistentes.length,
       );
 
-    let ordenCompraVinculada: { folio: string; status: string; productosVinculados: number } | undefined;
-    if (dto.ordenCompraId) {
-      ordenCompraVinculada = await this.vincularConOrdenCompra(
-        dto.ordenCompraId,
-        dto.productos,
-      );
+      return {
+        laboratorio: {
+          rfc: cfdiData.emisor.rfc,
+          nombre: cfdiData.emisor.nombre,
+          esNuevo: labResult.esNuevo,
+        },
+        productosCreados,
+        productosExistentes,
+        mensaje,
+        ordenCompraVinculada,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    const mensaje = this.generarMensaje(
-      labResult.esNuevo,
-      cfdiData.emisor.rfc,
-      cfdiData.emisor.nombre,
-      productosCreados.length,
-      productosExistentes.length,
-    );
-
-    return {
-      laboratorio: {
-        rfc: cfdiData.emisor.rfc,
-        nombre: cfdiData.emisor.nombre,
-        esNuevo: labResult.esNuevo,
-      },
-      productosCreados,
-      productosExistentes,
-      mensaje,
-      ordenCompraVinculada,
-    };
   }
 
   private removeXmlDeclaration(xml: string): string {
     return xml.replace(/<\?xml[^>]+\?>/g, '').trim();
   }
 
-  private extractCfdiData(xml: string): CfdiPreviewDto {
+  private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
     const getValue = (pattern: RegExp): string => {
       const match = xml.match(pattern);
       return match ? match[1] : '';
@@ -144,6 +175,8 @@ export class CfdiService {
 
     const emisorRfc = getValue(/<cfdi:Emisor[^>]*Rfc="([^"]+)"/);
     const emisorNombre = getValue(/<cfdi:Emisor[^>]*Nombre="([^"]+)"/);
+
+    const uuidCfdi = getValue(/<tfd:TimbreFiscalDigital[^>]*UUID="([^"]+)"/i);
 
     const emisor = {
       rfc: emisorRfc,
@@ -190,6 +223,7 @@ export class CfdiService {
       total,
       emisor,
       conceptos,
+      uuidCfdi,
     };
   }
 
@@ -198,23 +232,27 @@ export class CfdiService {
     return match ? match[1] : '';
   }
 
-  private async processLaboratorio(emisor: {
-    rfc: string;
-    nombre: string;
-  }): Promise<{ laboratorioId: string; esNuevo: boolean }> {
-    let laboratorio = await this.laboratorioRepository.findOne({
+  private async processLaboratorio(
+    emisor: { rfc: string; nombre: string },
+    manager?: EntityManager,
+  ): Promise<{ laboratorioId: string; esNuevo: boolean }> {
+    const repo = manager
+      ? manager.getRepository(Laboratorio)
+      : this.laboratorioRepository;
+
+    let laboratorio = await repo.findOne({
       where: { rfc: emisor.rfc },
     });
 
     const esNuevo = !laboratorio;
 
     if (!laboratorio) {
-      const nuevoLaboratorio = this.laboratorioRepository.create({
+      const nuevoLaboratorio = repo.create({
         nombre: emisor.nombre,
         rfc: emisor.rfc,
         statusId: 1,
       });
-      laboratorio = await this.laboratorioRepository.save(nuevoLaboratorio);
+      laboratorio = await repo.save(nuevoLaboratorio);
     }
 
     return { laboratorioId: laboratorio.id, esNuevo };
@@ -236,12 +274,14 @@ export class CfdiService {
     serie: string,
     folio: string,
     recepcionId: string,
+    manager: EntityManager,
   ): Promise<{
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
   }> {
     const productosCreados: { nombre: string; codigoBarras: string }[] = [];
     const productosExistentes: { nombre: string; codigoBarras: string }[] = [];
+    const productoRepo = manager.getRepository(Producto);
 
     for (const prodDto of productosDto) {
       const concepto = conceptos.find(
@@ -253,11 +293,12 @@ export class CfdiService {
         prodDto.fechaCaducidad,
         laboratorioId,
         recepcionId,
+        manager,
       );
 
       let producto: Producto | null = null;
 
-      producto = await this.productoRepository.findOne({
+      producto = await productoRepo.findOne({
         where: { codigoBarras: prodDto.productoId },
       });
 
@@ -266,6 +307,7 @@ export class CfdiService {
           concepto,
           prodDto,
           laboratorioId,
+          manager,
         );
         productosCreados.push({
           nombre: producto.nombre,
@@ -285,7 +327,7 @@ export class CfdiService {
         prodDto.cantidad,
         concepto?.ivaCfdi,
         concepto?.valorUnitario || 0,
-        undefined,
+        manager,
         TipoMovimiento.ENTRADA_BODEGA,
         userId,
       );
@@ -298,7 +340,7 @@ export class CfdiService {
         ivaCfdi: concepto?.ivaCfdi || null,
         movimientoId: inventario.ultimoMovimientoId || undefined,
         almacenTipo: AlmacenTipo.RECEPCION,
-      });
+      }, manager);
     }
 
     return { productosCreados, productosExistentes };
@@ -306,9 +348,11 @@ export class CfdiService {
 
   private async crearNuevoProducto(
     concepto: ConceptoDto | undefined,
-    prodDto: any,
+    prodDto: { productoId: string; stockMinimo?: number; stockMaximo?: number },
     laboratorioId: string,
+    manager: EntityManager,
   ): Promise<Producto> {
+    const repo = manager.getRepository(Producto);
     const productoData: Partial<Producto> = {
       nombre: concepto?.descripcion || prodDto.productoId,
       codigoBarras: prodDto.productoId,
@@ -320,8 +364,8 @@ export class CfdiService {
       laboratorioId: laboratorioId,
       statusId: 1,
     };
-    const producto = this.productoRepository.create(productoData);
-    return this.productoRepository.save(producto);
+    const producto = repo.create(productoData);
+    return repo.save(producto);
   }
 
   private async crearOLocalizarLote(
@@ -329,29 +373,35 @@ export class CfdiService {
     fechaCaducidad: string | undefined,
     laboratorioId: string,
     recepcionId?: string,
+    manager?: EntityManager,
   ): Promise<Lote> {
-    const loteExistente = await this.loteRepository.findOne({
+    const repo = manager
+      ? manager.getRepository(Lote)
+      : this.loteRepository;
+
+    const loteExistente = await repo.findOne({
       where: { numeroLote: numeroLote },
+      lock: manager ? { mode: 'pessimistic_write' } : undefined,
     });
 
     if (loteExistente) {
       if (fechaCaducidad) {
         loteExistente.fechaCaducidad = new Date(fechaCaducidad);
-        await this.loteRepository.save(loteExistente);
+        await repo.save(loteExistente);
       }
       return loteExistente;
     }
 
-    const nuevoLote = this.loteRepository.create({
+    const nuevoLote = repo.create({
       numeroLote: numeroLote,
       fechaCaducidad: fechaCaducidad
         ? new Date(fechaCaducidad)
-        : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        : (() => { throw new BadRequestException('fechaCaducidad es requerida para crear el lote'); })(),
       laboratorioId: laboratorioId,
       recepcionId: recepcionId || undefined,
       statusId: 1,
     });
-    return this.loteRepository.save(nuevoLote);
+    return repo.save(nuevoLote);
   }
 
   private generarMensaje(
@@ -380,14 +430,18 @@ export class CfdiService {
 
   private async vincularConOrdenCompra(
     ordenCompraId: string,
-    productos: {
-      productoId: string;
-      cantidad: number;
-    }[],
+    productos: { productoId: string; cantidad: number }[],
+    manager: EntityManager,
+    emisorRfc: string,
+    proveedorId: string,
   ): Promise<{ folio: string; status: string; productosVinculados: number }> {
-    const orden = await this.ordenCompraRepository.findOne({
+    const ordenRepo = manager.getRepository(OrdenCompra);
+    const detalleRepo = manager.getRepository(DetalleOrdenCompra);
+
+    const orden = await ordenRepo.findOne({
       where: { id: ordenCompraId },
       relations: ['detalles'],
+      lock: { mode: 'pessimistic_write' },
     });
 
     if (!orden) {
@@ -401,6 +455,13 @@ export class CfdiService {
     }
     if (orden.status === 'CANCELADA') {
       throw new BadRequestException('La orden de compra está cancelada');
+    }
+
+    if (orden.proveedorId !== proveedorId) {
+      throw new BadRequestException(
+        `El proveedor del CFDI no coincide con el proveedor de la orden de compra. ` +
+        `OC: ${orden.proveedorId || 'N/A'}, CFDI: ${proveedorId}`,
+      );
     }
 
     const detallesMap = new Map(
@@ -419,15 +480,16 @@ export class CfdiService {
         );
       }
 
-      await this.detalleOrdenCompraRepository.update(detalle.id, {
+      await detalleRepo.update(detalle.id, {
         cantidadRecibida: nuevaRecibida,
       });
       productosVinculados++;
     }
 
-    const ordenActualizada = await this.ordenCompraRepository.findOne({
+    const ordenActualizada = await ordenRepo.findOne({
       where: { id: ordenCompraId },
       relations: ['detalles'],
+      lock: { mode: 'pessimistic_write' },
     });
 
     if (!ordenActualizada) {
@@ -443,10 +505,10 @@ export class CfdiService {
     const statusActual = ordenActualizada.status;
     if (todosCompletados) {
       ordenActualizada.status = 'COMPLETADA';
-      await this.ordenCompraRepository.save(ordenActualizada);
+      await ordenRepo.save(ordenActualizada);
     } else if (ordenActualizada.status === 'BORRADOR') {
       ordenActualizada.status = 'PENDIENTE';
-      await this.ordenCompraRepository.save(ordenActualizada);
+      await ordenRepo.save(ordenActualizada);
     }
 
     return {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { DetalleLote } from './entities/detalle-lote.entity';
 
 @Injectable()
@@ -37,7 +37,12 @@ export class DetalleLoteService {
     });
   }
 
-  async create(data: Partial<DetalleLote>): Promise<DetalleLote> {
+  async create(data: Partial<DetalleLote>, managerArg?: EntityManager): Promise<DetalleLote> {
+    if (managerArg) {
+      const repo = managerArg.getRepository(DetalleLote);
+      const detalleLote = repo.create(data);
+      return repo.save(detalleLote);
+    }
     const detalleLote = this.detalleLoteRepository.create(data);
     return this.detalleLoteRepository.save(detalleLote);
   }

@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { CfdiService } from './cfdi.service';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
+import { Recepcion } from '../recepciones/entities/recepcion.entity';
 import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
 import { DetalleOrdenCompra } from '../ordenes-compra/entities/detalle-orden-compra.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
@@ -26,6 +28,10 @@ const mockLaboratorioRepository = {
   create: jest.fn(),
   save: jest.fn(),
 };
+const mockRecepcionRepository = {
+  create: jest.fn(),
+  save: jest.fn(),
+};
 const mockInventarioAlmacenService = {
   agregarStock: jest.fn().mockResolvedValue({ ultimoMovimientoId: 'mov-1' }),
 };
@@ -38,6 +44,7 @@ const mockProveedoresService = {
 };
 const mockRecepcionesService = {
   create: jest.fn(),
+  findByUuid: jest.fn().mockResolvedValue(null),
 };
 const mockOrdenCompraRepository = {
   findOne: jest.fn(),
@@ -47,8 +54,33 @@ const mockDetalleOrdenCompraRepository = {
   update: jest.fn(),
 };
 
+const mockManager = {
+  getRepository: jest.fn().mockImplementation((entity) => {
+    if (entity === Producto) return mockProductoRepository;
+    if (entity === Lote) return mockLoteRepository;
+    if (entity === Laboratorio) return mockLaboratorioRepository;
+    if (entity === Recepcion) return mockRecepcionRepository;
+    if (entity === OrdenCompra) return mockOrdenCompraRepository;
+    if (entity === DetalleOrdenCompra) return mockDetalleOrdenCompraRepository;
+    return {};
+  }),
+};
+
+const mockQueryRunner = {
+  connect: jest.fn(),
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  rollbackTransaction: jest.fn(),
+  release: jest.fn(),
+  manager: mockManager,
+};
+
+const mockDataSource = {
+  createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+};
+
 const VALID_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Serie="A" Folio="12345" Fecha="2026-06-01T12:00:00" SubTotal="1000.00" Total="1160.00">
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Serie="A" Folio="12345" Fecha="2026-06-01T12:00:00" SubTotal="1000.00" Total="1160.00">
   <cfdi:Emisor Rfc="LAB123456789" Nombre="Laboratorio Test"/>
   <cfdi:Conceptos>
     <cfdi:Concepto Cantidad="10" NoIdentificacion="PROD001" Descripcion="Producto Test 1" ValorUnitario="50.00" ClaveProdServ="51101700" ClaveUnidad="H87" Importe="500.00">
@@ -58,6 +90,9 @@ const VALID_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="500.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="80.00"/></cfdi:Traslados></cfdi:Impuestos>
     </cfdi:Concepto>
   </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital UUID="ABC12345-1234-5678-9ABC-DEF012345678"/>
+  </cfdi:Complemento>
 </cfdi:Comprobante>`;
 
 describe('CfdiService', () => {
@@ -67,30 +102,16 @@ describe('CfdiService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CfdiService,
-        {
-          provide: getRepositoryToken(Producto),
-          useValue: mockProductoRepository,
-        },
+        { provide: getRepositoryToken(Producto), useValue: mockProductoRepository },
         { provide: getRepositoryToken(Lote), useValue: mockLoteRepository },
-        {
-          provide: getRepositoryToken(Laboratorio),
-          useValue: mockLaboratorioRepository,
-        },
-        {
-          provide: InventarioAlmacenService,
-          useValue: mockInventarioAlmacenService,
-        },
+        { provide: getRepositoryToken(Laboratorio), useValue: mockLaboratorioRepository },
+        { provide: InventarioAlmacenService, useValue: mockInventarioAlmacenService },
         { provide: DetalleLoteService, useValue: mockDetalleLoteService },
         { provide: ProveedoresService, useValue: mockProveedoresService },
         { provide: RecepcionesService, useValue: mockRecepcionesService },
-        {
-          provide: getRepositoryToken(OrdenCompra),
-          useValue: mockOrdenCompraRepository,
-        },
-        {
-          provide: getRepositoryToken(DetalleOrdenCompra),
-          useValue: mockDetalleOrdenCompraRepository,
-        },
+        { provide: getRepositoryToken(OrdenCompra), useValue: mockOrdenCompraRepository },
+        { provide: getRepositoryToken(DetalleOrdenCompra), useValue: mockDetalleOrdenCompraRepository },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
 
@@ -100,6 +121,8 @@ describe('CfdiService', () => {
     mockLoteRepository.findOne.mockResolvedValue(null);
     mockLoteRepository.create.mockReturnValue({});
     mockLoteRepository.save.mockResolvedValue({ id: 'lote-1' });
+    mockRecepcionRepository.create.mockReturnValue({});
+    mockRecepcionRepository.save.mockResolvedValue({ id: 'rec-1' });
     mockProveedoresService.findByRfc.mockResolvedValue(null);
     mockProveedoresService.create.mockResolvedValue({ id: 'prov-1' });
     mockRecepcionesService.create.mockResolvedValue({ id: 'rec-1' });
@@ -179,6 +202,7 @@ describe('CfdiService', () => {
           productoId: 'PROD001',
           esNuevo: false,
           cantidad: 10,
+          fechaCaducidad: '2026-12-31',
           numeroLote: 'LOTE-TEST',
           stockMinimo: 5,
           stockMaximo: 50,
@@ -206,6 +230,7 @@ describe('CfdiService', () => {
       expect(result.productosExistentes).toHaveLength(0);
       expect(mockDetalleLoteService.create).toHaveBeenCalledWith(
         expect.objectContaining({ productoId: 'prod-1', cantidad: 10 }),
+        expect.any(Object),
       );
     });
 
@@ -234,13 +259,47 @@ describe('CfdiService', () => {
       expect(mockInventarioAlmacenService.agregarStock).toHaveBeenCalledWith(
         'prod-1',
         expect.any(String),
-        1,
+        expect.any(Number),
         10,
         16,
         50,
-        undefined,
+        expect.any(Object),
         'ENTRADA_BODEGA',
         'user-1',
+      );
+    });
+
+    it('should commit transaction on success', async () => {
+      mockLaboratorioRepository.findOne.mockResolvedValue({ id: 'lab-1' });
+      mockProductoRepository.findOne.mockResolvedValue({
+        id: 'prod-1',
+        codigoBarras: 'PROD001',
+      });
+
+      await service.procesarRecepcion(dto as any, userId);
+
+      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.rollbackTransaction).not.toHaveBeenCalled();
+      expect(mockQueryRunner.release).toHaveBeenCalled();
+    });
+
+    it('should rollback transaction on error', async () => {
+      mockLaboratorioRepository.findOne.mockRejectedValue(new Error('DB error'));
+
+      await expect(service.procesarRecepcion(dto as any, userId)).rejects.toThrow('DB error');
+
+      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.release).toHaveBeenCalled();
+    });
+
+    it('should reject duplicate UUID', async () => {
+      mockRecepcionesService.findByUuid.mockResolvedValue({ id: 'rec-existing', serie: 'A', folio: '99999' });
+      mockLaboratorioRepository.findOne.mockResolvedValue({ id: 'lab-1' });
+
+      await expect(service.procesarRecepcion(dto as any, userId)).rejects.toThrow(
+        'CFDI UUID',
       );
     });
   });

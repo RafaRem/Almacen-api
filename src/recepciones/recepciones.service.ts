@@ -38,4 +38,8 @@ export class RecepcionesService {
       ],
     });
   }
+
+  async findByUuid(uuid: string): Promise<Recepcion | null> {
+    return this.repo.findOne({ where: { uuidCfdi: uuid } });
+  }
 }

@@ -62,6 +62,10 @@ export class CfdiPreviewDto {
   @IsNumber()
   total: number;
 
+  @IsString()
+  @IsOptional()
+  uuidCfdi?: string;
+
   @ValidateNested()
   @Type(() => EmisorDto)
   emisor: EmisorDto;

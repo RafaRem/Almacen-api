@@ -25,8 +25,11 @@ export class ClientesController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  findAll(@Query('statusId') statusId?: string) {
-    return this.clientesService.findAll(statusId);
+  findAll(
+    @Query('statusId') statusId?: string,
+    @Query('nombre') nombre?: string,
+  ) {
+    return this.clientesService.findAll(statusId, nombre);
   }
 
   @Get(':id')

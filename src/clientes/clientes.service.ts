@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { Cliente } from './entities/cliente.entity';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/create-cliente.dto';
@@ -57,23 +57,33 @@ export class ClientesService {
     return this.clientesRepository.save(cliente);
   }
 
-  async findAll(statusId?: string): Promise<Cliente[]> {
-    const where: any = {};
+  async findAll(
+    statusId?: string,
+    nombre?: string,
+  ): Promise<Cliente[]> {
+    const qb = this.clientesRepository
+      .createQueryBuilder('cliente')
+      .leftJoinAndSelect('cliente.categoriaCliente', 'categoriaCliente')
+      .leftJoinAndSelect('cliente.telefonos', 'telefonos')
+      .leftJoinAndSelect('cliente.domicilio', 'domicilio')
+      .leftJoinAndSelect('cliente.facturacionCliente', 'facturacionCliente')
+      .leftJoinAndSelect('facturacionCliente.regimenFiscal', 'regimenFiscal')
+      .leftJoinAndSelect('cliente.credito', 'credito')
+      .orderBy('cliente.createdAt', 'DESC');
+
     if (statusId) {
-      where.statusId = parseInt(statusId, 10);
+      qb.andWhere('cliente.statusId = :statusId', {
+        statusId: parseInt(statusId, 10),
+      });
     }
-    return this.clientesRepository.find({
-      where,
-      relations: [
-        'categoriaCliente',
-        'telefonos',
-        'domicilio',
-        'facturacionCliente',
-        'facturacionCliente.regimenFiscal',
-        'credito',
-      ],
-      order: { createdAt: 'DESC' },
-    });
+    if (nombre) {
+      qb.andWhere(
+        "CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, '')) ILIKE :nombre",
+        { nombre: `%${nombre}%` },
+      );
+    }
+
+    return qb.getMany();
   }
 
   async findOne(id: string): Promise<Cliente> {

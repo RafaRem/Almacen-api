@@ -196,98 +196,101 @@ export class VentasService {
 
         let descuentoLinea = 0;
         let montoProductoLinea = 0;
-        try {
-          const calculo =
-            await this.descuentosService.calcularDescuentosAcumulables(
-              productoVenta.productoId,
-              productoVenta.cantidad,
-              producto.laboratorioId,
-              categoriaClienteId,
-              fechaCaducidad,
-              precioVenta,
-            );
 
-          descuentoLinea = calculo.descuentoTotal;
+        if (createVentaDto.descuentosPreview) {
+          try {
+            const calculo =
+              await this.descuentosService.calcularDescuentosAcumulables(
+                productoVenta.productoId,
+                productoVenta.cantidad,
+                producto.laboratorioId,
+                categoriaClienteId,
+                fechaCaducidad,
+                precioVenta,
+              );
 
-          if (calculo.descuentoProducto) {
-            montoProductoLinea = Number(
-              (calculo.descuentoProducto.monto || 0).toFixed(2),
-            );
-            if (calculo.descuentoProducto.descuentoId) {
+            descuentoLinea = calculo.descuentoTotal;
+
+            if (calculo.descuentoProducto) {
+              montoProductoLinea = Number(
+                (calculo.descuentoProducto.monto || 0).toFixed(2),
+              );
+              if (calculo.descuentoProducto.descuentoId) {
+                descuentosInfo.push({
+                  productoId: productoVenta.productoId,
+                  descuentoId: calculo.descuentoProducto.descuentoId,
+                  tipo: calculo.descuentoProducto.tipo,
+                  porcentaje: calculo.descuentoProducto.porcentaje,
+                  monto: montoProductoLinea,
+                  motivo: calculo.descuentoProducto.motivo,
+                });
+              }
+            }
+            if (calculo.descuentoCategoria) {
+              const montoCategoria = Number(
+                (calculo.descuentoCategoria.monto || 0).toFixed(2),
+              );
               descuentosInfo.push({
                 productoId: productoVenta.productoId,
-                descuentoId: calculo.descuentoProducto.descuentoId,
-                tipo: calculo.descuentoProducto.tipo,
-                porcentaje: calculo.descuentoProducto.porcentaje,
-                monto: montoProductoLinea,
-                motivo: calculo.descuentoProducto.motivo,
+                descuentoId: calculo.descuentoCategoria.descuentoId,
+                tipo: calculo.descuentoCategoria.tipo,
+                porcentaje: calculo.descuentoCategoria.porcentaje,
+                monto: montoCategoria,
+                motivo: calculo.descuentoCategoria.motivo,
               });
             }
-          }
-          if (calculo.descuentoCategoria) {
-            const montoCategoria = Number(
-              (calculo.descuentoCategoria.monto || 0).toFixed(2),
+          } catch (e) {
+            this.logger.error(
+              `Error calculando descuentos para producto ${productoVenta.productoId}: ${e.message}`,
             );
-            descuentosInfo.push({
-              productoId: productoVenta.productoId,
-              descuentoId: calculo.descuentoCategoria.descuentoId,
-              tipo: calculo.descuentoCategoria.tipo,
-              porcentaje: calculo.descuentoCategoria.porcentaje,
-              monto: montoCategoria,
-              motivo: calculo.descuentoCategoria.motivo,
-            });
           }
-        } catch (e) {
-          this.logger.error(
-            `Error calculando descuentos para producto ${productoVenta.productoId}: ${e.message}`,
-          );
-        }
 
-        if (createVentaDto.descuentosPreview?.descuentoPorProducto) {
-          const dp = createVentaDto.descuentosPreview.descuentoPorProducto.find(
-            (d) => d.productoId === productoVenta.productoId,
-          );
+          if (createVentaDto.descuentosPreview?.descuentoPorProducto) {
+            const dp = createVentaDto.descuentosPreview.descuentoPorProducto.find(
+              (d) => d.productoId === productoVenta.productoId,
+            );
 
-          if (dp) {
-            const tolerancia = 0.01;
-            const diferencia = Math.abs(dp.descuento - descuentoLinea);
+            if (dp) {
+              const tolerancia = 0.01;
+              const diferencia = Math.abs(dp.descuento - descuentoLinea);
 
-            if (diferencia > tolerancia) {
-              this.logger.warn(
-                `Descuento no coincide, se actualiza por mejor descuento: calculado ${descuentoLinea} vs preview ${dp.descuento}`,
-              );
-            } else {
-              // Eliminar entradas existentes para este producto del array (reemplazar con preview)
-              const idxToRemove = descuentosInfo.findIndex(
-                (d) => d.productoId === productoVenta.productoId,
-              );
-              if (idxToRemove !== -1) {
-                descuentosInfo.splice(idxToRemove, 2); // Elimina hasta 2 entradas (producto + categoria)
-              }
+              if (diferencia > tolerancia) {
+                this.logger.warn(
+                  `Descuento no coincide, se actualiza por mejor descuento: calculado ${descuentoLinea} vs preview ${dp.descuento}`,
+                );
+              } else {
+                // Eliminar entradas existentes para este producto del array (reemplazar con preview)
+                const idxToRemove = descuentosInfo.findIndex(
+                  (d) => d.productoId === productoVenta.productoId,
+                );
+                if (idxToRemove !== -1) {
+                  descuentosInfo.splice(idxToRemove, 2); // Elimina hasta 2 entradas (producto + categoria)
+                }
 
-              if (
-                dp.mejorDescuento?.descuentoId &&
-                dp.mejorDescuento.tipo !== 'NINGUNO'
-              ) {
-                descuentosInfo.push({
-                  productoId: productoVenta.productoId,
-                  descuentoId: dp.mejorDescuento.descuentoId,
-                  tipo: dp.mejorDescuento.tipo,
-                  porcentaje: dp.mejorDescuento.porcentaje,
-                  monto: dp.descuentoProducto,
-                  motivo: dp.mejorDescuento.motivo,
-                });
-              }
+                if (
+                  dp.mejorDescuento?.descuentoId &&
+                  dp.mejorDescuento.tipo !== 'NINGUNO'
+                ) {
+                  descuentosInfo.push({
+                    productoId: productoVenta.productoId,
+                    descuentoId: dp.mejorDescuento.descuentoId,
+                    tipo: dp.mejorDescuento.tipo,
+                    porcentaje: dp.mejorDescuento.porcentaje,
+                    monto: dp.descuentoProducto,
+                    motivo: dp.mejorDescuento.motivo,
+                  });
+                }
 
-              if (dp.descuentoCategoriaInfo) {
-                descuentosInfo.push({
-                  productoId: productoVenta.productoId,
-                  descuentoId: dp.descuentoCategoriaInfo.descuentoId ?? null,
-                  tipo: dp.descuentoCategoriaInfo.tipo,
-                  porcentaje: dp.descuentoCategoriaInfo.porcentaje,
-                  monto: dp.descuentoCategoria,
-                  motivo: dp.descuentoCategoriaInfo.motivo,
-                });
+                if (dp.descuentoCategoriaInfo) {
+                  descuentosInfo.push({
+                    productoId: productoVenta.productoId,
+                    descuentoId: dp.descuentoCategoriaInfo.descuentoId ?? null,
+                    tipo: dp.descuentoCategoriaInfo.tipo,
+                    porcentaje: dp.descuentoCategoriaInfo.porcentaje,
+                    monto: dp.descuentoCategoria,
+                    motivo: dp.descuentoCategoriaInfo.motivo,
+                  });
+                }
               }
             }
           }

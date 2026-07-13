@@ -131,9 +131,7 @@ export class DescuentosService {
     const hoy = new Date();
 
     const asignados = productosPorDescuento?.get(d.id);
-    if (asignados && !asignados.has(productoId)) {
-      return null;
-    }
+    if (asignados && !asignados.has(productoId)) return null;
 
     if (d.tipo === DescuentoTipo.VOLUMEN && d.condiciones) {
       const { minCantidad, maxCantidad } = d.condiciones;

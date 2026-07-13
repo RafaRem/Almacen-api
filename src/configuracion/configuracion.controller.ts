@@ -34,7 +34,7 @@ export class ConfiguracionController {
 
   @Get('ticket')
   async getTicketConfig() {
-    const config = await this.configuracionService.getConfiguracion('ticket');
+    const config = await this.configuracionService.getConfiguracion('ticket-mensaje');
     if (!config) {
       return { mensaje: '¡Gracias por su preferencia!' };
     }
@@ -47,7 +47,7 @@ export class ConfiguracionController {
     @Request() req,
   ) {
     return this.configuracionService.updateConfiguracion(
-      'ticket',
+      'ticket-mensaje',
       { mensaje: body.valor?.mensaje || '¡Gracias por su preferencia!' },
       req.user?.userId || 'SYSTEM',
     );

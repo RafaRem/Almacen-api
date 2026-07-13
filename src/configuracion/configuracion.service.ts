@@ -30,7 +30,7 @@ export class ConfiguracionService {
           'Configuración de descuentos. permiteCAE: muestra campo de Código de Autorización de Descuento',
       },
       {
-        clave: 'ticket',
+        clave: 'ticket-mensaje',
         valor: { mensaje: '¡Gracias por su preferencia!' },
         descripcion:
           'Configuración de impresión de tickets. mensaje: texto mostrado al final del ticket',

@@ -1,10 +1,12 @@
-import { IsArray, IsOptional, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsUUID, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class ProductoDescuentoItem {
   @IsUUID()
   productoId: string;
 
+  @IsNumber()
+  @Min(1)
   cantidad: number;
 }
 

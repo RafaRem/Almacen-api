@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
@@ -69,16 +69,21 @@ export class ReportesService {
         'venta.folio AS folio_venta',
         'venta.createdat AS fecha_venta',
         'cliente.nombre AS cliente_nombre',
+        'cliente.apellidoPaterno AS cliente_apellido_paterno',
+        'cliente.apellidoMaterno AS cliente_apellido_materno',
         'producto.nombre AS producto_nombre',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 });
     if (filters?.clienteNombre) {
-      queryBuilder.andWhere(
-        'LOWER(cliente.nombre) LIKE LOWER(:clienteNombre)',
-        {
-          clienteNombre: `%${filters.clienteNombre}%`,
-        },
-      );
+      const term = `%${filters.clienteNombre}%`;
+      if (filters.clienteNombre === 'VENTA MOSTRADOR') {
+        queryBuilder.andWhere('cliente.id IS NULL');
+      } else {
+        queryBuilder.andWhere(
+          `LOWER(CONCAT_WS(' ', cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno)) LIKE LOWER(:clienteNombre)`,
+          { clienteNombre: term },
+        );
+      }
     }
     if (filters?.fechaFrom) {
       queryBuilder.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
@@ -93,24 +98,32 @@ export class ReportesService {
     const resultados = await queryBuilder
       .orderBy('venta.createdAt', 'DESC')
       .getRawMany();
-    return resultados.map((r) => ({
-      nombreCliente: r.cliente_nombre || 'Mostrador',
-      folioVenta: r.folio_venta,
-      fechaVenta: r.fecha_venta,
-      producto: r.producto_nombre,
-      cantidad: parseInt(r.cantidad, 10) || 0,
-      precioVenta:
-        parseInt(r.cantidad, 10) > 0
-          ? parseFloat(r.importe_bruto) / parseInt(r.cantidad, 10)
-          : 0,
-      total: parseFloat(r.importe_bruto) || 0,
-    }));
+    return resultados.map((r) => {
+      const partes = [r.cliente_nombre, r.cliente_apellido_paterno, r.cliente_apellido_materno].filter(Boolean);
+      const nombreCliente = partes.length > 0 ? partes.join(' ').trim() : 'Mostrador';
+      return {
+        nombreCliente,
+        folioVenta: r.folio_venta,
+        fechaVenta: r.fecha_venta,
+        producto: r.producto_nombre,
+        cantidad: parseInt(r.cantidad, 10) || 0,
+        precioVenta:
+          parseInt(r.cantidad, 10) > 0
+            ? parseFloat(r.importe_bruto) / parseInt(r.cantidad, 10)
+            : 0,
+        total: parseFloat(r.importe_bruto) || 0,
+      };
+    });
   }
 
   async getResumenClientes(filters: ResumenClientesFilters): Promise<any> {
+    if (!filters.fechaFrom || !filters.fechaTo) {
+      throw new BadRequestException('fechaFrom y fechaTo son requeridos');
+    }
+
     const qb = this.ventasRepository
       .createQueryBuilder('venta')
-      .innerJoin('venta.cliente', 'cliente')
+      .leftJoin('venta.cliente', 'cliente')
       .leftJoin('cliente.categoriaCliente', 'categoria')
       .select([
         'cliente.id AS cliente_id',
@@ -131,10 +144,12 @@ export class ReportesService {
       );
 
     if (filters.clienteNombre) {
+      const term = filters.clienteNombre.toLowerCase();
       qb.andWhere(
-        "LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, ''))) LIKE :clienteNombre",
+        `(LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, ''))) LIKE :nombre OR (:esMostrador = true AND venta.clienteId IS NULL))`,
         {
-          clienteNombre: `%${filters.clienteNombre.toLowerCase()}%`,
+          nombre: `%${term}%`,
+          esMostrador: term === 'mostrador',
         },
       );
     }
@@ -151,18 +166,50 @@ export class ReportesService {
 
     const resumen = await qb.orderBy('total_vendido', 'DESC').getRawMany();
 
+    const MOSTRADOR_ID = '00000000-0000-0000-0000-000000000000';
+    for (const row of resumen) {
+      if (!row.cliente_id) {
+        row.cliente_id = MOSTRADOR_ID;
+        row.cliente_nombre = 'VENTA MOSTRADOR';
+        row.rfc = 'XAXX010101000';
+        row.categoria_nombre = 'Mostrador';
+      }
+    }
+
     if (resumen.length > 0) {
-      const clientIds = resumen.map((r) => r.cliente_id);
-      const ultimasCompras = await this.ventasRepository
+      const clientIds = resumen
+        .filter((r) => r.cliente_id !== MOSTRADOR_ID)
+        .map((r) => r.cliente_id);
+
+      const ultimasCompras: any[] = [];
+
+      if (clientIds.length > 0) {
+        const comprasConId = await this.ventasRepository
+          .createQueryBuilder('venta')
+          .select([
+            'venta.clienteId AS cliente_id',
+            'MAX(venta.createdAt) AS ultima_compra',
+          ])
+          .where('venta.clienteId IN (:...clientIds)', { clientIds })
+          .andWhere('venta.statusId = :statusActivo', { statusActivo: 1 })
+          .groupBy('venta.clienteId')
+          .getRawMany();
+        ultimasCompras.push(...comprasConId);
+      }
+
+      const compraMostrador = await this.ventasRepository
         .createQueryBuilder('venta')
-        .select([
-          'venta.clienteId AS cliente_id',
-          'MAX(venta.createdAt) AS ultima_compra',
-        ])
-        .where('venta.clienteId IN (:...clientIds)', { clientIds })
+        .select(['MAX(venta.createdAt) AS ultima_compra'])
+        .where('venta.clienteId IS NULL')
         .andWhere('venta.statusId = :statusActivo', { statusActivo: 1 })
-        .groupBy('venta.clienteId')
-        .getRawMany();
+        .getRawOne();
+
+      if (compraMostrador?.ultima_compra) {
+        ultimasCompras.push({
+          cliente_id: MOSTRADOR_ID,
+          ultima_compra: compraMostrador.ultima_compra,
+        });
+      }
 
       const ultimaCompraMap = new Map(
         ultimasCompras.map((u) => [u.cliente_id, u.ultima_compra]),

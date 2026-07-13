@@ -894,6 +894,11 @@ describe('VentasService', () => {
         productos: [{ productoId: 'prod-1', cantidad: 5 }],
         clienteId: 'cliente-1',
         metodoPago: MetodoPago.EFECTIVO,
+        descuentosPreview: {
+          descuentoAplicado: 0,
+          total: 0,
+          descuentoPorProducto: [],
+        },
       };
 
       await service.create(dto as any, usuarioId);

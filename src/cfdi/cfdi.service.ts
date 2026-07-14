@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
@@ -59,13 +63,19 @@ export class CfdiService {
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
     mensaje: string;
-    ordenCompraVinculada?: { folio: string; status: string; productosVinculados: number };
+    ordenCompraVinculada?: {
+      folio: string;
+      status: string;
+      productosVinculados: number;
+    };
   }> {
     const xml = this.removeXmlDeclaration(dto.xmlContent);
     const cfdiData = this.extractCfdiData(xml);
 
     if (cfdiData.uuidCfdi) {
-      const existente = await this.recepcionesService.findByUuid(cfdiData.uuidCfdi);
+      const existente = await this.recepcionesService.findByUuid(
+        cfdiData.uuidCfdi,
+      );
       if (existente) {
         throw new BadRequestException(
           `El CFDI UUID ${cfdiData.uuidCfdi} ya fue procesado en la recepción ${existente.serie || ''}-${existente.folio || existente.id}`,
@@ -82,7 +92,9 @@ export class CfdiService {
 
       const labResult = await this.processLaboratorio(cfdiData.emisor, manager);
 
-      let proveedor = await this.proveedoresService.findByRfc(cfdiData.emisor.rfc);
+      let proveedor = await this.proveedoresService.findByRfc(
+        cfdiData.emisor.rfc,
+      );
       if (!proveedor) {
         proveedor = await this.proveedoresService.create({
           nombre: cfdiData.emisor.nombre,
@@ -117,7 +129,9 @@ export class CfdiService {
           manager,
         );
 
-      let ordenCompraVinculada: { folio: string; status: string; productosVinculados: number } | undefined;
+      let ordenCompraVinculada:
+        | { folio: string; status: string; productosVinculados: number }
+        | undefined;
       if (dto.ordenCompraId) {
         ordenCompraVinculada = await this.vincularConOrdenCompra(
           dto.ordenCompraId,
@@ -332,15 +346,18 @@ export class CfdiService {
         userId,
       );
 
-      await this.detalleLoteService.create({
-        productoId: producto.id,
-        loteId: lote.id,
-        cantidad: prodDto.cantidad,
-        precioUnitario: concepto?.valorUnitario || 0,
-        ivaCfdi: concepto?.ivaCfdi || null,
-        movimientoId: inventario.ultimoMovimientoId || undefined,
-        almacenTipo: AlmacenTipo.RECEPCION,
-      }, manager);
+      await this.detalleLoteService.create(
+        {
+          productoId: producto.id,
+          loteId: lote.id,
+          cantidad: prodDto.cantidad,
+          precioUnitario: concepto?.valorUnitario || 0,
+          ivaCfdi: concepto?.ivaCfdi || null,
+          movimientoId: inventario.ultimoMovimientoId || undefined,
+          almacenTipo: AlmacenTipo.RECEPCION,
+        },
+        manager,
+      );
     }
 
     return { productosCreados, productosExistentes };
@@ -375,9 +392,7 @@ export class CfdiService {
     recepcionId?: string,
     manager?: EntityManager,
   ): Promise<Lote> {
-    const repo = manager
-      ? manager.getRepository(Lote)
-      : this.loteRepository;
+    const repo = manager ? manager.getRepository(Lote) : this.loteRepository;
 
     const loteExistente = await repo.findOne({
       where: { numeroLote: numeroLote },
@@ -396,7 +411,11 @@ export class CfdiService {
       numeroLote: numeroLote,
       fechaCaducidad: fechaCaducidad
         ? new Date(fechaCaducidad)
-        : (() => { throw new BadRequestException('fechaCaducidad es requerida para crear el lote'); })(),
+        : (() => {
+            throw new BadRequestException(
+              'fechaCaducidad es requerida para crear el lote',
+            );
+          })(),
       laboratorioId: laboratorioId,
       recepcionId: recepcionId || undefined,
       statusId: 1,
@@ -460,13 +479,11 @@ export class CfdiService {
     if (orden.proveedorId !== proveedorId) {
       throw new BadRequestException(
         `El proveedor del CFDI no coincide con el proveedor de la orden de compra. ` +
-        `OC: ${orden.proveedorId || 'N/A'}, CFDI: ${proveedorId}`,
+          `OC: ${orden.proveedorId || 'N/A'}, CFDI: ${proveedorId}`,
       );
     }
 
-    const detallesMap = new Map(
-      orden.detalles.map((d) => [d.productoId, d]),
-    );
+    const detallesMap = new Map(orden.detalles.map((d) => [d.productoId, d]));
 
     let productosVinculados = 0;
     for (const producto of productos) {
@@ -513,7 +530,11 @@ export class CfdiService {
 
     return {
       folio: orden.folio,
-      status: todosCompletados ? 'COMPLETADA' : statusActual === 'BORRADOR' ? 'PENDIENTE' : statusActual,
+      status: todosCompletados
+        ? 'COMPLETADA'
+        : statusActual === 'BORRADOR'
+          ? 'PENDIENTE'
+          : statusActual,
       productosVinculados,
     };
   }

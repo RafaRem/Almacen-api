@@ -21,7 +21,11 @@ import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-al
 import { Producto } from '../productos/entities/producto.entity';
 import { Proveedor } from '../proveedores/entities/proveedor.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
-import { TipoMovimiento, OrigenOperacion, SYSTEM_USER_ID } from '../common/constants';
+import {
+  TipoMovimiento,
+  OrigenOperacion,
+  SYSTEM_USER_ID,
+} from '../common/constants';
 
 @Injectable()
 export class OrdenesCompraService {
@@ -99,7 +103,12 @@ export class OrdenesCompraService {
     proveedorId?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ data: OrdenCompra[]; total: number; page: number; limit: number }> {
+  }): Promise<{
+    data: OrdenCompra[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const page = filters?.page || 1;
     const limit = filters?.limit || 15;
     const skip = (page - 1) * limit;
@@ -172,16 +181,12 @@ export class OrdenesCompraService {
     await this.ordenesRepository.save(orden);
 
     if (updateDto.detalles) {
-      const existingIds = orden.detalles
-        .filter((d) => d.id)
-        .map((d) => d.id);
+      const existingIds = orden.detalles.filter((d) => d.id).map((d) => d.id);
       const incomingIds = updateDto.detalles
         .filter((d) => d.id)
         .map((d) => d.id);
 
-      const toDelete = existingIds.filter(
-        (eid) => !incomingIds.includes(eid),
-      );
+      const toDelete = existingIds.filter((eid) => !incomingIds.includes(eid));
       if (toDelete.length) {
         await this.detallesRepository.delete(toDelete);
       }
@@ -250,7 +255,9 @@ export class OrdenesCompraService {
     cantidad?: number;
     preview?: boolean;
   }): Promise<any> {
-    this.logger.log(`reabastecer llamado con productoId=${dto.productoId}, proveedorId=${dto.proveedorId || 'ninguno'}, cantidad=${dto.cantidad}, preview=${dto.preview}`);
+    this.logger.log(
+      `reabastecer llamado con productoId=${dto.productoId}, proveedorId=${dto.proveedorId || 'ninguno'}, cantidad=${dto.cantidad}, preview=${dto.preview}`,
+    );
 
     const producto = await this.productoRepository.findOne({
       where: { id: dto.productoId },
@@ -260,7 +267,9 @@ export class OrdenesCompraService {
       this.logger.warn(`Producto ${dto.productoId} no encontrado`);
       throw new NotFoundException('Producto no encontrado');
     }
-    this.logger.log(`Producto encontrado: ${producto.nombre}, proveedorPreferido: ${producto.proveedorPreferido?.id || 'NINGUNO'}`);
+    this.logger.log(
+      `Producto encontrado: ${producto.nombre}, proveedorPreferido: ${producto.proveedorPreferido?.id || 'NINGUNO'}`,
+    );
 
     let proveedor = producto.proveedorPreferido;
 
@@ -283,7 +292,9 @@ export class OrdenesCompraService {
 
     // Sin proveedor explícito ni preferido → intentar fallback
     if (!proveedor) {
-      this.logger.warn(`Producto ${producto.nombre} sin proveedor preferido, buscando fallback por recepción`);
+      this.logger.warn(
+        `Producto ${producto.nombre} sin proveedor preferido, buscando fallback por recepción`,
+      );
 
       const fallbackRecepcion = await this.inventarioRepository
         .createQueryBuilder('inv')
@@ -311,7 +322,9 @@ export class OrdenesCompraService {
 
       // No hay proveedor disponible → pedir al usuario que seleccione uno
       if (!proveedor) {
-        this.logger.warn(`No hay proveedor para ${producto.nombre}, solicitando selección`);
+        this.logger.warn(
+          `No hay proveedor para ${producto.nombre}, solicitando selección`,
+        );
         const proveedores = await this.entityManager.find(Proveedor, {
           order: { nombre: 'ASC' },
         });
@@ -335,7 +348,9 @@ export class OrdenesCompraService {
       })
       .getRawOne();
     const stockActual = Number(stockResult?.total || 0);
-    this.logger.log(`Stock actual: ${stockActual}, stockMaximo: ${producto.stockMaximo}`);
+    this.logger.log(
+      `Stock actual: ${stockActual}, stockMaximo: ${producto.stockMaximo}`,
+    );
 
     const suggestedQuantity = Math.max(
       0,
@@ -355,7 +370,9 @@ export class OrdenesCompraService {
 
     const cantidad = dto.cantidad ?? suggestedQuantity;
     if (cantidad <= 0) {
-      this.logger.warn(`Stock suficiente: actual=${stockActual}, maximo=${producto.stockMaximo}, sugerida=${suggestedQuantity}`);
+      this.logger.warn(
+        `Stock suficiente: actual=${stockActual}, maximo=${producto.stockMaximo}, sugerida=${suggestedQuantity}`,
+      );
       throw new BadRequestException('El producto tiene suficiente stock');
     }
     this.logger.log(`Cantidad a reabastecer: ${cantidad}`);

@@ -153,14 +153,12 @@ describe('OrdenesCompraService', () => {
       ordenesRepository.create = jest.fn().mockReturnValue(orden);
       ordenesRepository.save = jest.fn().mockResolvedValue(orden);
       ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
-      detallesRepository.create = jest.fn((d) => d as any);
+      detallesRepository.create = jest.fn((d) => d);
       detallesRepository.save = jest.fn().mockResolvedValue([]);
 
       const result = await service.create({
         proveedorId: 'prov-1',
-        detalles: [
-          { productoId: 'prod-1', cantidad: 5 },
-        ],
+        detalles: [{ productoId: 'prod-1', cantidad: 5 }],
       });
 
       expect(detallesRepository.create).toHaveBeenCalled();
@@ -240,7 +238,7 @@ describe('OrdenesCompraService', () => {
   describe('addDetalle()', () => {
     it('adds detalle to BORRADOR order', async () => {
       ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
-      detallesRepository.create = jest.fn((d) => d as any);
+      detallesRepository.create = jest.fn((d) => d);
       detallesRepository.save = jest.fn().mockResolvedValue({});
 
       const result = await service.addDetalle('oc-1', {
@@ -281,9 +279,9 @@ describe('OrdenesCompraService', () => {
     });
 
     it('throws for invalid status', async () => {
-      await expect(
-        service.cambiarStatus('oc-1', 'INVALIDO'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.cambiarStatus('oc-1', 'INVALIDO')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -368,8 +366,8 @@ describe('OrdenesCompraService', () => {
       ordenesRepository.findOne = jest
         .fn()
         .mockResolvedValueOnce(completableOrden) // 1st: load in recibir
-        .mockResolvedValueOnce(updatedOrden)      // 2nd: load after transaction
-        .mockResolvedValueOnce(completedOrden);    // 3rd: final return
+        .mockResolvedValueOnce(updatedOrden) // 2nd: load after transaction
+        .mockResolvedValueOnce(completedOrden); // 3rd: final return
       ordenesRepository.save = jest.fn().mockResolvedValue(completedOrden);
 
       const txMgr = {
@@ -416,7 +414,9 @@ describe('OrdenesCompraService', () => {
   describe('remove()', () => {
     it('soft-deletes by setting status CANCELADA', async () => {
       ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
-      ordenesRepository.save = jest.fn().mockResolvedValue({ ...orden, status: 'CANCELADA' });
+      ordenesRepository.save = jest
+        .fn()
+        .mockResolvedValue({ ...orden, status: 'CANCELADA' });
 
       await service.remove('oc-1');
       expect(ordenesRepository.save).toHaveBeenCalled();
@@ -427,9 +427,7 @@ describe('OrdenesCompraService', () => {
         .fn()
         .mockResolvedValue({ ...orden, status: 'COMPLETADA' });
 
-      await expect(service.remove('oc-1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.remove('oc-1')).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -582,8 +580,12 @@ describe('OrdenesCompraService', () => {
     });
 
     it('agrega nuevo detalle cuando OC existe pero producto no está en ella', async () => {
-      const spyAddDetalle = jest.spyOn(service, 'addDetalle' as any)
-        .mockResolvedValue({ ...orden, detalles: [{ ...detalle, cantidad: 70 }] } as any);
+      const spyAddDetalle = jest
+        .spyOn(service, 'addDetalle' as any)
+        .mockResolvedValue({
+          ...orden,
+          detalles: [{ ...detalle, cantidad: 70 }],
+        } as any);
 
       productoRepository.findOne = jest
         .fn()
@@ -596,8 +598,11 @@ describe('OrdenesCompraService', () => {
       }));
       ordenesRepository.findOne = jest
         .fn()
-        .mockResolvedValueOnce({ ...orden, detalles: [] })  // OC check
-        .mockResolvedValue({ ...orden, detalles: [{ ...detalle, cantidad: 70 }] }); // final
+        .mockResolvedValueOnce({ ...orden, detalles: [] }) // OC check
+        .mockResolvedValue({
+          ...orden,
+          detalles: [{ ...detalle, cantidad: 70 }],
+        }); // final
       detallesRepository.findOne = jest.fn().mockResolvedValue(null);
 
       const result = await service.reabastecer({ productoId: 'prod-1' });

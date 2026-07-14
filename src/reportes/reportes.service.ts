@@ -61,6 +61,7 @@ export class ReportesService {
       .leftJoin('detalle.venta', 'venta')
       .leftJoin('venta.cliente', 'cliente')
       .leftJoin('detalle.producto', 'producto')
+      .leftJoin('detalle.lote', 'lote')
       .select([
         'detalle.cantidad AS cantidad',
         'detalle.preciounitario AS precio_unitario',
@@ -72,6 +73,8 @@ export class ReportesService {
         'cliente.apellidoPaterno AS cliente_apellido_paterno',
         'cliente.apellidoMaterno AS cliente_apellido_materno',
         'producto.nombre AS producto_nombre',
+        'lote.id AS lote_id',
+        'detalle.productoId AS producto_id',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 });
     if (filters?.clienteNombre) {
@@ -98,20 +101,74 @@ export class ReportesService {
     const resultados = await queryBuilder
       .orderBy('venta.createdAt', 'DESC')
       .getRawMany();
+
+    if (resultados.length === 0) return [];
+
+    const productoIds = [
+      ...new Set(resultados.map((r) => r.producto_id).filter(Boolean)),
+    ];
+
+    const costosMap = new Map<
+      string,
+      { precioUnitarioLote: number; ivaCfdi: number }
+    >();
+
+    if (productoIds.length > 0) {
+      const costos = await this.inventarioRepository
+        .createQueryBuilder('ia')
+        .select([
+          'ia.productoId AS producto_id',
+          'ia.loteId AS lote_id',
+          'ia.precioUnitarioLote AS precio_unitario_lote',
+          'ia.ivaCfdi AS iva_cfdi',
+        ])
+        .where('ia.almacenTipo = :alm', { alm: AlmacenTipo.VENTAS })
+        .andWhere('ia.productoId IN (:...pids)', { pids: productoIds })
+        .getRawMany();
+
+      for (const c of costos) {
+        costosMap.set(`${c.lote_id}::${c.producto_id}`, {
+          precioUnitarioLote: parseFloat(c.precio_unitario_lote) || 0,
+          ivaCfdi: parseFloat(c.iva_cfdi) || 0,
+        });
+      }
+    }
+
     return resultados.map((r) => {
-      const partes = [r.cliente_nombre, r.cliente_apellido_paterno, r.cliente_apellido_materno].filter(Boolean);
-      const nombreCliente = partes.length > 0 ? partes.join(' ').trim() : 'Mostrador';
+      const partes = [
+        r.cliente_nombre,
+        r.cliente_apellido_paterno,
+        r.cliente_apellido_materno,
+      ].filter(Boolean);
+      const nombreCliente =
+        partes.length > 0 ? partes.join(' ').trim() : 'Mostrador';
+      const cantidad = parseInt(r.cantidad, 10) || 0;
+      const subtotal = parseFloat(r.subtotal) || 0;
+      const costoInfo = costosMap.get(`${r.lote_id}::${r.producto_id}`) || {
+        precioUnitarioLote: 0,
+        ivaCfdi: 0,
+      };
+      const costoUnitario = costoInfo.precioUnitarioLote;
+
+      const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
+      const precioSinIva = precioNetoPorUnidad;
+      const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
+      const margenPorcentaje =
+        costoUnitario > 0
+          ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
+          : 0;
+
       return {
         nombreCliente,
         folioVenta: r.folio_venta,
         fechaVenta: r.fecha_venta,
         producto: r.producto_nombre,
-        cantidad: parseInt(r.cantidad, 10) || 0,
-        precioVenta:
-          parseInt(r.cantidad, 10) > 0
-            ? parseFloat(r.importe_bruto) / parseInt(r.cantidad, 10)
-            : 0,
-        total: parseFloat(r.importe_bruto) || 0,
+        cantidad,
+        precioVenta: precioNetoPorUnidad,
+        total: subtotal,
+        costoUnitario,
+        utilidad: Number(utilidadLinea.toFixed(2)),
+        margenPorcentaje: Number(margenPorcentaje.toFixed(2)),
       };
     });
   }
@@ -351,12 +408,13 @@ export class ReportesService {
 
     const precioMap = new Map<
       string,
-      { precioUnitarioLote: number; precioVenta: number }
+      { precioUnitarioLote: number; precioVenta: number; ivaCfdi: number }
     >();
     for (const inv of inventarios) {
       precioMap.set(inv.loteId, {
         precioUnitarioLote: inv.precioUnitarioLote || 0,
         precioVenta: inv.precioVenta || 0,
+        ivaCfdi: (inv as any).ivaCfdi || (inv as any).ivaPersonalizado || 0,
       });
     }
 
@@ -375,17 +433,31 @@ export class ReportesService {
       const precios = precioMap.get(d.loteId) ||
         precioMap.get(d.lote?.id) || {
           precioUnitarioLote: 0,
-          precioVenta: 0,
+          ivaCfdi: 0,
         };
+      const cantidad = d.cantidad || 0;
+      const subtotal = Number(d.subtotal) || 0;
+      const costoUnitario = precios.precioUnitarioLote;
+
+      const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
+      const precioSinIva = precioNetoPorUnidad;
+      const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
+      const margenLinea =
+        costoUnitario > 0
+          ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
+          : 0;
+
       return {
         folioVenta: d.venta?.folio,
         fechaVenta: d.venta?.createdAt,
         clienteNombre: d.venta?.cliente?.nombre || 'Mostrador',
         numeroLote: d.lote?.numeroLote,
-        cantidad: d.cantidad || 0,
-        precioUnitarioLote: precios.precioUnitarioLote,
-        precioVenta: d.precioUnitario || 0,
-        total: (d.precioUnitario || 0) * (d.cantidad || 0),
+        cantidad,
+        precioUnitarioLote: costoUnitario,
+        precioVenta: precioNetoPorUnidad,
+        total: subtotal,
+        utilidad: Number(utilidadLinea.toFixed(2)),
+        margenPorcentaje: Number(margenLinea.toFixed(2)),
       };
     });
     return {

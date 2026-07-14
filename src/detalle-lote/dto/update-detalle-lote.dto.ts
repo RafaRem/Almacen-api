@@ -31,4 +31,3 @@ export class UpdateDetalleLoteDto {
   @IsNumber()
   almacenTipo?: number;
 }
-

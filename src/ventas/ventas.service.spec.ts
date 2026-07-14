@@ -310,13 +310,14 @@ describe('VentasService', () => {
         {
           ventaId: 'venta-1',
           loteId: 'lote-1',
+          productoId: 'prod-1',
           cantidad: 5,
           precioUnitario: 208.8,
           subtotal: 939.6,
         },
       ];
       const costosData = [
-        { loteId: 'lote-1', precioUnitarioLote: 174, ivaCfdi: 0 },
+        { loteId: 'lote-1', productoId: 'prod-1', precioUnitarioLote: 174, ivaCfdi: 0 },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
@@ -335,6 +336,7 @@ describe('VentasService', () => {
         {
           ventaId: 'venta-1',
           loteId: 'lote-1',
+          productoId: 'prod-1',
           cantidad: 5,
           precioUnitario: 208.8,
           subtotal: 939.6,
@@ -342,14 +344,15 @@ describe('VentasService', () => {
         {
           ventaId: 'venta-1',
           loteId: 'lote-2',
+          productoId: 'prod-2',
           cantidad: 3,
           precioUnitario: 100,
           subtotal: 300,
         },
       ];
       const costosData = [
-        { loteId: 'lote-1', precioUnitarioLote: 174, ivaCfdi: 0 },
-        { loteId: 'lote-2', precioUnitarioLote: 80, ivaCfdi: 0 },
+        { loteId: 'lote-1', productoId: 'prod-1', precioUnitarioLote: 174, ivaCfdi: 0 },
+        { loteId: 'lote-2', productoId: 'prod-2', precioUnitarioLote: 80, ivaCfdi: 0 },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
@@ -368,6 +371,7 @@ describe('VentasService', () => {
         {
           ventaId: 'venta-1',
           loteId: 'lote-1',
+          productoId: 'prod-1',
           cantidad: 5,
           precioUnitario: 208.8,
           subtotal: 939.6,
@@ -375,14 +379,15 @@ describe('VentasService', () => {
         {
           ventaId: 'venta-2',
           loteId: 'lote-2',
+          productoId: 'prod-2',
           cantidad: 2,
           precioUnitario: 300,
           subtotal: 600,
         },
       ];
       const costosData = [
-        { loteId: 'lote-1', precioUnitarioLote: 174, ivaCfdi: 0 },
-        { loteId: 'lote-2', precioUnitarioLote: 200, ivaCfdi: 0 },
+        { loteId: 'lote-1', productoId: 'prod-1', precioUnitarioLote: 174, ivaCfdi: 0 },
+        { loteId: 'lote-2', productoId: 'prod-2', precioUnitarioLote: 200, ivaCfdi: 0 },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
@@ -411,13 +416,14 @@ describe('VentasService', () => {
         {
           ventaId: 'venta-1',
           loteId: 'lote-1',
+          productoId: 'prod-1',
           cantidad: 1,
           precioUnitario: 116,
           subtotal: 116,
         },
       ];
       const costosData = [
-        { loteId: 'lote-1', precioUnitarioLote: 80, ivaCfdi: 16 },
+        { loteId: 'lote-1', productoId: 'prod-1', precioUnitarioLote: 80, ivaCfdi: 16 },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);

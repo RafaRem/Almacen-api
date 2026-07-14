@@ -514,6 +514,7 @@ export class VentasService {
       .select([
         'detalle.ventaId',
         'detalle.loteId',
+        'detalle.productoId',
         'detalle.cantidad',
         'detalle.precioUnitario',
         'detalle.subtotal',

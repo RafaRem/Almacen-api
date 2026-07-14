@@ -530,13 +530,13 @@ export class VentasService {
     if (loteIds.length > 0) {
       const costos = await this.inventarioAlmacenRepository
         .createQueryBuilder('ia')
-        .select(['ia.loteId', 'ia.precioUnitarioLote', 'ia.ivaCfdi'])
+        .select(['ia.loteId', 'ia.productoId', 'ia.precioUnitarioLote', 'ia.ivaCfdi'])
         .where('ia.almacenTipo = :alm', { alm: AlmacenTipo.VENTAS })
         .andWhere('ia.loteId IN (:...lids)', { lids: loteIds })
         .getMany();
 
       for (const c of costos) {
-        costMap.set(c.loteId, {
+        costMap.set(`${c.loteId}::${c.productoId}`, {
           precioUnitarioLote: Number(c.precioUnitarioLote) || 0,
           ivaCfdi: Number(c.ivaCfdi) || 0,
         });
@@ -550,7 +550,7 @@ export class VentasService {
     for (const det of detalles) {
       const cantidad = Number(det.cantidad) || 0;
       const subtotal = Number(det.subtotal) || 0;
-      const cost = costMap.get(det.loteId) || {
+      const cost = costMap.get(`${det.loteId}::${det.productoId}`) || {
         precioUnitarioLote: 0,
         ivaCfdi: 0,
       };
@@ -618,12 +618,12 @@ export class VentasService {
     if (loteIds.length > 0) {
       const costos = await this.inventarioAlmacenRepository
         .createQueryBuilder('ia')
-        .select(['ia.loteId', 'ia.precioUnitarioLote', 'ia.ivaCfdi'])
+        .select(['ia.loteId', 'ia.productoId', 'ia.precioUnitarioLote', 'ia.ivaCfdi'])
         .where('ia.almacenTipo = :alm', { alm: AlmacenTipo.VENTAS })
         .andWhere('ia.loteId IN (:...lids)', { lids: loteIds })
         .getMany();
       for (const c of costos) {
-        costMap.set(c.loteId, {
+        costMap.set(`${c.loteId}::${c.productoId}`, {
           precioUnitarioLote: Number(c.precioUnitarioLote) || 0,
           ivaCfdi: Number(c.ivaCfdi) || 0,
         });
@@ -637,7 +637,7 @@ export class VentasService {
       const cantidad = Number(d.cantidad) || 0;
       const precioVentaRaw = Number(d.precioUnitario) || 0;
       const subtotal = Number(d.subtotal) || 0;
-      const cost = costMap.get(d.loteId) || {
+      const cost = costMap.get(`${d.loteId}::${d.productoId}`) || {
         precioUnitarioLote: 0,
         ivaCfdi: 0,
       };

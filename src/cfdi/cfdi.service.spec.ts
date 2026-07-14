@@ -102,15 +102,30 @@ describe('CfdiService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CfdiService,
-        { provide: getRepositoryToken(Producto), useValue: mockProductoRepository },
+        {
+          provide: getRepositoryToken(Producto),
+          useValue: mockProductoRepository,
+        },
         { provide: getRepositoryToken(Lote), useValue: mockLoteRepository },
-        { provide: getRepositoryToken(Laboratorio), useValue: mockLaboratorioRepository },
-        { provide: InventarioAlmacenService, useValue: mockInventarioAlmacenService },
+        {
+          provide: getRepositoryToken(Laboratorio),
+          useValue: mockLaboratorioRepository,
+        },
+        {
+          provide: InventarioAlmacenService,
+          useValue: mockInventarioAlmacenService,
+        },
         { provide: DetalleLoteService, useValue: mockDetalleLoteService },
         { provide: ProveedoresService, useValue: mockProveedoresService },
         { provide: RecepcionesService, useValue: mockRecepcionesService },
-        { provide: getRepositoryToken(OrdenCompra), useValue: mockOrdenCompraRepository },
-        { provide: getRepositoryToken(DetalleOrdenCompra), useValue: mockDetalleOrdenCompraRepository },
+        {
+          provide: getRepositoryToken(OrdenCompra),
+          useValue: mockOrdenCompraRepository,
+        },
+        {
+          provide: getRepositoryToken(DetalleOrdenCompra),
+          useValue: mockDetalleOrdenCompraRepository,
+        },
         { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
@@ -285,9 +300,13 @@ describe('CfdiService', () => {
     });
 
     it('should rollback transaction on error', async () => {
-      mockLaboratorioRepository.findOne.mockRejectedValue(new Error('DB error'));
+      mockLaboratorioRepository.findOne.mockRejectedValue(
+        new Error('DB error'),
+      );
 
-      await expect(service.procesarRecepcion(dto as any, userId)).rejects.toThrow('DB error');
+      await expect(
+        service.procesarRecepcion(dto as any, userId),
+      ).rejects.toThrow('DB error');
 
       expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
@@ -295,12 +314,16 @@ describe('CfdiService', () => {
     });
 
     it('should reject duplicate UUID', async () => {
-      mockRecepcionesService.findByUuid.mockResolvedValue({ id: 'rec-existing', serie: 'A', folio: '99999' });
+      mockRecepcionesService.findByUuid.mockResolvedValue({
+        id: 'rec-existing',
+        serie: 'A',
+        folio: '99999',
+      });
       mockLaboratorioRepository.findOne.mockResolvedValue({ id: 'lab-1' });
 
-      await expect(service.procesarRecepcion(dto as any, userId)).rejects.toThrow(
-        'CFDI UUID',
-      );
+      await expect(
+        service.procesarRecepcion(dto as any, userId),
+      ).rejects.toThrow('CFDI UUID');
     });
   });
 });

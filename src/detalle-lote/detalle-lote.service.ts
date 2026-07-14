@@ -37,7 +37,10 @@ export class DetalleLoteService {
     });
   }
 
-  async create(data: Partial<DetalleLote>, managerArg?: EntityManager): Promise<DetalleLote> {
+  async create(
+    data: Partial<DetalleLote>,
+    managerArg?: EntityManager,
+  ): Promise<DetalleLote> {
     if (managerArg) {
       const repo = managerArg.getRepository(DetalleLote);
       const detalleLote = repo.create(data);

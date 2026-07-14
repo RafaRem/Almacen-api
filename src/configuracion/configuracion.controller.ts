@@ -34,7 +34,8 @@ export class ConfiguracionController {
 
   @Get('ticket')
   async getTicketConfig() {
-    const config = await this.configuracionService.getConfiguracion('ticket-mensaje');
+    const config =
+      await this.configuracionService.getConfiguracion('ticket-mensaje');
     if (!config) {
       return { mensaje: '¡Gracias por su preferencia!' };
     }

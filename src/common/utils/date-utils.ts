@@ -11,7 +11,8 @@ export function isWithinDateRange(
   fechaFin?: Date | string,
   hoy: Date = new Date(),
 ): boolean {
-  const inicio = typeof fechaInicio === 'string' ? new Date(fechaInicio) : fechaInicio;
+  const inicio =
+    typeof fechaInicio === 'string' ? new Date(fechaInicio) : fechaInicio;
   const fin = typeof fechaFin === 'string' ? new Date(fechaFin) : fechaFin;
   if (!inicio && !fin) return true;
   if (inicio && fin) return inicio <= hoy && fin >= hoy;

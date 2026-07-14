@@ -11,6 +11,7 @@ import { ProductosModule } from '../productos/productos.module';
 import { LotesModule } from '../lotes/lotes.module';
 import { DescuentosModule } from '../descuentos/descuentos.module';
 import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almacen.module';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { MovimientosAlmacenModule } from '../movimientos-almacen/movimientos-almacen.module';
 import { ConfiguracionesModule } from '../configuraciones/configuraciones.module';
 import { ClientesModule } from '../clientes/clientes.module';
@@ -23,6 +24,7 @@ import { ClientesModule } from '../clientes/clientes.module';
       DetalleVentaLote,
       PagoVenta,
       DescuentoVentaDetalle,
+      InventarioAlmacen,
     ]),
     ProductosModule,
     LotesModule,

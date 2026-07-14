@@ -57,10 +57,7 @@ export class ClientesService {
     return this.clientesRepository.save(cliente);
   }
 
-  async findAll(
-    statusId?: string,
-    nombre?: string,
-  ): Promise<Cliente[]> {
+  async findAll(statusId?: string, nombre?: string): Promise<Cliente[]> {
     const qb = this.clientesRepository
       .createQueryBuilder('cliente')
       .leftJoinAndSelect('cliente.categoriaCliente', 'categoriaCliente')

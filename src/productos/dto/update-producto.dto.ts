@@ -1,9 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  IsEnum,
-} from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsEnum } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 
 export class UpdateProductoDto {

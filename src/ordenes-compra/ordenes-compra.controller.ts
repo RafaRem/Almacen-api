@@ -42,7 +42,12 @@ export class OrdenesCompraController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.ordenesCompraService.findAll({ status, proveedorId, page, limit });
+    return this.ordenesCompraService.findAll({
+      status,
+      proveedorId,
+      page,
+      limit,
+    });
   }
 
   @Get('borradores')

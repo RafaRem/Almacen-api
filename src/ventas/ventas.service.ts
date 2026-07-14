@@ -303,7 +303,7 @@ export class VentasService {
         const importeBruto = precioVenta * productoVenta.cantidad;
         const subtotalLinea = importeBruto - descuentoLinea;
 
-        subtotal += importeBruto;
+        subtotal += subtotalLinea;
         descuentoTotal += descuentoLinea;
 
         const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || '';
@@ -320,8 +320,8 @@ export class VentasService {
       }
 
       const ivaRate = await this.getIvaRate();
-      const iva = (subtotal - descuentoTotal) * ivaRate;
-      const total = subtotal - descuentoTotal + iva;
+      const iva = subtotal * ivaRate;
+      const total = subtotal + iva;
 
       let pagosData: {
         formaPago: FormaPago;
@@ -996,8 +996,8 @@ export class VentasService {
     }
 
     const ivaRate = await this.getIvaRate();
-    const iva = (subtotal - descuentoTotal) * ivaRate;
-    const total = subtotal - descuentoTotal + iva;
+    const iva = subtotal * ivaRate;
+    const total = subtotal + iva;
 
     return {
       subtotal,

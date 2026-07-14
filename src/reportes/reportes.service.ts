@@ -148,20 +148,15 @@ export class ReportesService {
         precioUnitarioLote: 0,
         ivaCfdi: 0,
       };
-      const ivaTasa = costoInfo.ivaCfdi;
       const costoUnitario = costoInfo.precioUnitarioLote;
 
       const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const precioSinIva =
-        ivaTasa > 0
-          ? precioNetoPorUnidad / (1 + ivaTasa / 100)
-          : precioNetoPorUnidad;
+      const precioSinIva = precioNetoPorUnidad;
       const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
       const margenPorcentaje =
         costoUnitario > 0
           ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
           : 0;
-      const ivaUnitario = precioNetoPorUnidad - precioSinIva;
 
       return {
         nombreCliente,
@@ -174,7 +169,6 @@ export class ReportesService {
         costoUnitario,
         utilidad: Number(utilidadLinea.toFixed(2)),
         margenPorcentaje: Number(margenPorcentaje.toFixed(2)),
-        ivaUnitario: Number(ivaUnitario.toFixed(2)),
       };
     });
   }
@@ -444,19 +438,14 @@ export class ReportesService {
       const cantidad = d.cantidad || 0;
       const subtotal = Number(d.subtotal) || 0;
       const costoUnitario = precios.precioUnitarioLote;
-      const ivaTasa = precios.ivaCfdi || 0;
 
       const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const precioSinIva =
-        ivaTasa > 0
-          ? precioNetoPorUnidad / (1 + ivaTasa / 100)
-          : precioNetoPorUnidad;
+      const precioSinIva = precioNetoPorUnidad;
       const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
       const margenLinea =
         costoUnitario > 0
           ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
           : 0;
-      const ivaUnitario = precioNetoPorUnidad - precioSinIva;
 
       return {
         folioVenta: d.venta?.folio,
@@ -469,7 +458,6 @@ export class ReportesService {
         total: subtotal,
         utilidad: Number(utilidadLinea.toFixed(2)),
         margenPorcentaje: Number(margenLinea.toFixed(2)),
-        ivaUnitario: Number(ivaUnitario.toFixed(2)),
       };
     });
     return {

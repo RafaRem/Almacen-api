@@ -556,11 +556,7 @@ export class VentasService {
       };
 
       const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const ivaTasa = cost.ivaCfdi;
-      const precioSinIva =
-        ivaTasa > 0
-          ? precioNetoPorUnidad / (1 + ivaTasa / 100)
-          : precioNetoPorUnidad;
+      const precioSinIva = precioNetoPorUnidad;
       const costoUnitario = cost.precioUnitarioLote;
       const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
       const costoLinea = costoUnitario * cantidad;
@@ -647,11 +643,7 @@ export class VentasService {
       };
 
       const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const ivaTasa = cost.ivaCfdi;
-      const precioSinIva =
-        ivaTasa > 0
-          ? precioNetoPorUnidad / (1 + ivaTasa / 100)
-          : precioNetoPorUnidad;
+      const precioSinIva = precioNetoPorUnidad;
       const costoUnitario = cost.precioUnitarioLote;
       const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
       const costoLinea = costoUnitario * cantidad;
@@ -671,7 +663,7 @@ export class VentasService {
         subtotal,
         importeBruto: Number(d.importeBruto) || 0,
         costoUnitario,
-        ivaCfdi: ivaTasa,
+        ivaCfdi: 0,
         precioSinIva: Number(precioSinIva.toFixed(2)),
         utilidadLinea: Number(utilidadLinea.toFixed(2)),
         margenLinea: Number(margenLinea.toFixed(2)),

@@ -360,7 +360,7 @@ describe('VentasService', () => {
 
       expect(data[0].costoTotal).toBe(1110);
       expect(data[0].utilidad).toBe(129.6);
-      expect(data[0].margenPorcentaje).toBeCloseTo(11.68, 1);
+      expect(data[0].margenPorcentaje).toBeCloseTo(11.67, 1);
     });
 
     it('should handle multiple ventas', async () => {
@@ -406,7 +406,7 @@ describe('VentasService', () => {
       expect(mockDetallesQueryBuilder.getMany).not.toHaveBeenCalled();
     });
 
-    it('should use ivaCfdi to compute precioSinIva', async () => {
+    it('should compute precioSinIva as subtotal/cantidad without deducing ivaCfdi', async () => {
       const detallesData = [
         {
           ventaId: 'venta-1',
@@ -427,8 +427,8 @@ describe('VentasService', () => {
       await (service as any).computeUtilidadVentas(data);
 
       expect(data[0].costoTotal).toBe(80);
-      expect(data[0].utilidad).toBe(20);
-      expect(data[0].margenPorcentaje).toBe(25);
+      expect(data[0].utilidad).toBe(36);
+      expect(data[0].margenPorcentaje).toBe(45);
     });
   });
 

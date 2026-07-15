@@ -141,7 +141,6 @@ export class InventarioAlmacenService {
       if (item.precioUnitarioLote > 0) {
         item.precioVenta = this.calcularPrecioVenta(
           item.precioUnitarioLote,
-          item.ivaCfdi,
           item.producto?.margenRecomendado,
         );
       }
@@ -237,18 +236,14 @@ export class InventarioAlmacenService {
 
   calcularPrecioVenta(
     precioUnitario: number,
-    ivaCfdi: number | null,
     margen: number | null,
   ): number | null {
     if (!precioUnitario || precioUnitario <= 0) {
       return null;
     }
-    const iva = ivaCfdi ?? 0;
     const margenValor = margen ?? 20;
 
-    const precioNeto = precioUnitario * (1 + iva / 100);
-    const cantidadMargen = precioUnitario * (margenValor / 100);
-    const precioVenta = precioNeto + cantidadMargen;
+    const precioVenta = precioUnitario * (1 + margenValor / 100);
 
     return Math.round(precioVenta * 100) / 100;
   }
@@ -265,7 +260,6 @@ export class InventarioAlmacenService {
 
     inventario.precioVenta = this.calcularPrecioVenta(
       inventario.precioUnitarioLote,
-      inventario.ivaCfdi,
       producto.margenRecomendado,
     );
 

@@ -303,7 +303,7 @@ export class VentasService {
         const importeBruto = precioVenta * productoVenta.cantidad;
         const subtotalLinea = importeBruto - descuentoLinea;
 
-        subtotal += importeBruto;
+        subtotal += subtotalLinea;
         descuentoTotal += descuentoLinea;
 
         const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || '';
@@ -320,8 +320,8 @@ export class VentasService {
       }
 
       const ivaRate = await this.getIvaRate();
-      const iva = (subtotal - descuentoTotal) * ivaRate;
-      const total = subtotal - descuentoTotal + iva;
+      const iva = subtotal * ivaRate;
+      const total = subtotal + iva;
 
       let pagosData: {
         formaPago: FormaPago;
@@ -514,68 +514,80 @@ export class VentasService {
       .select([
         'detalle.ventaId',
         'detalle.loteId',
+        'detalle.productoId',
         'detalle.cantidad',
         'detalle.precioUnitario',
+        'detalle.descuentoLinea',
         'detalle.subtotal',
       ])
       .where('detalle.ventaId IN (:...ids)', { ids: ventaIds })
       .getMany();
 
+    const productoIds = [...new Set(detalles.map((d) => d.productoId).filter(Boolean))];
+    const margenMap = new Map<string, number>();
+    if (productoIds.length > 0) {
+      try {
+        const rows = await this.dataSource.query(
+          `SELECT id, margen_recomendado FROM productos WHERE id = ANY($1)`,
+          [productoIds],
+        );
+        for (const row of rows) {
+          margenMap.set(row.id, row.margen_recomendado ?? 20);
+        }
+      } catch {
+        this.logger.warn('Error loading margenRecomendado, using default 20%');
+      }
+    }
+
     const loteIds = [...new Set(detalles.map((d) => d.loteId).filter(Boolean))];
-    const costMap = new Map<
-      string,
-      { precioUnitarioLote: number; ivaCfdi: number }
-    >();
-
+    const precioVentaMap = new Map<string, number>();
+    const costoMap = new Map<string, number>();
     if (loteIds.length > 0) {
-      const costos = await this.inventarioAlmacenRepository
-        .createQueryBuilder('ia')
-        .select(['ia.loteId', 'ia.precioUnitarioLote', 'ia.ivaCfdi'])
-        .where('ia.almacenTipo = :alm', { alm: AlmacenTipo.VENTAS })
-        .andWhere('ia.loteId IN (:...lids)', { lids: loteIds })
-        .getMany();
-
-      for (const c of costos) {
-        costMap.set(c.loteId, {
-          precioUnitarioLote: Number(c.precioUnitarioLote) || 0,
-          ivaCfdi: Number(c.ivaCfdi) || 0,
+      try {
+        const records = await this.inventarioAlmacenRepository.find({
+          where: { loteId: In(loteIds) },
+          select: ['productoId', 'loteId', 'precioVenta', 'precioUnitarioLote'],
         });
+        for (const rec of records) {
+          if (rec.precioVenta != null) {
+            precioVentaMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioVenta));
+            costoMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioUnitarioLote) || 0);
+          }
+        }
+      } catch {
+        this.logger.warn('Error loading precioVenta from inventario_almacen');
       }
     }
 
     const profitMap = new Map<
       string,
-      { utilidad: number; costoTotal: number }
+      { utilidad: number; utilidadBruta: number }
     >();
     for (const det of detalles) {
       const cantidad = Number(det.cantidad) || 0;
-      const subtotal = Number(det.subtotal) || 0;
-      const cost = costMap.get(det.loteId) || {
-        precioUnitarioLote: 0,
-        ivaCfdi: 0,
-      };
+      const precioUnitario = Number(det.precioUnitario) || 0;
+      const descuentoLinea = Number(det.descuentoLinea) || 0;
+      const margen = margenMap.get(det.productoId) ?? 20;
+      const key = `${det.productoId}:${det.loteId}`;
+      const precioVenta = precioVentaMap.get(key) ?? precioUnitario;
+      const costoUnitario = costoMap.get(key) ?? precioUnitario;
 
-      const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const precioSinIva = precioNetoPorUnidad;
-      const costoUnitario = cost.precioUnitarioLote;
-      const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
-      const costoLinea = costoUnitario * cantidad;
+      const utilidadBrutaLinea = precioVentaMap.has(key)
+        ? (precioVenta - costoUnitario) * cantidad
+        : precioVenta * cantidad * (margen / 100);
+      const utilidadLinea = utilidadBrutaLinea - descuentoLinea;
 
-      const prev = profitMap.get(det.ventaId) || { utilidad: 0, costoTotal: 0 };
+      const prev = profitMap.get(det.ventaId) || { utilidad: 0, utilidadBruta: 0 };
       profitMap.set(det.ventaId, {
         utilidad: prev.utilidad + utilidadLinea,
-        costoTotal: prev.costoTotal + costoLinea,
+        utilidadBruta: prev.utilidadBruta + utilidadBrutaLinea,
       });
     }
 
     for (const venta of data) {
-      const profit = profitMap.get(venta.id) || { utilidad: 0, costoTotal: 0 };
-      (venta as any).costoTotal = Number(profit.costoTotal.toFixed(2)) || 0;
+      const profit = profitMap.get(venta.id) || { utilidad: 0, utilidadBruta: 0 };
       (venta as any).utilidad = Number(profit.utilidad.toFixed(2)) || 0;
-      (venta as any).margenPorcentaje =
-        profit.costoTotal > 0
-          ? Number(((profit.utilidad / profit.costoTotal) * 100).toFixed(2))
-          : 0;
+      (venta as any).utilidadBruta = Number(profit.utilidadBruta.toFixed(2)) || 0;
     }
   }
 
@@ -610,67 +622,58 @@ export class VentasService {
       });
     }
 
-    const loteIds = [...new Set(detalles.map((d) => d.loteId).filter(Boolean))];
-    const costMap = new Map<
-      string,
-      { precioUnitarioLote: number; ivaCfdi: number }
-    >();
+    const loteIds = detalles.map((d) => d.lote?.id).filter(Boolean) as string[];
+    const precioVentaMap = new Map<string, number>();
+    const costoMap = new Map<string, number>();
     if (loteIds.length > 0) {
-      const costos = await this.inventarioAlmacenRepository
-        .createQueryBuilder('ia')
-        .select(['ia.loteId', 'ia.precioUnitarioLote', 'ia.ivaCfdi'])
-        .where('ia.almacenTipo = :alm', { alm: AlmacenTipo.VENTAS })
-        .andWhere('ia.loteId IN (:...lids)', { lids: loteIds })
-        .getMany();
-      for (const c of costos) {
-        costMap.set(c.loteId, {
-          precioUnitarioLote: Number(c.precioUnitarioLote) || 0,
-          ivaCfdi: Number(c.ivaCfdi) || 0,
+      try {
+        const records = await this.inventarioAlmacenRepository.find({
+          where: { loteId: In(loteIds) },
+          select: ['productoId', 'loteId', 'precioVenta', 'precioUnitarioLote'],
         });
+        for (const rec of records) {
+          if (rec.precioVenta != null) {
+            precioVentaMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioVenta));
+            costoMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioUnitarioLote) || 0);
+          }
+        }
+      } catch {
+        this.logger.warn('Error loading precioVenta from inventario_almacen');
       }
     }
 
     let utilidadTotal = 0;
-    let costoTotal = 0;
+    let utilidadBrutaTotal = 0;
 
     const detallesConvertidos = detalles.map((d) => {
       const cantidad = Number(d.cantidad) || 0;
       const precioVentaRaw = Number(d.precioUnitario) || 0;
-      const subtotal = Number(d.subtotal) || 0;
-      const cost = costMap.get(d.loteId) || {
-        precioUnitarioLote: 0,
-        ivaCfdi: 0,
-      };
+      const descuentoLinea = Number(d.descuentoLinea) || 0;
+      const margen = (d.producto as any)?.margenRecomendado ?? 20;
+      const key = `${d.productoId}:${d.lote?.id}`;
+      const precioVenta = precioVentaMap.get(key) ?? precioVentaRaw;
+      const costoUnitario = costoMap.get(key) ?? precioVentaRaw;
 
-      const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const precioSinIva = precioNetoPorUnidad;
-      const costoUnitario = cost.precioUnitarioLote;
-      const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
-      const costoLinea = costoUnitario * cantidad;
-      const margenLinea =
-        costoUnitario > 0
-          ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
-          : 0;
+      const utilidadBruta = precioVentaMap.has(key)
+        ? (precioVenta - costoUnitario) * cantidad
+        : precioVenta * cantidad * (margen / 100);
+      const utilidadLinea = utilidadBruta - descuentoLinea;
 
       utilidadTotal += utilidadLinea;
-      costoTotal += costoLinea;
+      utilidadBrutaTotal += utilidadBruta;
 
       return {
         ...d,
         cantidad,
         precioUnitario: precioVentaRaw,
-        descuentoLinea: Number(d.descuentoLinea) || 0,
-        subtotal,
+        precioVenta,
+        descuentoLinea,
+        subtotal: Number(d.subtotal) || 0,
         importeBruto: Number(d.importeBruto) || 0,
-        costoUnitario,
-        ivaCfdi: 0,
-        precioSinIva: Number(precioSinIva.toFixed(2)),
+        utilidadBruta: Number(utilidadBruta.toFixed(2)),
         utilidadLinea: Number(utilidadLinea.toFixed(2)),
-        margenLinea: Number(margenLinea.toFixed(2)),
       };
     });
-
-    const margenTotal = costoTotal > 0 ? (utilidadTotal / costoTotal) * 100 : 0;
 
     const pagosConvertidos = pagos.map((p) => ({
       ...p,
@@ -693,9 +696,8 @@ export class VentasService {
       pagos: pagosConvertidos,
       descuentos: descuentosConvertidos,
     };
-    result.costoTotal = Number(costoTotal.toFixed(2));
     result.utilidadTotal = Number(utilidadTotal.toFixed(2));
-    result.margenTotal = Number(margenTotal.toFixed(2));
+    result.utilidadBrutaTotal = Number(utilidadBrutaTotal.toFixed(2));
     return result;
   }
 
@@ -995,8 +997,8 @@ export class VentasService {
     }
 
     const ivaRate = await this.getIvaRate();
-    const iva = (subtotal - descuentoTotal) * ivaRate;
-    const total = subtotal - descuentoTotal + iva;
+    const iva = subtotal * ivaRate;
+    const total = subtotal + iva;
 
     return {
       subtotal,

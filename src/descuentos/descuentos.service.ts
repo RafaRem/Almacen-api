@@ -455,7 +455,6 @@ export class DescuentosService {
     productoId: string,
     cantidad: number,
     precioUnitario: number,
-    iva: number,
     margen: number,
     laboratorioId: string,
     categoriaClienteId?: string,
@@ -476,9 +475,7 @@ export class DescuentosService {
       monto: number | null;
     } | null;
   } | null> {
-    const precioNeto = precioUnitario * (1 + iva / 100);
-    const cantidadMargen = precioUnitario * (margen / 100);
-    const precioVenta = precioNeto + cantidadMargen;
+    const precioVenta = precioUnitario + precioUnitario * (margen / 100);
 
     const calculo = await this.calcularDescuentosAcumulables(
       productoId,

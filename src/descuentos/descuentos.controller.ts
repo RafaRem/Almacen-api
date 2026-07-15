@@ -99,7 +99,6 @@ export class DescuentosController {
       dto.productoId,
       dto.cantidad,
       dto.precioUnitario,
-      dto.iva,
       dto.margen,
       dto.laboratorioId,
       categoriaClienteId,

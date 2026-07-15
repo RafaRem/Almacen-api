@@ -533,12 +533,9 @@ export class OrdenesCompraService {
           inventario.precioUnitarioLote > 0 &&
           producto.margenRecomendado
         ) {
-          const iva = inventario.ivaCfdi ?? 16;
-          const precioNeto = inventario.precioUnitarioLote * (1 + iva / 100);
-          const cantidadMargen =
-            inventario.precioUnitarioLote * (producto.margenRecomendado / 100);
+          const margen = producto.margenRecomendado ?? 20;
           inventario.precioVenta =
-            Math.round((precioNeto + cantidadMargen) * 100) / 100;
+            Math.round(inventario.precioUnitarioLote * (1 + margen / 100) * 100) / 100;
           await manager.save(InventarioAlmacen, inventario);
         }
 

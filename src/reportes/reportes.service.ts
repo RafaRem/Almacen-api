@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
+  In,
   LessThanOrEqual,
   MoreThanOrEqual,
   Between,
@@ -67,6 +68,7 @@ export class ReportesService {
         'detalle.preciounitario AS precio_unitario',
         'detalle.subtotal AS subtotal',
         'detalle.importebruto AS importe_bruto',
+        'detalle.descuentolinea AS descuento_linea',
         'venta.folio AS folio_venta',
         'venta.createdat AS fecha_venta',
         'cliente.nombre AS cliente_nombre',
@@ -108,29 +110,35 @@ export class ReportesService {
       ...new Set(resultados.map((r) => r.producto_id).filter(Boolean)),
     ];
 
-    const costosMap = new Map<
-      string,
-      { precioUnitarioLote: number; ivaCfdi: number }
-    >();
-
+    const margenMap = new Map<string, number>();
     if (productoIds.length > 0) {
-      const costos = await this.inventarioRepository
-        .createQueryBuilder('ia')
-        .select([
-          'ia.productoId AS producto_id',
-          'ia.loteId AS lote_id',
-          'ia.precioUnitarioLote AS precio_unitario_lote',
-          'ia.ivaCfdi AS iva_cfdi',
-        ])
-        .where('ia.almacenTipo = :alm', { alm: AlmacenTipo.VENTAS })
-        .andWhere('ia.productoId IN (:...pids)', { pids: productoIds })
-        .getRawMany();
+      const productos = await this.productosRepository
+        .createQueryBuilder('p')
+        .select(['p.id', 'p.margenRecomendado'])
+        .where('p.id IN (:...pids)', { pids: productoIds })
+        .getMany();
+      for (const p of productos) {
+        margenMap.set(p.id, p.margenRecomendado ?? 20);
+      }
+    }
 
-      for (const c of costos) {
-        costosMap.set(`${c.lote_id}::${c.producto_id}`, {
-          precioUnitarioLote: parseFloat(c.precio_unitario_lote) || 0,
-          ivaCfdi: parseFloat(c.iva_cfdi) || 0,
+    const loteIds = [...new Set(resultados.map((r) => r.lote_id).filter(Boolean))];
+    const precioVentaMap = new Map<string, number>();
+    const costoMap = new Map<string, number>();
+    if (loteIds.length > 0) {
+      try {
+        const records = await this.inventarioRepository.find({
+          where: { loteId: In(loteIds) },
+          select: ['productoId', 'loteId', 'precioVenta', 'precioUnitarioLote'],
         });
+        for (const rec of records) {
+          if (rec.precioVenta != null) {
+            precioVentaMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioVenta));
+            costoMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioUnitarioLote) || 0);
+          }
+        }
+      } catch {
+        // fallback to precioUnitario
       }
     }
 
@@ -143,20 +151,17 @@ export class ReportesService {
       const nombreCliente =
         partes.length > 0 ? partes.join(' ').trim() : 'Mostrador';
       const cantidad = parseInt(r.cantidad, 10) || 0;
-      const subtotal = parseFloat(r.subtotal) || 0;
-      const costoInfo = costosMap.get(`${r.lote_id}::${r.producto_id}`) || {
-        precioUnitarioLote: 0,
-        ivaCfdi: 0,
-      };
-      const costoUnitario = costoInfo.precioUnitarioLote;
+      const precioUnitario = parseFloat(r.precio_unitario) || 0;
+      const descuentoLinea = parseFloat(r.descuento_linea) || 0;
+      const margen = margenMap.get(r.producto_id) ?? 20;
+      const key = `${r.producto_id}:${r.lote_id}`;
+      const precioVenta = precioVentaMap.get(key) ?? precioUnitario;
+      const costoUnitario = costoMap.get(key) ?? precioUnitario;
 
-      const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const precioSinIva = precioNetoPorUnidad;
-      const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
-      const margenPorcentaje =
-        costoUnitario > 0
-          ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
-          : 0;
+      const utilidadBruta = precioVentaMap.has(key)
+        ? (precioVenta - costoUnitario) * cantidad
+        : precioVenta * cantidad * (margen / 100);
+      const utilidadLinea = utilidadBruta - descuentoLinea;
 
       return {
         nombreCliente,
@@ -164,11 +169,11 @@ export class ReportesService {
         fechaVenta: r.fecha_venta,
         producto: r.producto_nombre,
         cantidad,
-        precioVenta: precioNetoPorUnidad,
-        total: subtotal,
-        costoUnitario,
+        precioVenta,
+        descuentoLinea,
+        total: parseFloat(r.subtotal) || 0,
+        utilidadBruta: Number(utilidadBruta.toFixed(2)),
         utilidad: Number(utilidadLinea.toFixed(2)),
-        margenPorcentaje: Number(margenPorcentaje.toFixed(2)),
       };
     });
   }
@@ -406,46 +411,51 @@ export class ReportesService {
       0,
     );
 
-    const precioMap = new Map<
-      string,
-      { precioUnitarioLote: number; precioVenta: number; ivaCfdi: number }
-    >();
-    for (const inv of inventarios) {
-      precioMap.set(inv.loteId, {
-        precioUnitarioLote: inv.precioUnitarioLote || 0,
-        precioVenta: inv.precioVenta || 0,
-        ivaCfdi: (inv as any).ivaCfdi || (inv as any).ivaPersonalizado || 0,
-      });
-    }
-
-    const primerInventario = inventarios.length > 0 ? inventarios[0] : null;
+    const primerInventario = inventarios[0];
 
     const detalles = await this.detallesRepository
       .createQueryBuilder('detalle')
       .leftJoinAndSelect('detalle.venta', 'venta')
       .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('detalle.lote', 'lote')
+      .leftJoinAndSelect('detalle.producto', 'producto')
       .where('detalle.productoId = :productoId', { productoId })
       .andWhere('venta.statusId = :statusId', { statusId: 1 })
       .orderBy('venta.createdAt', 'DESC')
       .getMany();
-    const trazabilidad = detalles.map((d) => {
-      const precios = precioMap.get(d.loteId) ||
-        precioMap.get(d.lote?.id) || {
-          precioUnitarioLote: 0,
-          ivaCfdi: 0,
-        };
-      const cantidad = d.cantidad || 0;
-      const subtotal = Number(d.subtotal) || 0;
-      const costoUnitario = precios.precioUnitarioLote;
+    const loteIds = [...new Set(detalles.map((d) => d.lote?.id).filter(Boolean))];
+    const precioVentaMap = new Map<string, number>();
+    const costoMap = new Map<string, number>();
+    if (loteIds.length > 0) {
+      try {
+        const records = await this.inventarioRepository.find({
+          where: { loteId: In(loteIds) },
+          select: ['productoId', 'loteId', 'precioVenta', 'precioUnitarioLote'],
+        });
+        for (const rec of records) {
+          if (rec.precioVenta != null) {
+            precioVentaMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioVenta));
+            costoMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioUnitarioLote) || 0);
+          }
+        }
+      } catch {
+        // fallback to precioUnitario
+      }
+    }
 
-      const precioNetoPorUnidad = cantidad > 0 ? subtotal / cantidad : 0;
-      const precioSinIva = precioNetoPorUnidad;
-      const utilidadLinea = (precioSinIva - costoUnitario) * cantidad;
-      const margenLinea =
-        costoUnitario > 0
-          ? ((precioSinIva - costoUnitario) / costoUnitario) * 100
-          : 0;
+    const trazabilidad = detalles.map((d) => {
+      const cantidad = d.cantidad || 0;
+      const precioUnitario = Number(d.precioUnitario) || 0;
+      const descuentoLinea = Number(d.descuentoLinea) || 0;
+      const margen = (d.producto as any)?.margenRecomendado ?? 20;
+      const key = `${d.productoId}:${d.lote?.id}`;
+      const precioVenta = precioVentaMap.get(key) ?? precioUnitario;
+      const costoUnitario = costoMap.get(key) ?? precioUnitario;
+
+      const utilidadBruta = precioVentaMap.has(key)
+        ? (precioVenta - costoUnitario) * cantidad
+        : precioVenta * cantidad * (margen / 100);
+      const utilidadLinea = utilidadBruta - descuentoLinea;
 
       return {
         folioVenta: d.venta?.folio,
@@ -453,11 +463,11 @@ export class ReportesService {
         clienteNombre: d.venta?.cliente?.nombre || 'Mostrador',
         numeroLote: d.lote?.numeroLote,
         cantidad,
-        precioUnitarioLote: costoUnitario,
-        precioVenta: precioNetoPorUnidad,
-        total: subtotal,
+        precioVenta,
+        descuentoLinea,
+        total: Number(d.subtotal) || 0,
+        utilidadBruta: Number(utilidadBruta.toFixed(2)),
         utilidad: Number(utilidadLinea.toFixed(2)),
-        margenPorcentaje: Number(margenLinea.toFixed(2)),
       };
     });
     return {

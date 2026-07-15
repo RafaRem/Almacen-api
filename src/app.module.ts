@@ -36,6 +36,7 @@ import { ProveedoresModule } from './proveedores/proveedores.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
 import { RecepcionModule } from './recepciones/recepcion.module';
+import { UpdatesModule } from './updates/updates.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { RecepcionModule } from './recepciones/recepcion.module';
     OrdenesCompraModule,
     RecepcionModule,
     DashboardModule,
+    UpdatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

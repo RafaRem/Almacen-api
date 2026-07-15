@@ -168,9 +168,6 @@ export class PreviewProductDiscountDto {
   precioUnitario: number;
 
   @IsNumber()
-  iva: number;
-
-  @IsNumber()
   margen: number;
 
   @IsUUID()

@@ -105,6 +105,9 @@ export class Factura {
   @Column({ type: 'varchar', length: 10, nullable: true })
   emisorRegimenFiscal: string;
 
+  @Column({ type: 'uuid', name: 'ventaid', nullable: true })
+  ventaId: string;
+
   @Column({ type: 'uuid', name: 'clienteid', nullable: true })
   clienteId: string;
 

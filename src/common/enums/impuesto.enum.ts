@@ -20,4 +20,4 @@ export const TasaImpuestoNombres: Record<number, string> = {
   [TasaImpuesto.TASA_26]: '26% - Tasa adicional',
 };
 
-export const DEFAULT_TASA = TasaImpuesto.TASA_26;
+export const DEFAULT_TASA = TasaImpuesto.TASA_16;

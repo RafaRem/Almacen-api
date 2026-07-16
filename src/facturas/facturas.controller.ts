@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FacturasService } from './facturas.service';
 import { CreateFacturaDto } from './dto/create-factura.dto';
+import { CreateFacturaDesdeVentaDto } from './dto/create-desde-venta.dto';
 import { UpdateFacturaDto } from './dto/update-factura.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
@@ -29,6 +30,14 @@ export class FacturasController {
   @Post()
   create(@Body() createFacturaDto: CreateFacturaDto) {
     return this.facturasService.create(createFacturaDto);
+  }
+
+  @Post('desde-venta/:ventaId')
+  crearDesdeVenta(
+    @Param('ventaId', ParseUUIDPipe) ventaId: string,
+    @Body() dto?: CreateFacturaDesdeVentaDto,
+  ) {
+    return this.facturasService.crearDesdeVenta(ventaId, dto);
   }
 
   @Get()

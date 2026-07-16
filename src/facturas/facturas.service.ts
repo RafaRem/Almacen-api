@@ -21,6 +21,7 @@ import { FacturaStatus } from './entities/factura.entity';
 import { MetodoPagoSat } from '../common/enums/metodo-pago-sat.enum';
 import { TipoComprobante } from '../common/enums/tipo-comprobante.enum';
 import { DEFAULT_TASA } from '../common/enums/impuesto.enum';
+import { TimbradoService } from '../timbrado/timbrado.service';
 
 interface ImpuestosLinea {
   base: number;
@@ -49,6 +50,7 @@ export class FacturasService {
     private readonly empresaRepository: Repository<DatosEmpresa>,
     @InjectRepository(RegimenFiscal)
     private readonly regimenFiscalRepository: Repository<RegimenFiscal>,
+    private readonly timbradoService: TimbradoService,
   ) {}
 
   async create(createFacturaDto: CreateFacturaDto): Promise<Factura> {
@@ -392,6 +394,9 @@ export class FacturasService {
       where: { id },
       relations: [
         'cliente',
+        'cliente.facturacionCliente',
+        'cliente.facturacionCliente.regimenFiscal',
+        'cliente.domicilio',
         'usuario',
         'detalles',
         'detalles.producto',
@@ -526,6 +531,24 @@ export class FacturasService {
     return detalles;
   }
 
+  async timbrar(id: string): Promise<Factura> {
+    const factura = await this.findOne(id);
+
+    if (factura.statusId !== FacturaStatus.BORRADOR) {
+      throw new BadRequestException(
+        'Solo se pueden timbrar facturas en estado borrador',
+      );
+    }
+
+    const result = await this.timbradoService.timbrar(factura);
+
+    factura.facturapiId = result.facturapiId;
+    factura.uuid = result.uuid;
+    factura.statusId = FacturaStatus.TIMBRADA;
+
+    return this.facturaRepository.save(factura);
+  }
+
   async marcarComoTimbradaDemo(id: string): Promise<Factura> {
     const factura = await this.findOne(id);
 
@@ -547,6 +570,10 @@ export class FacturasService {
       throw new BadRequestException(
         'Solo se pueden cancelar facturas timbradas',
       );
+    }
+
+    if (factura.facturapiId) {
+      await this.timbradoService.cancelar(factura.facturapiId);
     }
 
     factura.statusId = FacturaStatus.CANCELADA;

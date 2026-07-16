@@ -72,6 +72,12 @@ export class FacturasController {
     return this.facturasService.update(id, updateFacturaDto);
   }
 
+  @Post(':id/timbrar')
+  @HttpCode(HttpStatus.OK)
+  timbrar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.timbrar(id);
+  }
+
   @Post(':id/marcar-como-timbrada-demo')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermission(UserModule.INVOICES)

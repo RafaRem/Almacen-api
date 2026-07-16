@@ -11,6 +11,7 @@ import { FacturacionCliente } from '../facturacion-cliente/entities/facturacion-
 import { DatosEmpresa } from '../empresa/entities/datos-empresa.entity';
 import { RegimenFiscal } from '../regimen-fiscal/entities/regimen-fiscal.entity';
 import { CommonModule } from '../common/common.module';
+import { TimbradoModule } from '../timbrado/timbrado.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CommonModule } from '../common/common.module';
       RegimenFiscal,
     ]),
     CommonModule,
+    TimbradoModule,
   ],
   controllers: [FacturasController],
   providers: [FacturasService],

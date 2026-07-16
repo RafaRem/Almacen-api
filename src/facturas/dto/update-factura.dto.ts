@@ -8,6 +8,7 @@ import {
   ValidateNested,
   IsEnum,
   Min,
+  MaxLength,
 } from 'class-validator';
 import { TipoComprobante } from '../../common/enums/tipo-comprobante.enum';
 import { MetodoPagoSat } from '../../common/enums/metodo-pago-sat.enum';
@@ -33,6 +34,10 @@ export class ProductoFacturaUpdateDto {
   @IsOptional()
   @IsUUID()
   loteId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  tasaImpuesto?: number;
 }
 
 export class UpdateFacturaDto {
@@ -54,6 +59,7 @@ export class UpdateFacturaDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(5)
   lugarExpedicion?: string;
 
   @IsOptional()

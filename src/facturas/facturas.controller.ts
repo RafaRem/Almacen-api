@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { FacturasService } from './facturas.service';
 import { CreateFacturaDto } from './dto/create-factura.dto';
@@ -28,16 +29,17 @@ export class FacturasController {
   constructor(private readonly facturasService: FacturasService) {}
 
   @Post()
-  create(@Body() createFacturaDto: CreateFacturaDto) {
-    return this.facturasService.create(createFacturaDto);
+  create(@Body() createFacturaDto: CreateFacturaDto, @Request() req: any) {
+    return this.facturasService.create(createFacturaDto, req.user?.id);
   }
 
   @Post('desde-venta/:ventaId')
   crearDesdeVenta(
     @Param('ventaId', ParseUUIDPipe) ventaId: string,
     @Body() dto?: CreateFacturaDesdeVentaDto,
+    @Request() req?: any,
   ) {
-    return this.facturasService.crearDesdeVenta(ventaId, dto);
+    return this.facturasService.crearDesdeVenta(ventaId, dto, req?.user?.id);
   }
 
   @Get()
@@ -51,7 +53,8 @@ export class FacturasController {
     );
   }
 
-  @Get('preview')
+  @Post('preview')
+  @HttpCode(HttpStatus.OK)
   preview(
     @Body('productos') productos: CreateFacturaDto['productos'],
     @Body('clienteId') clienteId?: string,
@@ -74,8 +77,8 @@ export class FacturasController {
 
   @Post(':id/timbrar')
   @HttpCode(HttpStatus.OK)
-  timbrar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.timbrar(id);
+  timbrar(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.facturasService.timbrar(id, req.user?.id);
   }
 
   @Post(':id/marcar-como-timbrada-demo')
@@ -87,8 +90,8 @@ export class FacturasController {
 
   @Post(':id/cancelar')
   @HttpCode(HttpStatus.OK)
-  cancelar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.cancelar(id);
+  cancelar(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.facturasService.cancelar(id, req.user?.id);
   }
 
   @Delete(':id')

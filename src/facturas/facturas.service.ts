@@ -53,7 +53,7 @@ export class FacturasService {
     private readonly timbradoService: TimbradoService,
   ) {}
 
-  async create(createFacturaDto: CreateFacturaDto): Promise<Factura> {
+  async create(createFacturaDto: CreateFacturaDto, usuarioId?: string): Promise<Factura> {
     const {
       clienteId,
       productos,
@@ -141,6 +141,7 @@ export class FacturasService {
       observaciones,
       statusId: FacturaStatus.BORRADOR,
       clienteId,
+      usuarioId,
       emisorNombre,
       emisorRfc,
       emisorRegimenFiscal,
@@ -163,6 +164,7 @@ export class FacturasService {
   async crearDesdeVenta(
     ventaId: string,
     dto?: CreateFacturaDesdeVentaDto,
+    usuarioId?: string,
   ): Promise<Factura> {
     const venta = await this.ventaRepository.findOne({
       where: { id: ventaId },
@@ -300,6 +302,7 @@ export class FacturasService {
       observaciones: dto?.observaciones || undefined,
       statusId: FacturaStatus.BORRADOR,
       clienteId: venta.clienteId,
+      usuarioId,
       emisorNombre: empresa?.nombre || undefined,
       emisorRfc: empresa?.rfc || undefined,
       emisorRegimenFiscal: regimenFiscalCodigo,
@@ -359,7 +362,7 @@ export class FacturasService {
 
       detalles.push({
         productoId: prod.productoId,
-        loteId: prod.loteId || '',
+        loteId: prod.loteId || undefined,
         claveProdServ: producto.claveProdServ || '01010101',
         claveUnidad: producto.claveUnidad || 'ACT',
         descripcion: producto.nombre,
@@ -498,7 +501,7 @@ export class FacturasService {
       const importeBruto = precioUnitario * cantidad;
       const importe = importeBruto - descuento;
 
-      const tasaImpuesto = DEFAULT_TASA;
+      const tasaImpuesto = prod.tasaImpuesto || DEFAULT_TASA;
       const impuestos: ImpuestosLinea[] = [];
       if (tasaImpuesto > 0) {
         const base = importe;
@@ -514,7 +517,7 @@ export class FacturasService {
 
       detalles.push({
         productoId: prod.productoId,
-        loteId: prod.loteId || '',
+        loteId: prod.loteId || undefined,
         claveProdServ: producto.claveProdServ || '01010101',
         claveUnidad: producto.claveUnidad || 'ACT',
         descripcion: producto.nombre,
@@ -531,7 +534,7 @@ export class FacturasService {
     return detalles;
   }
 
-  async timbrar(id: string): Promise<Factura> {
+  async timbrar(id: string, usuarioId?: string): Promise<Factura> {
     const factura = await this.findOne(id);
 
     if (factura.statusId !== FacturaStatus.BORRADOR) {
@@ -545,6 +548,7 @@ export class FacturasService {
     factura.facturapiId = result.facturapiId;
     factura.uuid = result.uuid;
     factura.statusId = FacturaStatus.TIMBRADA;
+    if (usuarioId) factura.usuarioId = usuarioId;
 
     return this.facturaRepository.save(factura);
   }
@@ -563,7 +567,7 @@ export class FacturasService {
     return this.facturaRepository.save(factura);
   }
 
-  async cancelar(id: string): Promise<Factura> {
+  async cancelar(id: string, usuarioId?: string): Promise<Factura> {
     const factura = await this.findOne(id);
 
     if (factura.statusId !== FacturaStatus.TIMBRADA) {
@@ -577,6 +581,7 @@ export class FacturasService {
     }
 
     factura.statusId = FacturaStatus.CANCELADA;
+    if (usuarioId) factura.usuarioId = usuarioId;
 
     return this.facturaRepository.save(factura);
   }

@@ -8,6 +8,7 @@ import {
   ValidateNested,
   IsEnum,
   Min,
+  MaxLength,
 } from 'class-validator';
 import { TipoComprobante } from '../../common/enums/tipo-comprobante.enum';
 import { MetodoPagoSat } from '../../common/enums/metodo-pago-sat.enum';
@@ -51,6 +52,7 @@ export class CreateFacturaDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(5)
   lugarExpedicion?: string;
 
   @IsOptional()

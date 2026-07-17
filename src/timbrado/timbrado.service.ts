@@ -1,8 +1,14 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Facturapi, { CancellationMotive } from 'facturapi';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { Factura } from '../facturas/entities/factura.entity';
 import { FacturaDetalle } from '../facturas/entities/factura-detalle.entity';
+
+const UPLOADS_BASE = path.join(process.cwd(), 'uploads', 'facturas');
 
 @Injectable()
 export class TimbradoService {
@@ -15,7 +21,12 @@ export class TimbradoService {
     }
   }
 
-  async timbrar(factura: Factura): Promise<{ facturapiId: string; uuid: string }> {
+  async timbrar(factura: Factura): Promise<{
+    facturapiId: string;
+    uuid: string;
+    xmlPath: string;
+    pdfPath: string;
+  }> {
     if (!this.facturapi) {
       throw new BadRequestException('Facturapi no está configurado (FACTURAPI_KEY)');
     }
@@ -24,9 +35,31 @@ export class TimbradoService {
 
     const result = await this.facturapi.invoices.create(payload);
 
+    const dir = path.join(UPLOADS_BASE, factura.id);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const xmlPath = path.join(dir, `${result.uuid}.xml`);
+    const pdfPath = path.join(dir, `${result.uuid}.pdf`);
+
+    try {
+      const xmlStream = await this.facturapi.invoices.downloadXml(result.id) as Readable;
+      await pipeline(xmlStream, fs.createWriteStream(xmlPath));
+    } catch (e) {
+      console.error('Error descargando XML:', e);
+    }
+
+    try {
+      const pdfStream = await this.facturapi.invoices.downloadPdf(result.id) as Readable;
+      await pipeline(pdfStream, fs.createWriteStream(pdfPath));
+    } catch (e) {
+      console.error('Error descargando PDF:', e);
+    }
+
     return {
       facturapiId: result.id,
       uuid: result.uuid,
+      xmlPath: `/uploads/facturas/${factura.id}/${result.uuid}.xml`,
+      pdfPath: `/uploads/facturas/${factura.id}/${result.uuid}.pdf`,
     };
   }
 
@@ -36,6 +69,28 @@ export class TimbradoService {
     }
 
     await this.facturapi.invoices.cancel(facturapiId, { motive: CancellationMotive.ERRORES_SIN_RELACION });
+  }
+
+  async previewPdf(payload: Record<string, unknown>): Promise<NodeJS.ReadableStream> {
+    if (!this.facturapi) {
+      throw new BadRequestException('Facturapi no está configurado (FACTURAPI_KEY)');
+    }
+
+    const pdf = await this.facturapi.invoices.previewPdf(payload);
+
+    if (pdf instanceof Blob) {
+      throw new InternalServerErrorException('No se pudo generar el PDF de previsualización');
+    }
+
+    return pdf as NodeJS.ReadableStream;
+  }
+
+  async sendByEmail(facturapiId: string, email: string): Promise<void> {
+    if (!this.facturapi) {
+      throw new BadRequestException('Facturapi no está configurado (FACTURAPI_KEY)');
+    }
+
+    await this.facturapi.invoices.sendByEmail(facturapiId, { email });
   }
 
   private buildPayload(factura: Factura): Record<string, unknown> {

@@ -591,6 +591,17 @@ export class VentasService {
     }
   }
 
+  async findPendientesFactura(): Promise<Venta[]> {
+    return this.ventasRepository
+      .createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
+      .leftJoinAndSelect('venta.usuario', 'usuario')
+      .where('venta.statusId = :statusId', { statusId: 1 })
+      .andWhere(`venta.id NOT IN (SELECT f.ventaid FROM facturas f WHERE f.ventaid IS NOT NULL)`)
+      .orderBy('venta.createdAt', 'DESC')
+      .getMany();
+  }
+
   async findOne(
     id: string,
   ): Promise<

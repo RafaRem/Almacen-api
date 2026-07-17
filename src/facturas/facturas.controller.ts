@@ -12,6 +12,7 @@ import {
   HttpStatus,
   UseGuards,
   Request,
+  Header,
 } from '@nestjs/common';
 import { FacturasService } from './facturas.service';
 import { CreateFacturaDto } from './dto/create-factura.dto';
@@ -40,6 +41,16 @@ export class FacturasController {
     @Request() req?: any,
   ) {
     return this.facturasService.crearDesdeVenta(ventaId, dto, req?.user?.id);
+  }
+
+  @Post('desde-venta/:ventaId/crear-y-timbrar')
+  @HttpCode(HttpStatus.OK)
+  crearYTimbrarDesdeVenta(
+    @Param('ventaId', ParseUUIDPipe) ventaId: string,
+    @Body() dto?: CreateFacturaDesdeVentaDto,
+    @Request() req?: any,
+  ) {
+    return this.facturasService.crearYTimbrarDesdeVenta(ventaId, dto, req?.user?.id);
   }
 
   @Get()
@@ -92,6 +103,31 @@ export class FacturasController {
   @HttpCode(HttpStatus.OK)
   cancelar(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.facturasService.cancelar(id, req.user?.id);
+  }
+
+  @Get(':id/xml')
+  @Header('Content-Type', 'application/xml')
+  getXml(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.getXmlStream(id);
+  }
+
+  @Get(':id/pdf')
+  @Header('Content-Type', 'application/pdf')
+  getPdf(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.getPdfStream(id);
+  }
+
+  @Post(':id/preview-pdf')
+  @HttpCode(HttpStatus.OK)
+  @Header('Content-Type', 'application/pdf')
+  previewPdf(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.previewPdf(id);
+  }
+
+  @Post(':id/enviar-email')
+  @HttpCode(HttpStatus.OK)
+  enviarEmail(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.enviarEmail(id);
   }
 
   @Delete(':id')

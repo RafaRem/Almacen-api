@@ -74,6 +74,12 @@ export class VentasController {
     );
   }
 
+  @Get('pendientes-factura')
+  @UseGuards(JwtAuthGuard)
+  pendientesFactura() {
+    return this.ventasService.findPendientesFactura();
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {

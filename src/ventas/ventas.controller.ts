@@ -36,7 +36,7 @@ export class VentasController {
     @Query('usuarioId') usuarioId?: string,
   ) {
     const skipNum = skip ? parseInt(skip, 10) : 0;
-    const takeNum = take ? parseInt(take, 10) : 20;
+    const takeNum = take ? parseInt(take, 10) : undefined;
     return this.ventasService.findAll(skipNum, takeNum, {
       fechaFrom,
       fechaTo,
@@ -72,6 +72,24 @@ export class VentasController {
       fechaFrom,
       fechaTo,
     );
+  }
+
+  @Get('resumen')
+  @UseGuards(JwtAuthGuard)
+  resumen(
+    @Query('fechaFrom') fechaFrom?: string,
+    @Query('fechaTo') fechaTo?: string,
+    @Query('clienteId') clienteId?: string,
+    @Query('statusId') statusId?: string,
+    @Query('usuarioId') usuarioId?: string,
+  ) {
+    return this.ventasService.findResumen({
+      fechaFrom,
+      fechaTo,
+      clienteId,
+      statusId,
+      usuarioId,
+    });
   }
 
   @Get(':id')

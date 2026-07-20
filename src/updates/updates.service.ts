@@ -20,32 +20,52 @@ export class UpdatesService {
 
   async getUpdateJson(proxyBaseUrl: string): Promise<any> {
     if (!this.token) {
+      this.logger.error('GITHUB_TOKEN no configurado en variables de entorno')
       throw new NotFoundException('GITHUB_TOKEN no configurado')
     }
 
-    const { data: release } = await this.httpService.axiosRef.get(
-      `${this.apiBase}/repos/${this.repo}/releases/latest`,
-      { headers: { Authorization: `Bearer ${this.token}` } },
-    )
-
-    const updateAsset = release.assets.find((a: any) => a.name === 'update.json')
-    if (!updateAsset) {
-      throw new NotFoundException('update.json no encontrado en la última release')
+    let release: any
+    try {
+      const { data } = await this.httpService.axiosRef.get(
+        `${this.apiBase}/repos/${this.repo}/releases/latest`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      )
+      release = data
+    } catch (err: any) {
+      const status = err.response?.status || 'unknown'
+      const msg = err.response?.data?.message || err.message || 'Error desconocido'
+      this.logger.error(`Error al obtener última release de GitHub: status=${status} msg=${msg}`)
+      throw new NotFoundException(`Error al obtener última release: ${msg}`)
     }
 
-    const { data: updateJson } = await this.httpService.axiosRef.get(
-      `${this.apiBase}/repos/${this.repo}/releases/assets/${updateAsset.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/octet-stream',
-        },
-      },
-    )
+    const updateAsset = release.assets?.find((a: any) => a.name === 'update.json')
+    if (!updateAsset) {
+      this.logger.warn(`update.json no encontrado en release ${release.tag_name}`)
+      throw new NotFoundException(`update.json no encontrado en release ${release.tag_name || 'latest'}`)
+    }
 
-    for (const [platform, info] of Object.entries(updateJson.platforms)) {
+    let updateJson: any
+    try {
+      const { data } = await this.httpService.axiosRef.get(
+        `${this.apiBase}/repos/${this.repo}/releases/assets/${updateAsset.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            Accept: 'application/octet-stream',
+          },
+        },
+      )
+      updateJson = data
+    } catch (err: any) {
+      const status = err.response?.status || 'unknown'
+      const msg = err.response?.data?.message || err.message || 'Error desconocido'
+      this.logger.error(`Error al descargar update.json de GitHub: status=${status} msg=${msg}`)
+      throw new NotFoundException(`Error al descargar update.json: ${msg}`)
+    }
+
+    for (const [platform, info] of Object.entries(updateJson.platforms || {})) {
       const pInfo = info as any
-      const match = pInfo.url.match(/\/releases\/download\/([^/]+)\/(.+)$/)
+      const match = pInfo.url?.match(/\/releases\/download\/([^/]+)\/(.+)$/)
       if (match) {
         pInfo.url = `${proxyBaseUrl}/updates/download/${match[1]}/${match[2]}`
       }
@@ -56,6 +76,7 @@ export class UpdatesService {
 
   async downloadFile(tag: string, filename: string) {
     if (!this.token) {
+      this.logger.error('GITHUB_TOKEN no configurado en variables de entorno')
       throw new NotFoundException('GITHUB_TOKEN no configurado')
     }
 
@@ -77,9 +98,13 @@ export class UpdatesService {
       return { stream: response.data, contentType: ct }
     } catch (err: any) {
       if (err.response?.status === 404) {
+        this.logger.warn(`Archivo ${filename} no encontrado en release ${tag}`)
         throw new NotFoundException(`Archivo ${filename} no encontrado en release ${tag}`)
       }
-      throw err
+      const status = err.response?.status || 'unknown'
+      const msg = err.response?.data?.message || err.message || 'Error desconocido'
+      this.logger.error(`Error al descargar ${filename} de release ${tag}: status=${status} msg=${msg}`)
+      throw new NotFoundException(`Error al descargar archivo: ${msg}`)
     }
   }
 }

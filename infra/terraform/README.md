@@ -8,7 +8,7 @@ Terraform stack for the backend-only Azure deployment:
 - Azure Files mounted at `/uploads`
 - Log Analytics for Container Apps logs
 - PostgreSQL public firewall access from all public IPs, with database authentication still required
-- Azure Key Vault for `DATABASE_PASSWORD` and `JWT_SECRET`
+- Azure Key Vault for `DATABASE_PASSWORD`, `JWT_SECRET`, and `GITHUB_TOKEN`
 - HTTP startup, readiness, and liveness probes against `/health`
 - Resource Group/Key Vault stay in `eastus`; PostgreSQL and Container Apps use `eastus2` because this subscription is restricted/saturated for those services in `eastus`.
 - Terraform state is stored remotely in Azure Storage: `rg-nueva-era-prod` / `stnuevaeraprod2xg97h` / `tfstate` / `almacen-api-prod.tfstate`.
@@ -48,7 +48,13 @@ Generate ephemeral shell variables:
 
 ```sh
 eval "$(./scripts/generate-secrets-env.sh)"
+read -rs -p "GitHub token: " NUEVA_ERA_GITHUB_TOKEN
+echo
+export NUEVA_ERA_GITHUB_TOKEN
 ```
+
+Use a newly generated GitHub token here. Never paste it into source files,
+shell history, Terraform variables, or chat messages.
 
 Create the Key Vault and RBAC first:
 

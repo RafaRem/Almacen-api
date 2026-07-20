@@ -269,6 +269,12 @@ resource "azurerm_container_app" "api" {
     identity            = azurerm_user_assigned_identity.container_apps.id
   }
 
+  secret {
+    name                = "github-token"
+    key_vault_secret_id = "${azurerm_key_vault.main.vault_uri}secrets/${var.github_token_secret_name}"
+    identity            = azurerm_user_assigned_identity.container_apps.id
+  }
+
   ingress {
     external_enabled = true
     target_port      = var.container_target_port
@@ -348,6 +354,11 @@ resource "azurerm_container_app" "api" {
       env {
         name        = "JWT_SECRET"
         secret_name = "jwt-secret"
+      }
+
+      env {
+        name        = "GITHUB_TOKEN"
+        secret_name = "github-token"
       }
 
       env {

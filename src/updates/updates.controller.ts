@@ -8,7 +8,8 @@ export class UpdatesController {
 
   @Get('update.json')
   async getUpdateJson(@Req() req: Request) {
-    const baseUrl = `${req.protocol}://${req.get('host')}`
+    const protocol = req.get('x-forwarded-proto') || req.protocol
+    const baseUrl = `${protocol}://${req.get('host')}`
     return this.updatesService.getUpdateJson(baseUrl)
   }
 

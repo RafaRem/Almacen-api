@@ -8,7 +8,6 @@ export class UpdatesService {
   private readonly repo: string
   private readonly token: string
   private readonly apiBase = 'https://api.github.com'
-  private readonly downloadBase = 'https://github.com'
 
   constructor(
     private readonly httpService: HttpService,
@@ -80,14 +79,41 @@ export class UpdatesService {
       throw new NotFoundException('GITHUB_TOKEN no configurado')
     }
 
-    const url = `${this.downloadBase}/${this.repo}/releases/download/${tag}/${filename}`
+    let release: any
+    try {
+      const { data } = await this.httpService.axiosRef.get(
+        `${this.apiBase}/repos/${this.repo}/releases/tags/${tag}`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      )
+      release = data
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        this.logger.warn(`Release ${tag} no encontrada en GitHub`)
+        throw new NotFoundException(`Release ${tag} no encontrada`)
+      }
+      const status = err.response?.status || 'unknown'
+      const msg = err.response?.data?.message || err.message || 'Error desconocido'
+      this.logger.error(`Error al obtener release ${tag}: status=${status} msg=${msg}`)
+      throw new NotFoundException(`Error al obtener release: ${msg}`)
+    }
+
+    const asset = release.assets?.find((a: any) => a.name === filename)
+    if (!asset) {
+      this.logger.warn(`Archivo ${filename} no encontrado en release ${tag}`)
+      throw new NotFoundException(`Archivo ${filename} no encontrado en release ${tag}`)
+    }
 
     try {
-      const response = await this.httpService.axiosRef.get(url, {
-        headers: { Authorization: `Bearer ${this.token}` },
-        responseType: 'stream',
-        validateStatus: (status) => status === 200,
-      })
+      const response = await this.httpService.axiosRef.get(
+        `${this.apiBase}/repos/${this.repo}/releases/assets/${asset.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            Accept: 'application/octet-stream',
+          },
+          responseType: 'stream',
+        },
+      )
 
       const ct = filename.endsWith('.sig')
         ? 'text/plain'
@@ -98,8 +124,8 @@ export class UpdatesService {
       return { stream: response.data, contentType: ct }
     } catch (err: any) {
       if (err.response?.status === 404) {
-        this.logger.warn(`Archivo ${filename} no encontrado en release ${tag}`)
-        throw new NotFoundException(`Archivo ${filename} no encontrado en release ${tag}`)
+        this.logger.warn(`Archivo ${filename} no encontrado al descargar de release ${tag}`)
+        throw new NotFoundException(`Archivo ${filename} no encontrado al descargar`)
       }
       const status = err.response?.status || 'unknown'
       const msg = err.response?.data?.message || err.message || 'Error desconocido'

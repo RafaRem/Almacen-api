@@ -8,7 +8,7 @@ export class UpdatesController {
 
   @Get('update.json')
   async getUpdateJson(@Req() req: Request) {
-    const baseUrl = `${req.protocol}://${req.get('host')}`
+    const baseUrl = `https://${req.get('host')}`
     return this.updatesService.getUpdateJson(baseUrl)
   }
 

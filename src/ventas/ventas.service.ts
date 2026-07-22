@@ -452,7 +452,7 @@ export class VentasService {
 
   async findAll(
     skip = 0,
-    take = 20,
+    take?: number,
     filters?: {
       fechaFrom?: string;
       fechaTo?: string;
@@ -465,9 +465,10 @@ export class VentasService {
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('venta.usuario', 'usuario')
-      .orderBy('venta.createdAt', 'DESC')
-      .skip(skip)
-      .take(take);
+      .orderBy('venta.createdAt', 'DESC');
+
+    if (skip > 0) query.skip(skip);
+    if (take != null && take > 0) query.take(take);
 
     if (filters?.fechaFrom) {
       query.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
@@ -502,6 +503,67 @@ export class VentasService {
     }
 
     return { data, total };
+  }
+
+  async findResumen(
+    filters?: {
+      fechaFrom?: string;
+      fechaTo?: string;
+      clienteId?: string;
+      statusId?: string;
+      usuarioId?: string;
+    },
+  ): Promise<{ montoTotal: number; utilidadTotal: number; count: number }> {
+    const query = this.ventasRepository
+      .createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
+      .leftJoinAndSelect('venta.usuario', 'usuario');
+
+    if (filters?.fechaFrom) {
+      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
+        fechaFrom: filters.fechaFrom,
+      });
+    }
+    if (filters?.fechaTo) {
+      query.andWhere('DATE(venta.createdAt) <= :fechaTo', {
+        fechaTo: filters.fechaTo,
+      });
+    }
+    if (filters?.clienteId) {
+      query.andWhere('venta.clienteId = :clienteId', {
+        clienteId: filters.clienteId,
+      });
+    }
+    if (filters?.statusId) {
+      query.andWhere('venta.statusId = :statusId', {
+        statusId: parseInt(filters.statusId, 10),
+      });
+    }
+    if (filters?.usuarioId) {
+      query.andWhere('venta.usuarioId = :usuarioId', {
+        usuarioId: filters.usuarioId,
+      });
+    }
+
+    const data = await query.getMany();
+    if (data.length > 0) {
+      await this.computeUtilidadVentas(data);
+    }
+
+    const montoTotal = data.reduce(
+      (sum, v) => sum + Number(v.total),
+      0,
+    );
+    const utilidadTotal = data.reduce(
+      (sum, v) => sum + Number((v as any).utilidad || 0),
+      0,
+    );
+
+    return {
+      montoTotal: Math.round(montoTotal * 100) / 100,
+      utilidadTotal: Math.round(utilidadTotal * 100) / 100,
+      count: data.length,
+    };
   }
 
   private async computeUtilidadVentas(data: Venta[]): Promise<void> {

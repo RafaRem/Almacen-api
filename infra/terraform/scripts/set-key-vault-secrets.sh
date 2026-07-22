@@ -3,11 +3,13 @@ set -euo pipefail
 
 : "${TF_VAR_postgres_admin_password:?Set TF_VAR_postgres_admin_password first.}"
 : "${NUEVA_ERA_JWT_SECRET:?Set NUEVA_ERA_JWT_SECRET first.}"
+: "${NUEVA_ERA_GITHUB_TOKEN:?Set NUEVA_ERA_GITHUB_TOKEN first.}"
 
 expected_tenant_id="19767c7d-34c4-415c-9a1d-45ccfb89a3dd"
 expected_subscription_id="5e3f35c0-0fe2-40db-a778-723c73670c4c"
 postgres_secret_name="${POSTGRES_ADMIN_PASSWORD_SECRET_NAME:-postgres-admin-password}"
 jwt_secret_name="${JWT_SECRET_NAME:-jwt-secret}"
+github_token_secret_name="${GITHUB_TOKEN_SECRET_NAME:-github-token}"
 
 current_tenant_id="$(az account show --query tenantId --output tsv)"
 current_subscription_id="$(az account show --query id --output tsv)"
@@ -46,5 +48,6 @@ set_secret() {
 
 set_secret "$postgres_secret_name" "$TF_VAR_postgres_admin_password"
 set_secret "$jwt_secret_name" "$NUEVA_ERA_JWT_SECRET"
+set_secret "$github_token_secret_name" "$NUEVA_ERA_GITHUB_TOKEN"
 
 echo "Secrets were stored in Key Vault: $key_vault_name"

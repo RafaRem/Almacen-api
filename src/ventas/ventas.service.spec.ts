@@ -254,7 +254,6 @@ describe('VentasService', () => {
       const result = await service.findAll(0, 10);
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(0);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
     });
 
@@ -291,8 +290,8 @@ describe('VentasService', () => {
 
     it('should use default pagination when not specified', async () => {
       await service.findAll();
-      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(0);
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(20);
+      expect(mockQueryBuilder.skip).not.toHaveBeenCalled();
+      expect(mockQueryBuilder.take).not.toHaveBeenCalled();
     });
 
     it('should apply statusId filter as number', async () => {

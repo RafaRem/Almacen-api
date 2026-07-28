@@ -79,6 +79,6 @@ export class FacturasController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.cancelar(id);
+    return this.facturasService.remove(id);
   }
 }

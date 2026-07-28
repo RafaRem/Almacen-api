@@ -39,6 +39,7 @@ export class FacturasService {
   async create(createFacturaDto: CreateFacturaDto): Promise<Factura> {
     const {
       clienteId,
+      ventaId,
       productos,
       tipoComprobante,
       metodoPago,
@@ -62,6 +63,17 @@ export class FacturasService {
       if (!cliente) {
         throw new NotFoundException(
           `Cliente con ID ${clienteId} no encontrado`,
+        );
+      }
+    }
+
+    if (ventaId) {
+      const existing = await this.facturaRepository.findOne({
+        where: { ventaId },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `La venta ${ventaId} ya tiene una factura asociada`,
         );
       }
     }
@@ -124,6 +136,7 @@ export class FacturasService {
       observaciones,
       statusId: FacturaStatus.BORRADOR,
       clienteId,
+      ventaId,
       emisorNombre,
       emisorRfc,
       emisorRegimenFiscal,
@@ -222,6 +235,7 @@ export class FacturasService {
         'detalles',
         'detalles.producto',
         'detalles.lote',
+        'venta',
       ],
     });
 
@@ -378,6 +392,19 @@ export class FacturasService {
     factura.statusId = FacturaStatus.CANCELADA;
 
     return this.facturaRepository.save(factura);
+  }
+
+  async remove(id: string): Promise<void> {
+    const factura = await this.findOne(id);
+
+    if (factura.statusId !== FacturaStatus.BORRADOR) {
+      throw new BadRequestException(
+        'Solo se pueden eliminar facturas en estado borrador',
+      );
+    }
+
+    await this.facturaDetalleRepository.delete({ facturaId: id });
+    await this.facturaRepository.remove(factura);
   }
 
   async preview(

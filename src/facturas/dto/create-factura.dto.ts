@@ -43,6 +43,10 @@ export class CreateFacturaDto {
   clienteId?: string;
 
   @IsOptional()
+  @IsUUID()
+  ventaId?: string;
+
+  @IsOptional()
   @IsString()
   serie?: string;
 

@@ -11,6 +11,7 @@ import {
 import { Cliente } from '../../clientes/entities/cliente.entity';
 import { User } from '../../users/entities/user.entity';
 import { FacturaDetalle } from './factura-detalle.entity';
+import { Venta } from '../../ventas/entities/venta.entity';
 import { TipoComprobante } from '../../common/enums/tipo-comprobante.enum';
 import { MetodoPagoSat } from '../../common/enums/metodo-pago-sat.enum';
 
@@ -111,6 +112,13 @@ export class Factura {
   @ManyToOne(() => Cliente, { nullable: true })
   @JoinColumn({ name: 'clienteid' })
   cliente: Cliente;
+
+  @Column({ type: 'uuid', name: 'ventaid', nullable: true })
+  ventaId: string;
+
+  @ManyToOne(() => Venta, { nullable: true })
+  @JoinColumn({ name: 'ventaid' })
+  venta: Venta;
 
   @Column({ type: 'uuid', name: 'usuarioid', nullable: true })
   usuarioId: string;

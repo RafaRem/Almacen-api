@@ -957,4 +957,139 @@ export class InventarioAlmacenService {
       productos,
     };
   }
+
+  async transferirLote(
+    productoId: string,
+    loteOrigenId: string,
+    cantidad: number,
+    almacenTipo: AlmacenTipo,
+    tipoDestino: string,
+    userId: string = SYSTEM_USER_ID,
+    loteDestinoId?: string,
+    nuevoNumeroLote?: string,
+    nuevaFechaCaducidad?: string,
+  ): Promise<{ origen: InventarioAlmacen; destino: InventarioAlmacen }> {
+    return this.dataSource.transaction(async (manager) => {
+      const inventarioOrigen = await manager.findOne(InventarioAlmacen, {
+        where: { productoId, loteId: loteOrigenId, almacenTipo },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!inventarioOrigen) {
+        throw new BadRequestException('No se encontró inventario en el lote de origen');
+      }
+
+      const stockActual = Number(inventarioOrigen.cantidadActual);
+      if (stockActual < cantidad) {
+        throw new BadRequestException(
+          `Stock insuficiente. Disponible: ${stockActual}, Solicitado: ${cantidad}`,
+        );
+      }
+
+      let loteDestinoIdResolved = loteDestinoId;
+
+      if (tipoDestino === 'nuevo') {
+        if (!nuevoNumeroLote) {
+          throw new BadRequestException('Debe proporcionar un número de lote para el nuevo lote');
+        }
+        const loteRepo = manager.getRepository(Lote);
+        const existente = await loteRepo.findOne({ where: { numeroLote: nuevoNumeroLote } });
+        if (existente) {
+          throw new BadRequestException(`El número de lote "${nuevoNumeroLote}" ya existe`);
+        }
+        const loteOrigen = await loteRepo.findOne({ where: { id: loteOrigenId } });
+        if (!loteOrigen?.laboratorioId) {
+          throw new BadRequestException('El lote de origen no tiene laboratorio asignado');
+        }
+        const nuevoLote = loteRepo.create({
+          numeroLote: nuevoNumeroLote,
+          fechaCaducidad: nuevaFechaCaducidad ? new Date(nuevaFechaCaducidad) : loteOrigen.fechaCaducidad,
+          laboratorioId: loteOrigen.laboratorioId,
+          statusId: 1,
+        });
+        const savedLote = await loteRepo.save(nuevoLote);
+        loteDestinoIdResolved = savedLote.id;
+      }
+
+      if (!loteDestinoIdResolved) {
+        throw new BadRequestException('No se pudo determinar el lote de destino');
+      }
+
+      inventarioOrigen.cantidadActual = stockActual - cantidad;
+      await manager.save(inventarioOrigen);
+
+      let inventarioDestino = await manager.findOne(InventarioAlmacen, {
+        where: { productoId, loteId: loteDestinoIdResolved, almacenTipo },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (inventarioDestino) {
+        inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) + cantidad;
+      } else {
+        inventarioDestino = manager.create(InventarioAlmacen, {
+          productoId,
+          loteId: loteDestinoIdResolved,
+          almacenTipo,
+          cantidadActual: cantidad,
+          precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
+          precioVenta: inventarioOrigen.precioVenta,
+          ivaCfdi: inventarioOrigen.ivaCfdi,
+          ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
+        });
+      }
+
+      const savedDestino = await manager.save(inventarioDestino);
+
+      const observaciones = JSON.stringify({
+        loteDestinoId: loteDestinoIdResolved,
+        loteDestinoNumero: nuevoNumeroLote || 'existente',
+      });
+
+      const movimiento = manager.create(MovimientoAlmacen, {
+        productoId,
+        loteId: loteOrigenId,
+        almacenOrigen: almacenTipo,
+        almacenDestino: almacenTipo,
+        cantidad,
+        userId,
+        observaciones,
+        tipoMovimiento: TipoMovimiento.TRANSFERENCIA_ENTRE_LOTES,
+        origenOperacion: OrigenOperacion.ADMIN,
+      });
+
+      const savedMovimiento = await manager.save(movimiento);
+
+      const detalleLoteRepo = manager.getRepository(DetalleLote);
+      await detalleLoteRepo.save(
+        detalleLoteRepo.create({
+          productoId,
+          loteId: loteOrigenId,
+          cantidad,
+          precioUnitario: inventarioOrigen.precioUnitarioLote,
+          ivaCfdi: inventarioOrigen.ivaCfdi,
+          movimientoId: savedMovimiento.id,
+          almacenTipo,
+        }),
+      );
+
+      inventarioOrigen.ultimoMovimientoId = savedMovimiento.id;
+      await manager.save(inventarioOrigen);
+
+      if (savedDestino.id) {
+        const destinoActualizado = await manager.findOne(InventarioAlmacen, {
+          where: { id: savedDestino.id },
+        });
+        if (destinoActualizado) {
+          destinoActualizado.ultimoMovimientoId = savedMovimiento.id;
+          await manager.save(destinoActualizado);
+        }
+      }
+
+      const loteDestinoNumero = nuevoNumeroLote
+        || (await manager.getRepository(Lote).findOne({ where: { id: loteDestinoIdResolved } }))?.numeroLote
+        || 'desconocido';
+
+      return { origen: inventarioOrigen, destino: savedDestino, loteDestinoNumero };
+    });
+  }
 }

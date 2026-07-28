@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InventarioAlmacenService } from './inventario-almacen.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { UpdateInventarioAlmacenDto } from './dto/update-inventario-almacen.dto';
+import { TransferirLoteDto } from './dto/transferir-lote.dto';
 
 @Controller('inventario-almacen')
 export class InventarioAlmacenController {
@@ -194,6 +195,23 @@ export class InventarioAlmacenController {
       ? (parseInt(almacenTipo, 10) as AlmacenTipo)
       : undefined;
     return this.inventarioService.getProximosAVencer(diasNum, almacenTipoNum);
+  }
+
+  @Post('transferir-lote')
+  @UseGuards(JwtAuthGuard)
+  transferirLote(@Body() dto: TransferirLoteDto, @Req() req: any) {
+    const userId = req.user?.id || req.user?.sub || 'SYSTEM';
+    return this.inventarioService.transferirLote(
+      dto.productoId,
+      dto.loteOrigenId,
+      dto.cantidad,
+      dto.almacenTipo,
+      dto.tipoDestino,
+      userId,
+      dto.loteDestinoId,
+      dto.nuevoNumeroLote,
+      dto.nuevaFechaCaducidad,
+    );
   }
 
   @Post('agregar')

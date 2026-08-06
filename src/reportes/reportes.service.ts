@@ -23,6 +23,10 @@ export interface VentasPorClienteFilters {
   fechaTo?: string;
 }
 
+export interface VentasMensualesFilters {
+  year?: number;
+}
+
 export interface KardexInventarioFilters {
   productoNombre?: string;
   folioVenta?: string;
@@ -136,6 +140,27 @@ export class ReportesService {
         utilidad: Number(utilidadLinea.toFixed(2)),
       };
     });
+  }
+
+  async getVentasMensuales(filters?: VentasMensualesFilters): Promise<any[]> {
+    const year = filters?.year || new Date().getFullYear();
+
+    const qb = this.ventasRepository
+      .createQueryBuilder('venta')
+      .leftJoin('venta.cliente', 'cliente')
+      .select([
+        "COALESCE(CONCAT_WS(' ', cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno), 'Cliente General') AS cliente_nombre",
+        'EXTRACT(MONTH FROM venta.createdAt) AS mes',
+        'COALESCE(SUM(venta.total), 0) AS total_ventas',
+        'COUNT(venta.id) AS cantidad_ventas',
+      ])
+      .where('venta.statusId = :statusId', { statusId: 1 })
+      .andWhere('EXTRACT(YEAR FROM venta.createdAt) = :year', { year })
+      .groupBy('cliente.id, cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno, EXTRACT(MONTH FROM venta.createdAt)')
+      .orderBy('cliente_nombre', 'ASC')
+      .addOrderBy('mes', 'ASC');
+
+    return qb.getRawMany();
   }
 
   async getResumenClientes(filters: ResumenClientesFilters): Promise<any> {

@@ -2,6 +2,7 @@ import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import {
   ReportesService,
   VentasPorClienteFilters,
+  VentasMensualesFilters,
   KardexInventarioFilters,
   ResumenClientesFilters,
 } from './reportes.service';
@@ -22,6 +23,16 @@ export class ReportesController {
       clienteNombre,
       fechaFrom,
       fechaTo,
+    });
+  }
+
+  @Get('ventas-mensuales')
+  @UseGuards(JwtAuthGuard)
+  getVentasMensuales(
+    @Query('year') year?: string,
+  ) {
+    return this.reportesService.getVentasMensuales({
+      year: year ? parseInt(year, 10) : undefined,
     });
   }
 

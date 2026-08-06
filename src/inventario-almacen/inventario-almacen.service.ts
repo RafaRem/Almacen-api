@@ -323,6 +323,7 @@ export class InventarioAlmacenService {
       numeroLote: string;
       cantidad: number;
       precio: number;
+      costoUnitario: number;
     }[];
     movimientoId?: string;
   }> {
@@ -356,6 +357,7 @@ export class InventarioAlmacenService {
         numeroLote: string;
         cantidad: number;
         precio: number;
+        costoUnitario: number;
       }[] = [];
 
       for (const { inventario, cantidad: cant } of lotsSelected) {
@@ -372,6 +374,7 @@ export class InventarioAlmacenService {
           numeroLote: inventario.lote?.numeroLote || 'N/A',
           cantidad: cant,
           precio: inventario.precioVenta,
+          costoUnitario: Number(inventario.precioUnitarioLote) || 0,
         });
       }
 
@@ -415,6 +418,7 @@ export class InventarioAlmacenService {
       numeroLote: string;
       cantidad: number;
       precio: number;
+      costoUnitario: number;
       ivaCfdi: number;
       fechaCaducidad?: Date;
     }[];
@@ -444,6 +448,7 @@ export class InventarioAlmacenService {
         numeroLote: string;
         cantidad: number;
         precio: number;
+        costoUnitario: number;
         ivaCfdi: number;
         fechaCaducidad?: Date;
       }[] = [];
@@ -454,6 +459,7 @@ export class InventarioAlmacenService {
           numeroLote: inventario.lote?.numeroLote || 'N/A',
           cantidad: cant,
           precio: inventario.precioVenta || inventario.precioUnitarioLote,
+          costoUnitario: Number(inventario.precioUnitarioLote) || 0,
           ivaCfdi: inventario.ivaCfdi || 0,
           fechaCaducidad: inventario.lote?.fechaCaducidad,
         });

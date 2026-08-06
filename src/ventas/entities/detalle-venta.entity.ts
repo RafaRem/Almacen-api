@@ -59,6 +59,9 @@ export class DetalleVenta {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'importebruto' })
   importeBruto: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'costounitario', nullable: true })
+  costoUnitario: number | null;
+
   @OneToMany(
     () => DescuentoVentaDetalle,
     (descuentoDetalle) => descuentoDetalle.detalleVenta,

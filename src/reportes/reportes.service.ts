@@ -23,6 +23,10 @@ export interface VentasPorClienteFilters {
   fechaTo?: string;
 }
 
+export interface VentasMensualesFilters {
+  year?: number;
+}
+
 export interface KardexInventarioFilters {
   productoNombre?: string;
   folioVenta?: string;
@@ -69,6 +73,7 @@ export class ReportesService {
         'detalle.subtotal AS subtotal',
         'detalle.importebruto AS importe_bruto',
         'detalle.descuentolinea AS descuento_linea',
+        'detalle.costounitario AS costo_unitario',
         'venta.folio AS folio_venta',
         'venta.createdat AS fecha_venta',
         'cliente.nombre AS cliente_nombre',
@@ -106,42 +111,6 @@ export class ReportesService {
 
     if (resultados.length === 0) return [];
 
-    const productoIds = [
-      ...new Set(resultados.map((r) => r.producto_id).filter(Boolean)),
-    ];
-
-    const margenMap = new Map<string, number>();
-    if (productoIds.length > 0) {
-      const productos = await this.productosRepository
-        .createQueryBuilder('p')
-        .select(['p.id', 'p.margenRecomendado'])
-        .where('p.id IN (:...pids)', { pids: productoIds })
-        .getMany();
-      for (const p of productos) {
-        margenMap.set(p.id, p.margenRecomendado ?? 20);
-      }
-    }
-
-    const loteIds = [...new Set(resultados.map((r) => r.lote_id).filter(Boolean))];
-    const precioVentaMap = new Map<string, number>();
-    const costoMap = new Map<string, number>();
-    if (loteIds.length > 0) {
-      try {
-        const records = await this.inventarioRepository.find({
-          where: { loteId: In(loteIds) },
-          select: ['productoId', 'loteId', 'precioVenta', 'precioUnitarioLote'],
-        });
-        for (const rec of records) {
-          if (rec.precioVenta != null) {
-            precioVentaMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioVenta));
-            costoMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioUnitarioLote) || 0);
-          }
-        }
-      } catch {
-        // fallback to precioUnitario
-      }
-    }
-
     return resultados.map((r) => {
       const partes = [
         r.cliente_nombre,
@@ -152,15 +121,10 @@ export class ReportesService {
         partes.length > 0 ? partes.join(' ').trim() : 'Mostrador';
       const cantidad = parseInt(r.cantidad, 10) || 0;
       const precioUnitario = parseFloat(r.precio_unitario) || 0;
+      const costoUnitario = parseFloat(r.costo_unitario) || 0;
       const descuentoLinea = parseFloat(r.descuento_linea) || 0;
-      const margen = margenMap.get(r.producto_id) ?? 20;
-      const key = `${r.producto_id}:${r.lote_id}`;
-      const precioVenta = precioVentaMap.get(key) ?? precioUnitario;
-      const costoUnitario = costoMap.get(key) ?? precioUnitario;
 
-      const utilidadBruta = precioVentaMap.has(key)
-        ? (precioVenta - costoUnitario) * cantidad
-        : precioVenta * cantidad * (margen / 100);
+      const utilidadBruta = (precioUnitario - costoUnitario) * cantidad;
       const utilidadLinea = utilidadBruta - descuentoLinea;
 
       return {
@@ -169,13 +133,34 @@ export class ReportesService {
         fechaVenta: r.fecha_venta,
         producto: r.producto_nombre,
         cantidad,
-        precioVenta,
+        precioVenta: precioUnitario,
         descuentoLinea,
         total: parseFloat(r.subtotal) || 0,
         utilidadBruta: Number(utilidadBruta.toFixed(2)),
         utilidad: Number(utilidadLinea.toFixed(2)),
       };
     });
+  }
+
+  async getVentasMensuales(filters?: VentasMensualesFilters): Promise<any[]> {
+    const year = filters?.year || new Date().getFullYear();
+
+    const qb = this.ventasRepository
+      .createQueryBuilder('venta')
+      .leftJoin('venta.cliente', 'cliente')
+      .select([
+        "COALESCE(CONCAT_WS(' ', cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno), 'Cliente General') AS cliente_nombre",
+        'EXTRACT(MONTH FROM venta.createdAt) AS mes',
+        'COALESCE(SUM(venta.total), 0) AS total_ventas',
+        'COUNT(venta.id) AS cantidad_ventas',
+      ])
+      .where('venta.statusId = :statusId', { statusId: 1 })
+      .andWhere('EXTRACT(YEAR FROM venta.createdAt) = :year', { year })
+      .groupBy('cliente.id, cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno, EXTRACT(MONTH FROM venta.createdAt)')
+      .orderBy('cliente_nombre', 'ASC')
+      .addOrderBy('mes', 'ASC');
+
+    return qb.getRawMany();
   }
 
   async getResumenClientes(filters: ResumenClientesFilters): Promise<any> {
@@ -423,38 +408,13 @@ export class ReportesService {
       .andWhere('venta.statusId = :statusId', { statusId: 1 })
       .orderBy('venta.createdAt', 'DESC')
       .getMany();
-    const loteIds = [...new Set(detalles.map((d) => d.lote?.id).filter(Boolean))];
-    const precioVentaMap = new Map<string, number>();
-    const costoMap = new Map<string, number>();
-    if (loteIds.length > 0) {
-      try {
-        const records = await this.inventarioRepository.find({
-          where: { loteId: In(loteIds) },
-          select: ['productoId', 'loteId', 'precioVenta', 'precioUnitarioLote'],
-        });
-        for (const rec of records) {
-          if (rec.precioVenta != null) {
-            precioVentaMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioVenta));
-            costoMap.set(`${rec.productoId}:${rec.loteId}`, Number(rec.precioUnitarioLote) || 0);
-          }
-        }
-      } catch {
-        // fallback to precioUnitario
-      }
-    }
-
     const trazabilidad = detalles.map((d) => {
       const cantidad = d.cantidad || 0;
       const precioUnitario = Number(d.precioUnitario) || 0;
+      const costoUnitario = Number(d.costoUnitario) || 0;
       const descuentoLinea = Number(d.descuentoLinea) || 0;
-      const margen = (d.producto as any)?.margenRecomendado ?? 20;
-      const key = `${d.productoId}:${d.lote?.id}`;
-      const precioVenta = precioVentaMap.get(key) ?? precioUnitario;
-      const costoUnitario = costoMap.get(key) ?? precioUnitario;
 
-      const utilidadBruta = precioVentaMap.has(key)
-        ? (precioVenta - costoUnitario) * cantidad
-        : precioVenta * cantidad * (margen / 100);
+      const utilidadBruta = (precioUnitario - costoUnitario) * cantidad;
       const utilidadLinea = utilidadBruta - descuentoLinea;
 
       return {
@@ -463,7 +423,7 @@ export class ReportesService {
         clienteNombre: d.venta?.cliente?.nombre || 'Mostrador',
         numeroLote: d.lote?.numeroLote,
         cantidad,
-        precioVenta,
+        precioVenta: precioUnitario,
         descuentoLinea,
         total: Number(d.subtotal) || 0,
         utilidadBruta: Number(utilidadBruta.toFixed(2)),

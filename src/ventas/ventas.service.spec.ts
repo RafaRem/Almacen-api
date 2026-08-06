@@ -317,22 +317,19 @@ describe('VentasService', () => {
           productoId: 'prod-1',
           cantidad: 5,
           precioUnitario: 208.8,
+          costoUnitario: 160,
           descuentoLinea: 0,
           subtotal: 939.6,
         },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
-      const precioVentaRecords = [
-        { productoId: 'prod-1', loteId: 'lote-1', precioVenta: 200, precioUnitarioLote: 160 },
-      ];
-      mockInventarioAlmacenRepository.find.mockResolvedValue(precioVentaRecords);
 
       const data = [{ id: 'venta-1', folio: 1 }] as any[];
       await (service as any).computeUtilidadVentas(data);
 
-      expect(data[0].utilidad).toBe(200);
-      expect(data[0].utilidadBruta).toBe(200);
+      expect(data[0].utilidad).toBe(244);
+      expect(data[0].utilidadBruta).toBe(244);
     });
 
     it('should handle multiple detalles for same venta', async () => {
@@ -343,6 +340,7 @@ describe('VentasService', () => {
           productoId: 'prod-1',
           cantidad: 5,
           precioUnitario: 208.8,
+          costoUnitario: 160,
           descuentoLinea: 0,
           subtotal: 939.6,
         },
@@ -352,23 +350,19 @@ describe('VentasService', () => {
           productoId: 'prod-2',
           cantidad: 3,
           precioUnitario: 100,
+          costoUnitario: 120,
           descuentoLinea: 0,
           subtotal: 300,
         },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
-      const precioVentaRecords = [
-        { productoId: 'prod-1', loteId: 'lote-1', precioVenta: 200, precioUnitarioLote: 160 },
-        { productoId: 'prod-2', loteId: 'lote-2', precioVenta: 150, precioUnitarioLote: 120 },
-      ];
-      mockInventarioAlmacenRepository.find.mockResolvedValue(precioVentaRecords);
 
       const data = [{ id: 'venta-1', folio: 1 }] as any[];
       await (service as any).computeUtilidadVentas(data);
 
-      expect(data[0].utilidad).toBe(290);
-      expect(data[0].utilidadBruta).toBe(290);
+      expect(data[0].utilidad).toBe(184);
+      expect(data[0].utilidadBruta).toBe(184);
     });
 
     it('should handle multiple ventas', async () => {
@@ -379,6 +373,7 @@ describe('VentasService', () => {
           productoId: 'prod-1',
           cantidad: 5,
           precioUnitario: 208.8,
+          costoUnitario: 160,
           descuentoLinea: 0,
           subtotal: 939.6,
         },
@@ -388,17 +383,13 @@ describe('VentasService', () => {
           productoId: 'prod-2',
           cantidad: 2,
           precioUnitario: 300,
+          costoUnitario: 200,
           descuentoLinea: 0,
           subtotal: 600,
         },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
-      const precioVentaRecords = [
-        { productoId: 'prod-1', loteId: 'lote-1', precioVenta: 200, precioUnitarioLote: 160 },
-        { productoId: 'prod-2', loteId: 'lote-2', precioVenta: 250, precioUnitarioLote: 200 },
-      ];
-      mockInventarioAlmacenRepository.find.mockResolvedValue(precioVentaRecords);
 
       const data = [
         { id: 'venta-1', folio: 1 },
@@ -406,8 +397,8 @@ describe('VentasService', () => {
       ] as any[];
       await (service as any).computeUtilidadVentas(data);
 
-      expect(data[0].utilidad).toBe(200);
-      expect(data[1].utilidad).toBe(100);
+      expect(data[0].utilidad).toBe(244);
+      expect(data[1].utilidad).toBe(200);
     });
 
     it('should handle empty data array', async () => {
@@ -425,22 +416,19 @@ describe('VentasService', () => {
           productoId: 'prod-1',
           cantidad: 1,
           precioUnitario: 116,
+          costoUnitario: 120,
           descuentoLinea: 0,
           subtotal: 116,
         },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
-      const precioVentaRecords = [
-        { productoId: 'prod-1', loteId: 'lote-1', precioVenta: 150, precioUnitarioLote: 120 },
-      ];
-      mockInventarioAlmacenRepository.find.mockResolvedValue(precioVentaRecords);
 
       const data = [{ id: 'venta-1', folio: 1 }] as any[];
       await (service as any).computeUtilidadVentas(data);
 
-      expect(data[0].utilidad).toBe(30);
-      expect(data[0].utilidadBruta).toBe(30);
+      expect(data[0].utilidad).toBe(-4);
+      expect(data[0].utilidadBruta).toBe(-4);
     });
 
     it('should subtract descuentoLinea from utilidadBruta for utilidad real', async () => {
@@ -451,16 +439,13 @@ describe('VentasService', () => {
           productoId: 'prod-1',
           cantidad: 1,
           precioUnitario: 100,
+          costoUnitario: 80,
           descuentoLinea: 10,
           subtotal: 90,
         },
       ];
 
       mockDetallesQueryBuilder.getMany.mockResolvedValue(detallesData);
-      const precioVentaRecords = [
-        { productoId: 'prod-1', loteId: 'lote-1', precioVenta: 100, precioUnitarioLote: 80 },
-      ];
-      mockInventarioAlmacenRepository.find.mockResolvedValue(precioVentaRecords);
 
       const data = [{ id: 'venta-1', folio: 1 }] as any[];
       await (service as any).computeUtilidadVentas(data);

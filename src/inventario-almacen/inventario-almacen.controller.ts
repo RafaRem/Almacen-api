@@ -47,7 +47,10 @@ export class InventarioAlmacenController {
 
   @Get('stock/almacen/:tipo')
   @UseGuards(JwtAuthGuard)
-  getStockPorAlmacen(@Param('tipo') tipo: string) {
+  getStockPorAlmacen(
+    @Param('tipo') tipo: string,
+    @Query('soloConStock') soloConStock?: string,
+  ) {
     const tipoMap: Record<string, AlmacenTipo> = {
       BODEGA: AlmacenTipo.RECEPCION,
       RECEPCION: AlmacenTipo.RECEPCION,
@@ -61,7 +64,8 @@ export class InventarioAlmacenController {
     if (almacenTipo === undefined) {
       throw new BadRequestException('Tipo de almacén inválido');
     }
-    return this.inventarioService.getStockPorAlmacen(almacenTipo);
+    const conStock = soloConStock === '1' || soloConStock === 'true';
+    return this.inventarioService.getStockPorAlmacen(almacenTipo, conStock);
   }
 
   @Get('producto/:productoId')

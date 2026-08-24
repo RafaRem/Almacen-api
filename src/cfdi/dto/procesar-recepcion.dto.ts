@@ -74,6 +74,10 @@ export class CfdiPreviewDto {
   @ValidateNested({ each: true })
   @Type(() => ConceptoDto)
   conceptos: ConceptoDto[];
+
+  @IsString()
+  @IsOptional()
+  objetoImp?: string;
 }
 
 export class ProductoRecepcionDto {

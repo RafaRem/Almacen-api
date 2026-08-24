@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { Repository, DataSource, EntityManager, MoreThan } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
@@ -76,9 +76,16 @@ export class InventarioAlmacenService {
     });
   }
 
-  async getStockPorAlmacen(almacenTipo: AlmacenTipo): Promise<any[]> {
+  async getStockPorAlmacen(
+    almacenTipo: AlmacenTipo,
+    soloConStock: boolean = false,
+  ): Promise<any[]> {
+    const where: any = { almacenTipo };
+    if (soloConStock) {
+      where.cantidadActual = MoreThan(0);
+    }
     const inventarios = await this.inventarioRepository.find({
-      where: { almacenTipo },
+      where,
       relations: ['producto', 'lote'],
       order: { lote: { fechaCaducidad: 'ASC' } },
     });

@@ -60,6 +60,9 @@ export class Producto {
   @Column({ nullable: true })
   claveUnidad: string;
 
+  @Column({ type: 'varchar', length: 2, default: '00' })
+  impuestoAplicado: string;
+
   @Column({
     type: 'enum',
     enum: StatusId,

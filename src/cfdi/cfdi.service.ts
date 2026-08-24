@@ -69,7 +69,8 @@ export class CfdiService {
       productosVinculados: number;
     };
   }> {
-    const xml = this.removeXmlDeclaration(dto.xmlContent);
+    const xmlContent = dto.xmlContent || '';
+    const xml = this.removeXmlDeclaration(xmlContent);
     const cfdiData = this.extractCfdiData(xml);
 
     if (cfdiData.uuidCfdi) {
@@ -119,7 +120,7 @@ export class CfdiService {
 
       const { productosCreados, productosExistentes } =
         await this.processProductos(
-          dto.productos,
+          dto.productos || [],
           cfdiData.conceptos,
           userId,
           labResult.laboratorioId,
@@ -127,6 +128,7 @@ export class CfdiService {
           cfdiData.folio,
           recepcion.id,
           manager,
+          cfdiData,
         );
 
       let ordenCompraVinculada:
@@ -135,7 +137,7 @@ export class CfdiService {
       if (dto.ordenCompraId) {
         ordenCompraVinculada = await this.vincularConOrdenCompra(
           dto.ordenCompraId,
-          dto.productos,
+          dto.productos || [],
           manager,
           cfdiData.emisor.rfc,
           proveedor.id,
@@ -175,7 +177,7 @@ export class CfdiService {
     return xml.replace(/<\?xml[^>]+\?>/g, '').trim();
   }
 
-  private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
+private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
     const getValue = (pattern: RegExp): string => {
       const match = xml.match(pattern);
       return match ? match[1] : '';
@@ -197,6 +199,8 @@ export class CfdiService {
       nombre: emisorNombre,
     };
 
+    let objetoImp = '00';
+
     const conceptoMatches =
       xml.match(/<cfdi:Concepto[^>]*>[\s\S]*?<\/cfdi:Concepto>/g) || [];
 
@@ -217,6 +221,8 @@ export class CfdiService {
 
       const tasaMatch = conceptoXml.match(/TasaOCuota="([^"]+)"/);
       const ivaCfdi = tasaMatch ? parseFloat(tasaMatch[1]) * 100 : null;
+      const objImp = conceptoXml.match(/ObjetoImp="([^"]+)"/)?.[1] || '00';
+      objetoImp = objImp; // Update the outer scope variable
 
       return {
         cantidad,
@@ -226,6 +232,7 @@ export class CfdiService {
         claveProdServ,
         claveUnidad,
         ivaCfdi,
+        objetoImp: objImp,
       };
     });
 
@@ -238,6 +245,7 @@ export class CfdiService {
       emisor,
       conceptos,
       uuidCfdi,
+      objetoImp,
     };
   }
 
@@ -289,6 +297,7 @@ export class CfdiService {
     folio: string,
     recepcionId: string,
     manager: EntityManager,
+    cfdiData: { objetoImp?: string; [key: string]: any },
   ): Promise<{
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
@@ -322,12 +331,17 @@ export class CfdiService {
           prodDto,
           laboratorioId,
           manager,
+          cfdiData.objetoImp || '00',
         );
         productosCreados.push({
           nombre: producto.nombre,
           codigoBarras: producto.codigoBarras,
         });
       } else {
+        // Actualizar impuestoAplicado en producto existente
+        await productoRepo.update(producto.id, {
+          impuestoAplicado: cfdiData.objetoImp || '00',
+        });
         productosExistentes.push({
           nombre: producto.nombre,
           codigoBarras: producto.codigoBarras,
@@ -368,6 +382,7 @@ export class CfdiService {
     prodDto: { productoId: string; stockMinimo?: number; stockMaximo?: number },
     laboratorioId: string,
     manager: EntityManager,
+    impuestoAplicado: string = '00',
   ): Promise<Producto> {
     const repo = manager.getRepository(Producto);
     const productoData: Partial<Producto> = {
@@ -380,6 +395,7 @@ export class CfdiService {
       claveUnidad: concepto?.claveUnidad || undefined,
       laboratorioId: laboratorioId,
       statusId: 1,
+      impuestoAplicado: impuestoAplicado || '00',
     };
     const producto = repo.create(productoData);
     return repo.save(producto);

@@ -18,7 +18,7 @@ Terraform stack for the backend-only Azure deployment:
 Run Terraform from the workspace root environment so Azure CLI uses the project tenant:
 
 ```sh
-cd /Users/carlos/Documents/nueva_era
+cd /Users/m1/Documents/nueva_era
 source .envrc
 cd Almacen-api/infra/terraform
 ```

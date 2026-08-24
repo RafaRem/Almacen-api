@@ -1,0 +1,1 @@
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS "impuestoAplicado" varchar(2) DEFAULT '00';

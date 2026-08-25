@@ -125,13 +125,13 @@ export class CsvService {
       }
 
       const cantidad = Number(cantidadStr.replace(/[,$]/g, ''));
-      if (!cantidadStr || isNaN(cantidad) || cantidad <= 0) {
-        errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: Cantidad inválida (debe ser > 0)` });
+      if (!cantidadStr || isNaN(cantidad) || cantidad < 0) {
+        errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: Cantidad inválida (debe ser >= 0)` });
         continue;
       }
 
-      const precio = Number(valorUnitarioStr.replace(/[$,]/g, ''));
-      if (!valorUnitarioStr || isNaN(precio)) {
+      const precio = cantidad > 0 ? Number(valorUnitarioStr.replace(/[$,]/g, '')) : 0;
+      if (cantidad > 0 && (!valorUnitarioStr || isNaN(precio))) {
         errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: ValorUnitario inválido` });
         continue;
       }
@@ -239,6 +239,13 @@ export class CsvService {
         productosFrontend.map((p) => [p.productoId, p])
       );
 
+      // Fecha de caducidad default: misma para todos los productos del CSV (día de carga + 1 año)
+      const fechaCaducidadDefault = (() => {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() + 1);
+        return d;
+      })();
+
       for (const fila of preview.filasValidadas) {
         const frontendData = productosFrontendMap.get(fila.productoId);
 
@@ -247,9 +254,12 @@ export class CsvService {
         // Resolver proveedor por fila (null si no trae Proveedor)
         const proveedorFila = await this.resolverProveedor(fila.proveedor, manager);
         
+        const esSoloProducto = fila.cantidad <= 0;
         let producto: Producto | null = productosExistentesMap.get(fila.productoId) || null;
 
         if (producto) {
+          // Producto existente con cantidad 0: ignorar (no tocar inventario ni lote)
+          if (esSoloProducto) continue;
           const updateData: Partial<Producto> = {
             impuestoAplicado: fila.impuestoAplicado,
             nombre: fila.nombre,
@@ -281,6 +291,8 @@ export class CsvService {
           });
           producto = await productoRepo.save(nuevoProducto);
           estadisticas.productosCreados++;
+          // Producto nuevo con cantidad 0: solo registrar en catálogo (sin lote/inventario)
+          if (esSoloProducto) continue;
         }
 
         const numeroLote = frontendData?.numeroLote ?? `CSV-${recepcionId}-${fila.productoId}`;
@@ -289,11 +301,7 @@ export class CsvService {
         if (!lote) {
           const fechaCaducidad = frontendData?.fechaCaducidad
             ? new Date(frontendData.fechaCaducidad)
-            : (() => {
-                const d = new Date();
-                d.setFullYear(d.getFullYear() + 1);
-                return d;
-              })();
+            : fechaCaducidadDefault;
           const nuevoLote = loteRepo.create({
             numeroLote,
             fechaCaducidad,

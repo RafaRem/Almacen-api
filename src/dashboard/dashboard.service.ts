@@ -114,7 +114,7 @@ export class DashboardService {
       fecha: v.createdAt,
       cliente: v.cliente
         ? `${v.cliente.nombre} ${v.cliente.apellidoPaterno || ''} ${v.cliente.apellidoMaterno || ''}`.trim()
-        : 'Mostrador',
+        : 'Cliente General',
       total: Number(v.total),
       vendedor: v.usuario?.username || 'N/A',
     }));

@@ -61,17 +61,29 @@ export class ReportesController {
   getKardexInventario(
     @Query('productoNombre') productoNombre: string,
     @Query('folioVenta') folioVenta: string,
+    @Query('fechaFrom') fechaFrom: string,
+    @Query('fechaTo') fechaTo: string,
   ) {
     return this.reportesService.getKardexInventario({
       productoNombre,
       folioVenta,
+      fechaFrom,
+      fechaTo,
     });
   }
 
   @Get('kardex-inventario/detalle/:productoId')
   @UseGuards(JwtAuthGuard)
-  getKardexDetalleProducto(@Param('productoId') productoId: string) {
-    return this.reportesService.getKardexDetalleProducto(productoId);
+  getKardexDetalleProducto(
+    @Param('productoId') productoId: string,
+    @Query('fechaFrom') fechaFrom: string,
+    @Query('fechaTo') fechaTo: string,
+  ) {
+    return this.reportesService.getKardexDetalleProducto(
+      productoId,
+      fechaFrom,
+      fechaTo,
+    );
   }
 
   @Get('proximos-caducar')

@@ -30,6 +30,8 @@ export interface VentasMensualesFilters {
 export interface KardexInventarioFilters {
   productoNombre?: string;
   folioVenta?: string;
+  fechaFrom?: string;
+  fechaTo?: string;
 }
 
 export interface ResumenClientesFilters {
@@ -86,7 +88,10 @@ export class ReportesService {
       .where('venta.statusId = :statusId', { statusId: 1 });
     if (filters?.clienteNombre) {
       const term = `%${filters.clienteNombre}%`;
-      if (filters.clienteNombre === 'VENTA MOSTRADOR') {
+      const esMostrador = ['mostrador', 'venta mostrador', 'cliente general'].includes(
+        filters.clienteNombre.toLowerCase(),
+      );
+      if (esMostrador) {
         queryBuilder.andWhere('cliente.id IS NULL');
       } else {
         queryBuilder.andWhere(
@@ -118,7 +123,7 @@ export class ReportesService {
         r.cliente_apellido_materno,
       ].filter(Boolean);
       const nombreCliente =
-        partes.length > 0 ? partes.join(' ').trim() : 'Mostrador';
+        partes.length > 0 ? partes.join(' ').trim() : 'Cliente General';
       const cantidad = parseInt(r.cantidad, 10) || 0;
       const precioUnitario = parseFloat(r.precio_unitario) || 0;
       const costoUnitario = parseFloat(r.costo_unitario) || 0;
@@ -149,7 +154,8 @@ export class ReportesService {
       .createQueryBuilder('venta')
       .leftJoin('venta.cliente', 'cliente')
       .select([
-        "COALESCE(CONCAT_WS(' ', cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno), 'Cliente General') AS cliente_nombre",
+        `CASE WHEN cliente.id IS NULL THEN 'Cliente General'
+              ELSE CONCAT_WS(' ', cliente.nombre, cliente.apellidoPaterno, cliente.apellidoMaterno) END AS cliente_nombre`,
         'EXTRACT(MONTH FROM venta.createdAt) AS mes',
         'COALESCE(SUM(venta.total), 0) AS total_ventas',
         'COUNT(venta.id) AS cantidad_ventas',
@@ -192,11 +198,12 @@ export class ReportesService {
 
     if (filters.clienteNombre) {
       const term = filters.clienteNombre.toLowerCase();
+      const esMostrador = ['mostrador', 'venta mostrador', 'cliente general'].includes(term);
       qb.andWhere(
         `(LOWER(CONCAT(cliente.nombre, ' ', COALESCE(cliente.apellidoPaterno, ''), ' ', COALESCE(cliente.apellidoMaterno, ''))) LIKE :nombre OR (:esMostrador = true AND venta.clienteId IS NULL))`,
         {
           nombre: `%${term}%`,
-          esMostrador: term === 'mostrador',
+          esMostrador,
         },
       );
     }
@@ -217,9 +224,9 @@ export class ReportesService {
     for (const row of resumen) {
       if (!row.cliente_id) {
         row.cliente_id = MOSTRADOR_ID;
-        row.cliente_nombre = 'VENTA MOSTRADOR';
+        row.cliente_nombre = 'Cliente General';
         row.rfc = 'XAXX010101000';
-        row.categoria_nombre = 'Mostrador';
+        row.categoria_nombre = 'Cliente General';
       }
     }
 
@@ -337,15 +344,14 @@ export class ReportesService {
       .createQueryBuilder('detalle')
       .leftJoin('detalle.venta', 'venta')
       .leftJoin('detalle.producto', 'producto')
-      .leftJoin('detalle.lote', 'lote')
       .select([
         'producto.id AS producto_id',
         'producto.nombre AS producto_nombre',
-        'lote.numeroLote AS numero_lote',
         'SUM(detalle.cantidad) AS total_cantidad_vendida',
+        'COUNT(DISTINCT venta.id) AS cantidad_ventas',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 })
-      .groupBy('producto.id, producto.nombre, lote.numeroLote');
+      .groupBy('producto.id, producto.nombre');
     if (filters?.productoNombre) {
       queryBuilder.andWhere(
         'LOWER(producto.nombre) LIKE LOWER(:productoNombre)',
@@ -362,18 +368,59 @@ export class ReportesService {
         });
       }
     }
+    if (filters?.fechaFrom) {
+      queryBuilder.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
+        fechaFrom: filters.fechaFrom,
+      });
+    }
+    if (filters?.fechaTo) {
+      queryBuilder.andWhere('DATE(venta.createdAt) <= :fechaTo', {
+        fechaTo: filters.fechaTo,
+      });
+    }
     const resultados = await queryBuilder
       .orderBy('producto.nombre', 'ASC')
       .getRawMany();
-    return resultados.map((r) => ({
-      productoId: r.producto_id,
-      nombreProducto: r.producto_nombre,
-      numeroLote: r.numero_lote,
-      totalCantidadVendida: parseInt(r.total_cantidad_vendida, 10) || 0,
-    }));
+
+    if (resultados.length === 0) return [];
+
+    const productoIds = resultados.map((r) => r.producto_id);
+    const stocks = await this.inventarioRepository
+      .createQueryBuilder('inv')
+      .select([
+        'inv.productoId AS producto_id',
+        'SUM(inv.cantidadActual) AS stock_actual',
+      ])
+      .where('inv.almacenTipo = :almacenTipo', {
+        almacenTipo: AlmacenTipo.VENTAS,
+      })
+      .andWhere('inv.productoId IN (:...productoIds)', { productoIds })
+      .groupBy('inv.productoId')
+      .getRawMany();
+
+    const stockMap = new Map(
+      stocks.map((s) => [s.producto_id, Number(s.stock_actual) || 0]),
+    );
+
+    return resultados.map((r) => {
+      const totalCantidadVendida = parseInt(r.total_cantidad_vendida, 10) || 0;
+      const stockActual = stockMap.get(r.producto_id) || 0;
+      return {
+        productoId: r.producto_id,
+        nombreProducto: r.producto_nombre,
+        stockInicial: stockActual + totalCantidadVendida,
+        stockActual,
+        totalCantidadVendida,
+        cantidadVentas: parseInt(r.cantidad_ventas, 10) || 0,
+      };
+    });
   }
 
-  async getKardexDetalleProducto(productoId: string): Promise<any> {
+  async getKardexDetalleProducto(
+    productoId: string,
+    fechaFrom?: string,
+    fechaTo?: string,
+  ): Promise<any> {
     const producto = await this.productosRepository
       .createQueryBuilder('producto')
       .leftJoinAndSelect('producto.laboratorio', 'laboratorio')
@@ -398,16 +445,41 @@ export class ReportesService {
 
     const primerInventario = inventarios[0];
 
-    const detalles = await this.detallesRepository
+    const preciosPorLote = inventarios.map((inv) => ({
+      numeroLote: inv.lote?.numeroLote || '—',
+      precioVenta: Number(inv.precioVenta) || 0,
+      precioUnitarioLote: Number(inv.precioUnitarioLote) || 0,
+    }));
+
+    const detallesQuery = this.detallesRepository
       .createQueryBuilder('detalle')
       .leftJoinAndSelect('detalle.venta', 'venta')
       .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('detalle.lote', 'lote')
       .leftJoinAndSelect('detalle.producto', 'producto')
       .where('detalle.productoId = :productoId', { productoId })
-      .andWhere('venta.statusId = :statusId', { statusId: 1 })
-      .orderBy('venta.createdAt', 'DESC')
+      .andWhere('venta.statusId = :statusId', { statusId: 1 });
+    if (fechaFrom) {
+      detallesQuery.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
+        fechaFrom,
+      });
+    }
+    if (fechaTo) {
+      detallesQuery.andWhere('DATE(venta.createdAt) <= :fechaTo', {
+        fechaTo,
+      });
+    }
+    const detalles = await detallesQuery
+      .orderBy('venta.createdAt', 'ASC')
       .getMany();
+
+    const vendidosPeriodo = detalles.reduce(
+      (sum, d) => sum + Number(d.cantidad || 0),
+      0,
+    );
+    const stockInicial = stockTotal + vendidosPeriodo;
+
+    let saldo = stockInicial;
     const trazabilidad = detalles.map((d) => {
       const cantidad = d.cantidad || 0;
       const precioUnitario = Number(d.precioUnitario) || 0;
@@ -417,12 +489,17 @@ export class ReportesService {
       const utilidadBruta = (precioUnitario - costoUnitario) * cantidad;
       const utilidadLinea = utilidadBruta - descuentoLinea;
 
+      const cantidadInicial = saldo;
+      saldo -= cantidad;
+
       return {
         folioVenta: d.venta?.folio,
         fechaVenta: d.venta?.createdAt,
-        clienteNombre: d.venta?.cliente?.nombre || 'Mostrador',
+        clienteNombre: d.venta?.cliente?.nombre || 'Cliente General',
         numeroLote: d.lote?.numeroLote,
         cantidad,
+        cantidadInicial,
+        restante: saldo,
         precioVenta: precioUnitario,
         descuentoLinea,
         total: Number(d.subtotal) || 0,
@@ -439,8 +516,10 @@ export class ReportesService {
         stockMaximo: producto.stockMaximo,
         stockActual: stockTotal,
       },
+      stockInicial,
       precioUnitarioLote: primerInventario?.precioUnitarioLote || 0,
       precioVenta: primerInventario?.precioVenta || 0,
+      preciosPorLote,
       trazabilidad,
     };
   }
@@ -483,7 +562,7 @@ export class ReportesService {
       ...d,
       clienteNombre: d.cliente
         ? `${d.cliente.nombre} ${d.cliente.apellidoPaterno || ''} ${d.cliente.apellidoMaterno || ''}`.trim()
-        : 'Mostrador',
+        : 'Cliente General',
       cliente: undefined,
     }));
   }

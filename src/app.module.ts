@@ -24,6 +24,7 @@ import { TelefonosModule } from './telefonos/telefonos.module';
 import { DomiciliosModule } from './domicilios/domicilios.module';
 import { FacturacionClienteModule } from './facturacion-cliente/facturacion-cliente.module';
 import { CreditosModule } from './creditos/creditos.module';
+import { CuentasCobrarModule } from './cuentas-cobrar/cuentas-cobrar.module';
 import { CfdiModule } from './cfdi/cfdi.module';
 import { InventarioAlmacenModule } from './inventario-almacen/inventario-almacen.module';
 import { ConfiguracionesModule } from './configuraciones/configuraciones.module';
@@ -72,6 +73,7 @@ import { UpdatesModule } from './updates/updates.module';
     DomiciliosModule,
     FacturacionClienteModule,
     CreditosModule,
+    CuentasCobrarModule,
     CfdiModule,
     InventarioAlmacenModule,
     ConfiguracionesModule,

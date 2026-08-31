@@ -15,6 +15,9 @@ import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-alm
 import { MovimientosAlmacenModule } from '../movimientos-almacen/movimientos-almacen.module';
 import { ConfiguracionesModule } from '../configuraciones/configuraciones.module';
 import { ClientesModule } from '../clientes/clientes.module';
+import { CuentasCobrarModule } from '../cuentas-cobrar/cuentas-cobrar.module';
+import { CreditosModule } from '../creditos/creditos.module';
+import { CuentaPorCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 
 @Module({
   imports: [
@@ -25,6 +28,7 @@ import { ClientesModule } from '../clientes/clientes.module';
       PagoVenta,
       DescuentoVentaDetalle,
       InventarioAlmacen,
+      CuentaPorCobrar,
     ]),
     ProductosModule,
     LotesModule,
@@ -33,6 +37,8 @@ import { ClientesModule } from '../clientes/clientes.module';
     MovimientosAlmacenModule,
     ConfiguracionesModule,
     ClientesModule,
+    CuentasCobrarModule,
+    CreditosModule,
   ],
   controllers: [VentasController],
   providers: [VentasService],

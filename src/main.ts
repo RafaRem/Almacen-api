@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { AppModule } from './app.module';
 import { ValidationErrorFilter } from './common/filters/validation-error.filter';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   if (
@@ -30,7 +31,7 @@ async function bootstrap() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  app.useGlobalFilters(new ValidationErrorFilter());
+  app.useGlobalFilters(new ValidationErrorFilter(), new AllExceptionsFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { IsNumber, IsOptional } from 'class-validator';
 import { Credito } from './entities/credito.entity';
 import {
@@ -123,39 +123,55 @@ export class CreditosService {
     clienteId: string,
     monto: number,
     usuarioId?: string,
+    manager?: EntityManager,
   ): Promise<Credito> {
-    const credito = await this.findByCliente(clienteId);
+    const disponible = await this.getDisponible(clienteId);
+    if (monto > disponible) {
+      throw new Error('El monto excede el crédito disponible');
+    }
+
+    const repo = manager ? manager.getRepository(Credito) : this.creditoRepository;
+    const movimientoRepo = manager
+      ? manager.getRepository(MovimientoCredito)
+      : this.movimientoRepository;
+
+    const credito = await (manager
+      ? repo.findOne({ where: { clienteId } })
+      : this.findByCliente(clienteId));
     if (!credito) {
       throw new NotFoundException(
         `Crédito para cliente ${clienteId} no encontrado`,
       );
     }
 
-    const disponible = Number(credito.limite) - Number(credito.saldoActual);
-    if (monto > disponible) {
-      throw new Error('El monto excede el crédito disponible');
-    }
-
     const saldoAnterior = Number(credito.saldoActual);
     credito.saldoActual = saldoAnterior + monto;
-    const saved = await this.creditoRepository.save(credito);
-    await this.registrarMovimiento(
+    const saved = await repo.save(credito);
+
+    const movimiento = movimientoRepo.create({
       clienteId,
-      usuarioId,
-      TipoMovimientoCredito.USO,
-      {
-        saldoActualAnterior: saldoAnterior,
-        saldoActualNuevo: Number(saved.saldoActual),
-        observaciones: `Uso de crédito por $${monto.toFixed(2)}`,
-      },
-    );
+      usuarioId: usuarioId || 'SYSTEM',
+      tipo: TipoMovimientoCredito.USO,
+      saldoActualAnterior: saldoAnterior,
+      saldoActualNuevo: Number(saved.saldoActual),
+      observaciones: `Uso de crédito por $${monto.toFixed(2)}`,
+    });
+    await movimientoRepo.save(movimiento);
     return saved;
   }
 
   async getDisponible(clienteId: string): Promise<number> {
     const credito = await this.findByCliente(clienteId);
     if (!credito) return 0;
-    return Number(credito.limite) - Number(credito.saldoActual);
+    return Number(credito.limite) - Number(credito.saldoActual) + Number(credito.creditoAFavor || 0);
+  }
+
+  async getMovimientos(clienteId: string): Promise<MovimientoCredito[]> {
+    return this.movimientoRepository.find({
+      where: { clienteId },
+      order: { createdAt: 'DESC' },
+      take: 20,
+    });
   }
 
   async delete(clienteId: string): Promise<void> {

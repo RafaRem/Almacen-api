@@ -20,10 +20,13 @@ import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-alm
 import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-almacen.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { MetodoPago } from '../common/enums/metodo-pago.enum';
+import { CuentasCobrarService } from '../cuentas-cobrar/cuentas-cobrar.service';
+import { CreditosService } from '../creditos/creditos.service';
 import { FormaPago } from '../common/enums/forma-pago.enum';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { ClientesService } from '../clientes/clientes.service';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { CuentaPorCobrar, StatusCuentaCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 import { TipoMovimiento, OrigenOperacion } from '../common/constants';
 import { parseDate } from '../common/utils/date-utils';
 import {
@@ -52,6 +55,8 @@ export class VentasService {
     private movimientosAlmacenService: MovimientosAlmacenService,
     private configuracionesService: ConfiguracionesService,
     private clientesService: ClientesService,
+    private cuentasCobrarService: CuentasCobrarService,
+    private creditosService: CreditosService,
     private dataSource: DataSource,
   ) {
     this.logger = new Logger(VentasService.name);
@@ -367,6 +372,8 @@ export class VentasService {
           ? this.convertirFormaPagoAMetodoPago(pagosData[0].formaPago)
           : MetodoPago.EFECTIVO;
 
+      const metodoPagoFinal = createVentaDto.metodoPago || metodoPagoLegacy;
+
       const nextFolio = await this.getNextFolio();
 
       const venta = this.ventasRepository.create({
@@ -377,11 +384,49 @@ export class VentasService {
         descuentoAplicado: descuentoTotal,
         iva,
         total,
-        metodoPago: metodoPagoLegacy,
+        metodoPago: metodoPagoFinal,
         observaciones: createVentaDto.observaciones,
       });
 
       const savedVenta = await manager.save(Venta, venta);
+
+      let cuentaPorCobrarId: string | null = null;
+
+      // Crear cuenta por cobrar si es venta a crédito
+      if (metodoPagoFinal === MetodoPago.CREDITO && createVentaDto.clienteId) {
+        const disponible = await this.creditosService.getDisponible(createVentaDto.clienteId);
+        const sobregiro = total - disponible;
+        if (sobregiro > 500) {
+          throw new BadRequestException(
+            `La venta excede el crédito disponible por más de $500. Crédito disponible: $${disponible.toFixed(2)}, Total: $${total.toFixed(2)}. Requires autorización de administrador.`,
+          );
+        }
+        if (sobregiro > 0) {
+          this.logger.warn(
+            `Venta a crédito excede crédito disponible en $${sobregiro.toFixed(2)}. Crédito disponible: $${disponible.toFixed(2)}, Total: $${total.toFixed(2)}`,
+          );
+        }
+        const fechaVencimiento = new Date();
+        fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
+        const cuenta = manager.create(CuentaPorCobrar, {
+          clienteId: createVentaDto.clienteId,
+          ventaId: savedVenta.id,
+          montoOriginal: total,
+          montoPendiente: total,
+          creditoAFavor: 0,
+          idStatus: StatusCuentaCobrar.PENDIENTE,
+          fechaVencimiento,
+        });
+        await manager.save(CuentaPorCobrar, cuenta);
+        cuentaPorCobrarId = cuenta.id;
+        await this.creditosService.usarCredito(
+          createVentaDto.clienteId,
+          total,
+          usuarioId,
+          manager,
+        );
+        this.logger.log(`Cuenta por cobrar creada para venta ${savedVenta.id}: $${total.toFixed(2)}`);
+      }
 
       for (const detalle of detalles) {
         detalle.ventaId = savedVenta.id;
@@ -453,6 +498,7 @@ export class VentasService {
         detalles: detallesConRelaciones,
         pagos: pagosData,
         descuentos: descuentosInfo,
+        cuentaPorCobrarId,
       };
     });
   }
@@ -1018,6 +1064,7 @@ export class VentasService {
       [MetodoPago.EFECTIVO]: FormaPago.EFECTIVO,
       [MetodoPago.TARJETA]: FormaPago.TARJETA_CREDITO,
       [MetodoPago.TRANSFERENCIA]: FormaPago.TRANSFERENCIA,
+      [MetodoPago.CREDITO]: FormaPago.EFECTIVO,
     };
     return mapa[metodo] || FormaPago.EFECTIVO;
   }

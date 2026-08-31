@@ -34,6 +34,8 @@ import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { DetalleVentaLote } from '../ventas/entities/detalle-venta-lote.entity';
 import { Factura } from '../facturas/entities/factura.entity';
 import { FacturaDetalle } from '../facturas/entities/factura-detalle.entity';
+import { CuentaPorCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
+import { Abono } from '../abonos/entities/abono.entity';
 
 export const databaseEntities = [
   User,
@@ -70,6 +72,8 @@ export const databaseEntities = [
   DetalleVentaLote,
   Factura,
   FacturaDetalle,
+  CuentaPorCobrar,
+  Abono,
 ];
 
 export const getDatabaseConfig = (

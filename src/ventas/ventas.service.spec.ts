@@ -12,6 +12,8 @@ import { InventarioAlmacenService } from '../inventario-almacen/inventario-almac
 import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-almacen.service';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { ClientesService } from '../clientes/clientes.service';
+import { CuentasCobrarService } from '../cuentas-cobrar/cuentas-cobrar.service';
+import { CreditosService } from '../creditos/creditos.service';
 import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
@@ -103,6 +105,16 @@ const mockMovimientosAlmacenService = {
   create: jest.fn(),
 };
 
+const mockCuentasCobrarService = {
+  create: jest.fn(),
+  findByCliente: jest.fn(),
+};
+
+const mockCreditosService = {
+  getDisponible: jest.fn().mockResolvedValue(10000),
+  usarCredito: jest.fn(),
+};
+
 const mockInventarioAlmacenQueryBuilder = {
   select: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
@@ -159,6 +171,8 @@ describe('VentasService', () => {
         },
         { provide: ClientesService, useValue: mockClientesService },
         { provide: LotesService, useValue: mockLotesService },
+        { provide: CuentasCobrarService, useValue: mockCuentasCobrarService },
+        { provide: CreditosService, useValue: mockCreditosService },
       ],
     }).compile();
 

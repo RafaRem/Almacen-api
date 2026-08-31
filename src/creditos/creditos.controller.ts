@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CreditosService, CreateCreditoDto } from './creditos.service';
 import { Credito } from './entities/credito.entity';
+import { MovimientoCredito } from './entities/movimiento-credito.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @UseGuards(JwtAuthGuard)
@@ -31,6 +32,13 @@ export class CreditosController {
   ): Promise<{ disponible: number }> {
     const disponible = await this.creditosService.getDisponible(clienteId);
     return { disponible };
+  }
+
+  @Get('cliente/:clienteId/movimientos')
+  async getMovimientos(
+    @Param('clienteId') clienteId: string,
+  ): Promise<MovimientoCredito[]> {
+    return this.creditosService.getMovimientos(clienteId);
   }
 
   @Post('cliente/:clienteId')

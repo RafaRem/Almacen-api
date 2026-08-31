@@ -9,6 +9,7 @@ export enum TipoMovimientoCredito {
   CREACION = 'CREACION',
   ACTUALIZACION = 'ACTUALIZACION',
   USO = 'USO',
+  ABONO = 'ABONO',
 }
 
 @Entity('movimientos_credito')

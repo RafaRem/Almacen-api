@@ -33,6 +33,15 @@ export class Credito {
   })
   saldoActual: number;
 
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    name: 'credito_a_favor',
+    default: 0,
+  })
+  creditoAFavor: number;
+
   @Column({ type: 'int', name: 'id_status', default: 1 })
   idStatus: number;
 

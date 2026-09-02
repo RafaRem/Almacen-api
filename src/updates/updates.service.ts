@@ -82,21 +82,21 @@ export class UpdatesService {
     let release: any
     try {
       const { data } = await this.httpService.axiosRef.get(
-        `${this.apiBase}/repos/${this.repo}/releases/latest`,
+        `${this.apiBase}/repos/${this.repo}/releases/tags/${tag}`,
         { headers: { Authorization: `Bearer ${this.token}` } },
       )
       release = data
     } catch (err: any) {
       const status = err.response?.status || 'unknown'
       const msg = err.response?.data?.message || err.message || 'Error desconocido'
-      this.logger.error(`Error al obtener latest release: status=${status} msg=${msg}`)
-      throw new NotFoundException(`Error al obtener release: ${msg}`)
+      this.logger.error(`Error al obtener release ${tag}: status=${status} msg=${msg}`)
+      throw new NotFoundException(`Error al obtener release ${tag}: ${msg}`)
     }
 
     const asset = release.assets?.find((a: any) => a.name === filename)
     if (!asset) {
-      this.logger.warn(`Archivo ${filename} no encontrado en latest release ${release.tag_name}`)
-      throw new NotFoundException(`Archivo ${filename} no encontrado en release ${release.tag_name}`)
+      this.logger.warn(`Archivo ${filename} no encontrado en release ${tag}`)
+      throw new NotFoundException(`Archivo ${filename} no encontrado en release ${tag}`)
     }
 
     try {

@@ -137,7 +137,7 @@ export class CreditosService {
       : this.movimientoRepository;
 
     const credito = await (manager
-      ? repo.findOne({ where: { clienteId } })
+      ? repo.findOne({ where: { clienteId }, lock: { mode: 'pessimistic_write' } })
       : this.findByCliente(clienteId));
     console.log(`[usarCredito] Crédito encontrado:`, credito ? `ID: ${credito.id}` : 'NULL');
     if (!credito) {

@@ -126,6 +126,7 @@ export class CreditosService {
     manager?: EntityManager,
   ): Promise<Credito> {
     const disponible = await this.getDisponible(clienteId);
+    console.log(`[usarCredito] Cliente: ${clienteId}, Monto: ${monto}, Disponible: ${disponible}`);
     if (monto > disponible) {
       throw new Error('El monto excede el crédito disponible');
     }
@@ -138,6 +139,7 @@ export class CreditosService {
     const credito = await (manager
       ? repo.findOne({ where: { clienteId } })
       : this.findByCliente(clienteId));
+    console.log(`[usarCredito] Crédito encontrado:`, credito ? `ID: ${credito.id}` : 'NULL');
     if (!credito) {
       throw new NotFoundException(
         `Crédito para cliente ${clienteId} no encontrado`,
@@ -147,6 +149,7 @@ export class CreditosService {
     const saldoAnterior = Number(credito.saldoActual);
     credito.saldoActual = saldoAnterior + monto;
     const saved = await repo.save(credito);
+    console.log(`[usarCredito] Crédito actualizado. Nuevo saldo: ${saved.saldoActual}`);
 
     const movimiento = movimientoRepo.create({
       clienteId,
@@ -157,11 +160,13 @@ export class CreditosService {
       observaciones: `Uso de crédito por $${monto.toFixed(2)}`,
     });
     await movimientoRepo.save(movimiento);
+    console.log(`[usarCredito] Movimiento de crédito guardado`);
     return saved;
   }
 
   async getDisponible(clienteId: string): Promise<number> {
     const credito = await this.findByCliente(clienteId);
+    console.log(`[getDisponible] Cliente: ${clienteId}, Crédito encontrado:`, credito ? `ID: ${credito.id}, Limite: ${credito.limite}, Saldo: ${credito.saldoActual}, AFavor: ${credito.creditoAFavor}` : 'NULL');
     if (!credito) return 0;
     return Number(credito.limite) - Number(credito.saldoActual) + Number(credito.creditoAFavor || 0);
   }

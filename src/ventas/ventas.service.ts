@@ -394,38 +394,46 @@ export class VentasService {
 
       // Crear cuenta por cobrar si es venta a crédito
       if (metodoPagoFinal === MetodoPago.CREDITO && createVentaDto.clienteId) {
-        const disponible = await this.creditosService.getDisponible(createVentaDto.clienteId);
-        const sobregiro = total - disponible;
-        if (sobregiro > 500) {
-          throw new BadRequestException(
-            `La venta excede el crédito disponible por más de $500. Crédito disponible: $${disponible.toFixed(2)}, Total: $${total.toFixed(2)}. Requires autorización de administrador.`,
+        try {
+          const disponible = await this.creditosService.getDisponible(createVentaDto.clienteId);
+          this.logger.log(`[VentaCredito] Cliente: ${createVentaDto.clienteId}, Disponible: ${disponible}, Total: ${total}`);
+          const sobregiro = total - disponible;
+          if (sobregiro > 500) {
+            throw new BadRequestException(
+              `La venta excede el crédito disponible por más de $500. Crédito disponible: $${disponible.toFixed(2)}, Total: $${total.toFixed(2)}. Requires autorización de administrador.`,
+            );
+          }
+          if (sobregiro > 0) {
+            this.logger.warn(
+              `Venta a crédito excede crédito disponible en $${sobregiro.toFixed(2)}. Crédito disponible: $${disponible.toFixed(2)}, Total: $${total.toFixed(2)}`,
+            );
+          }
+          const fechaVencimiento = new Date();
+          fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
+          this.logger.log(`[VentaCredito] Creando cuenta por cobrar para venta ${savedVenta.id}`);
+          const cuenta = manager.create(CuentaPorCobrar, {
+            clienteId: createVentaDto.clienteId,
+            ventaId: savedVenta.id,
+            montoOriginal: total,
+            montoPendiente: total,
+            creditoAFavor: 0,
+            idStatus: StatusCuentaCobrar.PENDIENTE,
+            fechaVencimiento,
+          });
+          const savedCuenta = await manager.save(CuentaPorCobrar, cuenta);
+          this.logger.log(`[VentaCredito] Cuenta por cobrar creada: ${savedCuenta.id}`);
+          cuentaPorCobrarId = savedCuenta.id;
+          await this.creditosService.usarCredito(
+            createVentaDto.clienteId,
+            total,
+            usuarioId,
+            manager,
           );
+          this.logger.log(`Cuenta por cobrar creada para venta ${savedVenta.id}: $${total.toFixed(2)}`);
+        } catch (error) {
+          this.logger.error(`[VentaCredito] Error en venta a crédito: ${error.message}`, error.stack);
+          throw error;
         }
-        if (sobregiro > 0) {
-          this.logger.warn(
-            `Venta a crédito excede crédito disponible en $${sobregiro.toFixed(2)}. Crédito disponible: $${disponible.toFixed(2)}, Total: $${total.toFixed(2)}`,
-          );
-        }
-        const fechaVencimiento = new Date();
-        fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
-        const cuenta = manager.create(CuentaPorCobrar, {
-          clienteId: createVentaDto.clienteId,
-          ventaId: savedVenta.id,
-          montoOriginal: total,
-          montoPendiente: total,
-          creditoAFavor: 0,
-          idStatus: StatusCuentaCobrar.PENDIENTE,
-          fechaVencimiento,
-        });
-        await manager.save(CuentaPorCobrar, cuenta);
-        cuentaPorCobrarId = cuenta.id;
-        await this.creditosService.usarCredito(
-          createVentaDto.clienteId,
-          total,
-          usuarioId,
-          manager,
-        );
-        this.logger.log(`Cuenta por cobrar creada para venta ${savedVenta.id}: $${total.toFixed(2)}`);
       }
 
       for (const detalle of detalles) {

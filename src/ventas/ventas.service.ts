@@ -432,7 +432,9 @@ export class VentasService {
           this.logger.log(`Cuenta por cobrar creada para venta ${savedVenta.id}: $${total.toFixed(2)}`);
         } catch (error) {
           this.logger.error(`[VentaCredito] Error en venta a crédito: ${error.message}`, error.stack);
-          throw error;
+          const errorMsg = error.message || 'Error desconocido';
+          const errorStack = error.stack || '';
+          throw new BadRequestException(`Error en venta a crédito: ${errorMsg}\nStack: ${errorStack}`);
         }
       }
 

@@ -21,7 +21,7 @@ export class MovimientoCredito {
   clienteId: string;
 
   @Column({ type: 'uuid', name: 'usuarioid', nullable: true })
-  usuarioId: string;
+  usuarioId: string | null;
 
   @Column({
     type: 'enum',

@@ -153,7 +153,7 @@ export class CreditosService {
 
     const movimiento = movimientoRepo.create({
       clienteId,
-      usuarioId: usuarioId || 'SYSTEM',
+      usuarioId: usuarioId || null,
       tipo: TipoMovimientoCredito.USO,
       saldoActualAnterior: saldoAnterior,
       saldoActualNuevo: Number(saved.saldoActual),

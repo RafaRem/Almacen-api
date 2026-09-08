@@ -524,46 +524,92 @@ export class VentasService {
       usuarioId?: string;
     },
   ): Promise<{ data: Venta[]; total: number }> {
-    const query = this.ventasRepository
-      .createQueryBuilder('venta')
-      .leftJoinAndSelect('venta.cliente', 'cliente')
-      .leftJoinAndSelect('venta.usuario', 'usuario')
-      .orderBy('venta.createdAt', 'DESC');
-
-    if (skip > 0) query.skip(skip);
-    if (take != null && take > 0) query.take(take);
+    let countSql = `SELECT COUNT(*) as total FROM ventas v WHERE 1=1`;
+    let sql = `
+      SELECT v.id, v.folio, v.subtotal, v.descuentoaplicado, v.iva, v.total,
+             v.metodopago, v.statusid, v.createdat, v.updatedat,
+             v.clienteid, v.usuarioid,
+             c.id as cuenta_id, c.monto_pendiente, c.id_status as cuenta_status,
+             cl.id as cl_id, cl.nombre as cl_nombre, cl."apellidoPaterno" as cl_ap, cl."apellidoMaterno" as cl_am, cl.empresa as cl_empresa,
+             u.id as u_id, u.name as u_name
+      FROM ventas v
+      LEFT JOIN cuenta_por_cobrar c ON c.venta_id = v.id
+      LEFT JOIN clientes cl ON cl.id = v.clienteid
+      LEFT JOIN users u ON u.id = v.usuarioid
+      WHERE 1=1`;
+    const params: any[] = [];
+    let p = 1;
 
     if (filters?.fechaFrom) {
-      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
-        fechaFrom: filters.fechaFrom,
-      });
+      sql += ` AND DATE(v.createdat) >= $${p++}`;
+      countSql += ` AND DATE(v.createdat) >= $${p - 1}`;
+      params.push(filters.fechaFrom);
     }
     if (filters?.fechaTo) {
-      query.andWhere('DATE(venta.createdAt) <= :fechaTo', {
-        fechaTo: filters.fechaTo,
-      });
+      sql += ` AND DATE(v.createdat) <= $${p++}`;
+      countSql += ` AND DATE(v.createdat) <= $${p - 1}`;
+      params.push(filters.fechaTo);
     }
     if (filters?.clienteId) {
-      query.andWhere('venta.clienteId = :clienteId', {
-        clienteId: filters.clienteId,
-      });
+      sql += ` AND v.clienteid = $${p++}`;
+      countSql += ` AND v.clienteid = $${p - 1}`;
+      params.push(filters.clienteId);
     }
     if (filters?.statusId) {
-      query.andWhere('venta.statusId = :statusId', {
-        statusId: parseInt(filters.statusId, 10),
-      });
+      sql += ` AND v.statusid = $${p++}`;
+      countSql += ` AND v.statusid = $${p - 1}`;
+      params.push(parseInt(filters.statusId, 10));
     }
     if (filters?.usuarioId) {
-      query.andWhere('venta.usuarioId = :usuarioId', {
-        usuarioId: filters.usuarioId,
-      });
+      sql += ` AND v.usuarioid = $${p++}`;
+      countSql += ` AND v.usuarioid = $${p - 1}`;
+      params.push(filters.usuarioId);
     }
 
-    const [data, total] = await query.getManyAndCount();
-
-    if (data.length > 0) {
-      await this.computeUtilidadVentas(data);
+    sql += ` ORDER BY v.createdat DESC`;
+    if (take != null && take > 0) {
+      sql += ` LIMIT ${take}`;
+      if (skip > 0) sql += ` OFFSET ${skip}`;
     }
+
+    const [rows, countResult] = await Promise.all([
+      this.dataSource.query(sql, params),
+      this.dataSource.query(countSql, params),
+    ]);
+
+    const total = parseInt(countResult[0]?.total || '0', 10);
+
+    const data = rows.map((r: any) => ({
+      id: r.id,
+      folio: parseInt(r.folio, 10),
+      subtotal: parseFloat(r.subtotal),
+      descuentoAplicado: parseFloat(r.descuentoaplicado),
+      iva: parseFloat(r.iva),
+      total: parseFloat(r.total),
+      metodoPago: r.metodopago,
+      statusId: parseInt(r.statusid, 10),
+      createdAt: r.createdat,
+      updatedAt: r.updatedat,
+      clienteId: r.clienteid,
+      usuarioId: r.usuarioid,
+      cliente: r.cl_id ? {
+        id: r.cl_id,
+        nombre: r.cl_nombre,
+        apellidoPaterno: r.cl_ap,
+        apellidoMaterno: r.cl_am,
+        empresa: r.cl_empresa,
+      } : null,
+      usuario: r.u_id ? {
+        id: r.u_id,
+        name: r.u_name,
+      } : null,
+      cuentaPorCobrarId: r.cuenta_id || null,
+      montoPendiente: r.monto_pendiente ? parseFloat(r.monto_pendiente) : null,
+      cuentaPorCobrarStatus: r.cuenta_status ? parseInt(r.cuenta_status, 10) : null,
+      isLiquidated: r.cuenta_id
+        ? parseInt(r.cuenta_status, 10) === StatusCuentaCobrar.PAGADA
+        : (r.metodopago !== MetodoPago.CREDITO),
+    }));
 
     return { data, total };
   }
@@ -576,57 +622,68 @@ export class VentasService {
       statusId?: string;
       usuarioId?: string;
     },
-  ): Promise<{ montoTotal: number; utilidadTotal: number; count: number }> {
-    const query = this.ventasRepository
-      .createQueryBuilder('venta')
-      .leftJoinAndSelect('venta.cliente', 'cliente')
-      .leftJoinAndSelect('venta.usuario', 'usuario');
+  ): Promise<{ montoTotal: number; utilidadTotal: number; count: number; totalPendiente: number }> {
+    let sql = `
+      SELECT v.id, v.total, c.monto_pendiente, c.id_status as cuenta_status
+      FROM ventas v
+      LEFT JOIN cuenta_por_cobrar c ON c.venta_id = v.id
+      WHERE 1=1`;
+    const params: any[] = [];
+    let p = 1;
 
     if (filters?.fechaFrom) {
-      query.andWhere('DATE(venta.createdAt) >= :fechaFrom', {
-        fechaFrom: filters.fechaFrom,
-      });
+      sql += ` AND DATE(v.createdat) >= $${p++}`;
+      params.push(filters.fechaFrom);
     }
     if (filters?.fechaTo) {
-      query.andWhere('DATE(venta.createdAt) <= :fechaTo', {
-        fechaTo: filters.fechaTo,
-      });
+      sql += ` AND DATE(v.createdat) <= $${p++}`;
+      params.push(filters.fechaTo);
     }
     if (filters?.clienteId) {
-      query.andWhere('venta.clienteId = :clienteId', {
-        clienteId: filters.clienteId,
-      });
+      sql += ` AND v.clienteid = $${p++}`;
+      params.push(filters.clienteId);
     }
     if (filters?.statusId) {
-      query.andWhere('venta.statusId = :statusId', {
-        statusId: parseInt(filters.statusId, 10),
-      });
+      sql += ` AND v.statusid = $${p++}`;
+      params.push(parseInt(filters.statusId, 10));
     }
     if (filters?.usuarioId) {
-      query.andWhere('venta.usuarioId = :usuarioId', {
-        usuarioId: filters.usuarioId,
-      });
+      sql += ` AND v.usuarioid = $${p++}`;
+      params.push(filters.usuarioId);
     }
 
-    const data = await query.getMany();
-    if (data.length > 0) {
-      await this.computeUtilidadVentas(data);
-    }
+    const rows = await this.dataSource.query(sql, params);
 
-    const montoTotal = data.reduce(
-      (sum, v) => sum + Number(v.total),
-      0,
-    );
-    const utilidadTotal = data.reduce(
-      (sum, v) => sum + Number((v as any).utilidad || 0),
-      0,
-    );
+    const montoTotal = rows.reduce((sum: number, r: any) => sum + parseFloat(r.total || 0), 0);
+    const totalPendiente = rows.reduce((sum: number, r: any) => {
+      if (r.cuenta_status && [StatusCuentaCobrar.PENDIENTE, StatusCuentaCobrar.VENCIDA].includes(parseInt(r.cuenta_status, 10))) {
+        return sum + parseFloat(r.monto_pendiente || 0);
+      }
+      return sum;
+    }, 0);
+
+    const utilidadVentas = await this.getUtilidadVentas(rows.map((r: any) => r.id));
 
     return {
       montoTotal: Math.round(montoTotal * 100) / 100,
-      utilidadTotal: Math.round(utilidadTotal * 100) / 100,
-      count: data.length,
+      utilidadTotal: Math.round(utilidadVentas * 100) / 100,
+      count: rows.length,
+      totalPendiente: Math.round(totalPendiente * 100) / 100,
     };
+  }
+
+  private async getUtilidadVentas(ventaIds: string[]): Promise<number> {
+    if (ventaIds.length === 0) return 0;
+
+    const ventas = await this.ventasRepository
+      .createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.detalles', 'detalle')
+      .where('venta.id IN (:...ids)', { ids: ventaIds })
+      .getMany();
+
+    await this.computeUtilidadVentas(ventas);
+
+    return ventas.reduce((sum, v) => sum + Number((v as any).utilidad || 0), 0);
   }
 
   private async computeUtilidadVentas(data: Venta[]): Promise<void> {

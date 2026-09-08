@@ -311,6 +311,7 @@ export class CuentasCobrarService {
     monto: number,
     usuarioId: string,
     observaciones?: string,
+    formaPago?: string,
   ): Promise<any> {
     const rows = await this.dataSource.query(
       `SELECT id, cliente_id, monto_pendiente, id_status, COALESCE(credito_a_favor, 0) as credito_a_favor
@@ -334,9 +335,9 @@ export class CuentasCobrarService {
 
     const abonoId = crypto.randomUUID();
     await this.dataSource.query(
-      `INSERT INTO abono (id, cuenta_cobrar_id, monto, excedente, observaciones, usuario_id, fecha, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
-      [abonoId, cuentaId, monto, excedente, observaciones || null, usuarioId],
+      `INSERT INTO abono (id, cuenta_cobrar_id, monto, excedente, forma_pago, observaciones, usuario_id, fecha, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+      [abonoId, cuentaId, monto, excedente, formaPago || null, observaciones || null, usuarioId],
     );
 
     await this.dataSource.query(
@@ -376,6 +377,7 @@ export class CuentasCobrarService {
         id: abonoId,
         monto,
         excedente,
+        formaPago: formaPago || null,
         fecha: new Date().toISOString(),
       },
     };
@@ -383,7 +385,7 @@ export class CuentasCobrarService {
 
   async abonosPorCuenta(cuentaId: string): Promise<any[]> {
     const rows = await this.dataSource.query(
-      `SELECT a.id, a.cuenta_cobrar_id, a.monto, a.excedente, a.observaciones, a.fecha, a.usuario_id, a.created_at
+      `SELECT a.id, a.cuenta_cobrar_id, a.monto, a.excedente, a.forma_pago, a.observaciones, a.fecha, a.usuario_id, a.created_at
        FROM abono a WHERE a.cuenta_cobrar_id = $1 ORDER BY a.fecha DESC`,
       [cuentaId],
     );
@@ -392,6 +394,7 @@ export class CuentasCobrarService {
       cuentaCobrarId: r.cuenta_cobrar_id,
       monto: parseFloat(r.monto),
       excedente: parseFloat(r.excedente),
+      formaPago: r.forma_pago,
       observaciones: r.observaciones,
       fecha: r.fecha,
       usuarioId: r.usuario_id,

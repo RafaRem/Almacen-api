@@ -85,7 +85,7 @@ export class CuentasCobrarController {
   @Post(':id/abono')
   async aplicarAbono(
     @Param('id') id: string,
-    @Body() body: { monto: number; observaciones?: string },
+    @Body() body: { monto: number; formaPago?: string; observaciones?: string },
     @Request() req,
   ): Promise<{ cuenta: CuentaPorCobrar; abono: Abono }> {
     return this.cuentasCobrarService.aplicarAbono(
@@ -93,6 +93,7 @@ export class CuentasCobrarController {
       body.monto,
       req.user?.id,
       body.observaciones,
+      body.formaPago,
     );
   }
 

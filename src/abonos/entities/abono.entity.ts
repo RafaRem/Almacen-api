@@ -36,6 +36,9 @@ export class Abono {
   })
   excedente: number;
 
+  @Column({ type: 'varchar', length: '10', name: 'forma_pago', nullable: true })
+  formaPago: string;
+
   @CreateDateColumn({ name: 'fecha' })
   fecha: Date;
 

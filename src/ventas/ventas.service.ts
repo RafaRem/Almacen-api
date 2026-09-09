@@ -522,6 +522,7 @@ export class VentasService {
       clienteId?: string;
       statusId?: string;
       usuarioId?: string;
+      metodoPago?: string;
     },
   ): Promise<{ data: Venta[]; total: number }> {
     let countSql = `SELECT COUNT(*) as total FROM ventas v WHERE 1=1`;
@@ -565,6 +566,22 @@ export class VentasService {
       countSql += ` AND v.usuarioid = $${p - 1}`;
       params.push(filters.usuarioId);
     }
+    if (filters?.metodoPago) {
+      const metodos = filters.metodoPago.split(',');
+      if (metodos.length === 1) {
+        sql += ` AND v.metodopago = $${p}`;
+        countSql += ` AND v.metodopago = $${p}`;
+        params.push(metodos[0]);
+        p++;
+      } else {
+        const placeholders = metodos.map(() => `$${p++}`).join(', ');
+        sql += ` AND v.metodopago IN (${placeholders})`;
+        const countOffset = params.length + 1;
+        const countPlaceholders = metodos.map((_, i) => `$${countOffset + i}`).join(', ');
+        countSql += ` AND v.metodopago IN (${countPlaceholders})`;
+        params.push(...metodos);
+      }
+    }
 
     sql += ` ORDER BY v.createdat DESC`;
     if (take != null && take > 0) {
@@ -578,6 +595,21 @@ export class VentasService {
     ]);
 
     const total = parseInt(countResult[0]?.total || '0', 10);
+
+    const ventaIds = rows.map((r: any) => r.id);
+    let utilidadMap: Map<string, { utilidad: number; utilidadBruta: number }> = new Map();
+    if (ventaIds.length > 0) {
+      const ventas = await this.ventasRepository
+        .createQueryBuilder('venta')
+        .leftJoinAndSelect('venta.detalles', 'detalle')
+        .where('venta.id IN (:...ids)', { ids: ventaIds })
+        .getMany();
+      await this.computeUtilidadVentas(ventas);
+      utilidadMap = new Map(ventas.map(v => [v.id, {
+        utilidad: (v as any).utilidad ?? 0,
+        utilidadBruta: (v as any).utilidadBruta ?? 0,
+      }]));
+    }
 
     const data = rows.map((r: any) => ({
       id: r.id,
@@ -609,6 +641,8 @@ export class VentasService {
       isLiquidated: r.cuenta_id
         ? parseInt(r.cuenta_status, 10) === StatusCuentaCobrar.PAGADA
         : (r.metodopago !== MetodoPago.CREDITO),
+      utilidad: utilidadMap.get(r.id)?.utilidad ?? null,
+      utilidadBruta: utilidadMap.get(r.id)?.utilidadBruta ?? null,
     }));
 
     return { data, total };
@@ -621,6 +655,7 @@ export class VentasService {
       clienteId?: string;
       statusId?: string;
       usuarioId?: string;
+      metodoPago?: string;
     },
   ): Promise<{ montoTotal: number; utilidadTotal: number; count: number; totalPendiente: number }> {
     let sql = `
@@ -650,6 +685,16 @@ export class VentasService {
     if (filters?.usuarioId) {
       sql += ` AND v.usuarioid = $${p++}`;
       params.push(filters.usuarioId);
+    }
+    if (filters?.metodoPago) {
+      const metodos = filters.metodoPago.split(',');
+      if (metodos.length === 1) {
+        sql += ` AND v.metodopago = $${p++}`;
+        params.push(metodos[0]);
+      } else {
+        sql += ` AND v.metodopago IN (${metodos.map(() => `$${p++}`).join(', ')})`;
+        params.push(...metodos);
+      }
     }
 
     const rows = await this.dataSource.query(sql, params);

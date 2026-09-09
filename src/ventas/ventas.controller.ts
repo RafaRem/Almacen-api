@@ -34,6 +34,7 @@ export class VentasController {
     @Query('clienteId') clienteId?: string,
     @Query('statusId') statusId?: string,
     @Query('usuarioId') usuarioId?: string,
+    @Query('metodoPago') metodoPago?: string,
   ) {
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : undefined;
@@ -43,6 +44,7 @@ export class VentasController {
       clienteId,
       statusId,
       usuarioId,
+      metodoPago,
     });
   }
 
@@ -82,6 +84,7 @@ export class VentasController {
     @Query('clienteId') clienteId?: string,
     @Query('statusId') statusId?: string,
     @Query('usuarioId') usuarioId?: string,
+    @Query('metodoPago') metodoPago?: string,
   ) {
     return this.ventasService.findResumen({
       fechaFrom,
@@ -89,6 +92,7 @@ export class VentasController {
       clienteId,
       statusId,
       usuarioId,
+      metodoPago,
     });
   }
 

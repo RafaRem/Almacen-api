@@ -8,6 +8,7 @@ import {
   IsIn,
   ValidateIf,
 } from 'class-validator';
+import { Clase } from '../../common/enums/clase.enum';
 
 type TipoPersonaDto = 'fisica' | 'moral';
 
@@ -47,6 +48,10 @@ export class CreateClienteDto {
   @IsOptional()
   @IsInt()
   statusId?: number;
+
+  @IsOptional()
+  @IsIn(['A', 'B'])
+  clase?: Clase;
 }
 
 export class UpdateClienteDto {
@@ -87,4 +92,8 @@ export class UpdateClienteDto {
   @IsOptional()
   @IsInt()
   statusId?: number;
+
+  @IsOptional()
+  @IsIn(['A', 'B'])
+  clase?: Clase;
 }

@@ -14,6 +14,7 @@ import { Telefono } from '../../telefonos/entities/telefono.entity';
 import { Domicilio } from '../../domicilios/entities/domicilio.entity';
 import { FacturacionCliente } from '../../facturacion-cliente/entities/facturacion-cliente.entity';
 import { Credito } from '../../creditos/entities/credito.entity';
+import { Clase } from '../../common/enums/clase.enum';
 
 export type TipoPersona = 'fisica' | 'moral';
 
@@ -49,6 +50,9 @@ export class Cliente {
 
   @Column({ type: 'int', name: 'statusid', default: 1 })
   statusId: number;
+
+  @Column({ type: 'varchar', length: 10, nullable: true, name: 'clase', default: 'B' })
+  clase: Clase;
 
   @Column({ type: 'varchar', length: 10, nullable: true, name: 'tipo_persona' })
   tipoPersona: TipoPersona;

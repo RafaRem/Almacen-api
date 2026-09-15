@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray } from 'class-validator';
 
 export class CreateProductoDto {
   @IsString()
@@ -36,4 +36,9 @@ export class CreateProductoDto {
   @IsOptional()
   @IsNumber()
   statusId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  clasesPermitidas?: string[];
 }

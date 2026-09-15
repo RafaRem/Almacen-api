@@ -116,12 +116,14 @@ export class VentasService {
       const descuentosInfo: DescuentoInfoEntry[] = [];
 
       let categoriaClienteId: string | undefined;
+      let clienteClase: string | undefined;
       if (createVentaDto.clienteId) {
         try {
           const cliente = await this.clientesService.findOne(
             createVentaDto.clienteId,
           );
           categoriaClienteId = cliente?.categoriaClienteId;
+          clienteClase = cliente?.clase;
         } catch {
           this.logger.error('Error fetching cliente en create');
         }
@@ -149,6 +151,14 @@ export class VentasService {
           throw new BadRequestException(
             `Producto ${productoVenta.productoId} no encontrado`,
           );
+        }
+
+        if (clienteClase === 'B' && producto.clasesPermitidas && producto.clasesPermitidas.length > 0) {
+          if (!producto.clasesPermitidas.includes('B')) {
+            throw new BadRequestException(
+              `Producto "${producto.nombre}" no disponible para clientes clase B`,
+            );
+          }
         }
 
         const inventarioProducto =

@@ -70,6 +70,9 @@ export class Producto {
   })
   statusId: StatusId;
 
+  @Column({ type: 'text', array: true, nullable: true, name: 'clases_permitidas' })
+  clasesPermitidas: string[] | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

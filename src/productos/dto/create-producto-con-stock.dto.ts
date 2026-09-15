@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsUUID,
   IsInt,
+  IsArray,
   Min,
   IsDateString,
 } from 'class-validator';
@@ -61,4 +62,9 @@ export class CreateProductoConStockDto {
   @IsOptional()
   @IsInt()
   statusId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  clasesPermitidas?: string[];
 }

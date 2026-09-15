@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsEnum, IsArray } from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 
 export class UpdateProductoDto {
@@ -37,4 +37,9 @@ export class UpdateProductoDto {
   @IsOptional()
   @IsEnum(StatusId)
   statusId?: StatusId;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  clasesPermitidas?: string[] | null;
 }

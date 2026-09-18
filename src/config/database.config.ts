@@ -36,6 +36,8 @@ import { Factura } from '../facturas/entities/factura.entity';
 import { FacturaDetalle } from '../facturas/entities/factura-detalle.entity';
 import { CuentaPorCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 import { Abono } from '../abonos/entities/abono.entity';
+import { CorteCaja } from '../corte-caja/entities/corte-caja.entity';
+import { CorteCajaVenta } from '../corte-caja/entities/corte-caja-venta.entity';
 
 export const databaseEntities = [
   User,
@@ -74,6 +76,8 @@ export const databaseEntities = [
   FacturaDetalle,
   CuentaPorCobrar,
   Abono,
+  CorteCaja,
+  CorteCajaVenta,
 ];
 
 export const getDatabaseConfig = (

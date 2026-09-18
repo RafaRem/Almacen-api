@@ -13,6 +13,7 @@ import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-al
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { ClientesService } from '../clientes/clientes.service';
 import { CuentasCobrarService } from '../cuentas-cobrar/cuentas-cobrar.service';
+import { CorteCajaService } from '../corte-caja/corte-caja.service';
 import { CreditosService } from '../creditos/creditos.service';
 import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
@@ -173,6 +174,7 @@ describe('VentasService', () => {
         { provide: LotesService, useValue: mockLotesService },
         { provide: CuentasCobrarService, useValue: mockCuentasCobrarService },
         { provide: CreditosService, useValue: mockCreditosService },
+        { provide: CorteCajaService, useValue: { vincularVentaACorte: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 

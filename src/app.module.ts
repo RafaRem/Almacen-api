@@ -38,6 +38,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
 import { RecepcionModule } from './recepciones/recepcion.module';
 import { UpdatesModule } from './updates/updates.module';
+import { CorteCajaModule } from './corte-caja/corte-caja.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { UpdatesModule } from './updates/updates.module';
     RecepcionModule,
     DashboardModule,
     UpdatesModule,
+    CorteCajaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

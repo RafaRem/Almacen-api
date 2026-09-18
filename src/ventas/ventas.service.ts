@@ -29,6 +29,7 @@ import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-al
 import { CuentaPorCobrar, StatusCuentaCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 import { TipoMovimiento, OrigenOperacion } from '../common/constants';
 import { parseDate } from '../common/utils/date-utils';
+import { CorteCajaService } from '../corte-caja/corte-caja.service';
 import {
   DescuentoInfoEntry,
   PreviewDescuentoResult,
@@ -57,6 +58,7 @@ export class VentasService {
     private clientesService: ClientesService,
     private cuentasCobrarService: CuentasCobrarService,
     private creditosService: CreditosService,
+    private corteCajaService: CorteCajaService,
     private dataSource: DataSource,
   ) {
     this.logger = new Logger(VentasService.name);
@@ -399,6 +401,13 @@ export class VentasService {
       });
 
       const savedVenta = await manager.save(Venta, venta);
+
+      // Vincular venta al corte de caja activo (dentro de la misma transacción)
+      try {
+        await this.corteCajaService.vincularVentaACorte(savedVenta.id, usuarioId, manager);
+      } catch (e) {
+        this.logger.warn(`Error vinculando venta a corte de caja: ${e.message}`);
+      }
 
       let cuentaPorCobrarId: string | null = null;
 

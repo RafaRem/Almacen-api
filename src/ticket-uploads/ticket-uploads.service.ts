@@ -16,7 +16,7 @@ interface MulterFile {
 
 @Injectable()
 export class TicketUploadsService {
-  private readonly uploadsDir = path.join(process.cwd(), 'uploads', 'ticket');
+  private readonly uploadsDir = '/uploads/ticket';
 
   constructor(
     @InjectRepository(ConfiguracionSistema)

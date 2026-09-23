@@ -41,7 +41,7 @@ export class Producto {
   @Column({
     name: 'margen_recomendado',
     type: 'decimal',
-    precision: 5,
+    precision: 10,
     scale: 2,
     nullable: true,
   })

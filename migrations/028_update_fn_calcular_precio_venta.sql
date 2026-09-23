@@ -1,6 +1,10 @@
+-- Drop existing functions before recreating (required because parameter names changed)
+DROP FUNCTION IF EXISTS fn_calcular_precio_venta(numeric, numeric);
+DROP FUNCTION IF EXISTS fn_calcular_precio_venta(numeric, numeric, numeric);
+
 -- fn_calcular_precio_venta with 2 arguments (precio, margen)
 -- Used by: trg_inventario_precio_insert, trg_inventario_precio_change
-CREATE OR REPLACE FUNCTION fn_calcular_precio_venta(
+CREATE FUNCTION fn_calcular_precio_venta(
   p_precio numeric,
   p_margen numeric
 ) RETURNS numeric AS $$
@@ -17,7 +21,7 @@ $$ LANGUAGE plpgsql;
 
 -- fn_calcular_precio_venta with 3 arguments (precio, iva, margen)
 -- Used by: trg_producto_margen_change
-CREATE OR REPLACE FUNCTION fn_calcular_precio_venta(
+CREATE FUNCTION fn_calcular_precio_venta(
   p_precio numeric,
   p_iva numeric,
   p_margen numeric

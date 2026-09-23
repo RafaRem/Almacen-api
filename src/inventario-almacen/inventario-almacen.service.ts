@@ -166,6 +166,7 @@ export class InventarioAlmacenService {
     managerArg?: EntityManager,
     tipoMovimiento?: string,
     userId?: string,
+    precioVentaFijo?: number | null,
   ): Promise<InventarioAlmacen> {
     const repo = managerArg
       ? managerArg.getRepository(InventarioAlmacen)
@@ -185,6 +186,9 @@ export class InventarioAlmacenService {
       }
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
+      }
+      if (precioVentaFijo !== undefined && precioVentaFijo !== null) {
+        inventario.precioVenta = precioVentaFijo;
       }
       const saved = await repo.save(inventario);
       if (tipoMovimiento) {
@@ -216,6 +220,7 @@ export class InventarioAlmacenService {
         cantidadActual: cantidad,
         ivaCfdi: ivaCfdi ?? null,
         precioUnitarioLote: precioLote,
+        precioVenta: precioVentaFijo ?? null,
       });
     }
 

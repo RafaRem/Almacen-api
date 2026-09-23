@@ -26,6 +26,8 @@ export interface CsvFilaValidada {
   laboratorioId?: string;
   proveedor?: string;
   impuestoAplicado: string;
+  precioVenta?: number;
+  margenCalculado?: number;
 }
 
 export interface CsvProcesamientoResultado {
@@ -130,14 +132,22 @@ export class CsvService {
         continue;
       }
 
-      const precio = cantidad > 0 ? Number(valorUnitarioStr.replace(/[$,]/g, '')) : 0;
-      if (cantidad > 0 && (!valorUnitarioStr || isNaN(precio))) {
+      let precio = Number(valorUnitarioStr.replace(/[$,]/g, ''));
+      if (isNaN(precio)) precio = 0;
+      if (!valorUnitarioStr || isNaN(precio)) {
         errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: ValorUnitario inválido` });
         continue;
       }
 
       const impuestoAplicado = this.mapearImpuesto(getVal(fila, 'ObjetoImp'));
       distribucionImpuestos[impuestoAplicado]++;
+
+      const precioVentaStr = getVal(fila, 'P. venta');
+      const precioVenta = precioVentaStr ? Number(precioVentaStr.replace(/[$,]/g, '')) : undefined;
+      let margenCalculado: number | undefined;
+      if (precioVenta && precio > 0) {
+        margenCalculado = ((precioVenta - precio) / precio) * 100;
+      }
 
       seenCodigos.add(noIdentificacion);
 
@@ -151,6 +161,8 @@ export class CsvService {
         laboratorioId: getVal(fila, 'Departamento') || undefined,
         proveedor: getVal(fila, 'Proveedor') || undefined,
         impuestoAplicado,
+        precioVenta,
+        margenCalculado,
       });
     }
 
@@ -258,15 +270,15 @@ export class CsvService {
         let producto: Producto | null = productosExistentesMap.get(fila.productoId) || null;
 
         if (producto) {
-          // Producto existente con cantidad 0: ignorar (no tocar inventario ni lote)
-          if (esSoloProducto) continue;
           const updateData: Partial<Producto> = {
             impuestoAplicado: fila.impuestoAplicado,
             nombre: fila.nombre,
             claveUnidad: fila.claveUnidad,
             claveProdServ: fila.claveProdServ || producto.claveProdServ,
           };
-          // Asociar proveedor solo si el producto no tiene uno asignado y el CSV trae uno
+          if (fila.margenCalculado !== undefined) {
+            updateData.margenRecomendado = Math.round(fila.margenCalculado * 100) / 100;
+          }
           if (!producto.proveedorPreferidoId && proveedorFila) {
             updateData.proveedorPreferidoId = proveedorFila.id;
           }
@@ -288,11 +300,12 @@ export class CsvService {
             stockMaximo: frontendData?.stockMaximo ?? 100,
             statusId: 1,
             impuestoAplicado: fila.impuestoAplicado,
+            margenRecomendado: fila.margenCalculado
+              ? Math.round(fila.margenCalculado * 100) / 100
+              : null,
           });
           producto = await productoRepo.save(nuevoProducto);
           estadisticas.productosCreados++;
-          // Producto nuevo con cantidad 0: solo registrar en catálogo (sin lote/inventario)
-          if (esSoloProducto) continue;
         }
 
         const numeroLote = frontendData?.numeroLote ?? `CSV-${recepcionId}-${fila.productoId}`;
@@ -317,17 +330,20 @@ export class CsvService {
         }
 
         const ivaCfdi = fila.impuestoAplicado === '01' ? 16 : 0;
+        const almacenTipo = esSoloProducto ? AlmacenTipo.VENTAS : AlmacenTipo.RECEPCION;
+        const tipoMovimiento = esSoloProducto ? undefined : TipoMovimiento.ENTRADA_BODEGA;
 
         const inventario = await this.inventarioService.agregarStock(
           producto.id,
           lote.id,
-          AlmacenTipo.RECEPCION,
-          fila.cantidad,
+          almacenTipo,
+          Math.round(fila.cantidad),
           ivaCfdi,
           fila.precio,
           manager,
-          TipoMovimiento.ENTRADA_BODEGA,
+          tipoMovimiento,
           userId,
+          fila.precioVenta,
         );
 
         await this.detalleLoteService.create(
@@ -338,7 +354,7 @@ export class CsvService {
             precioUnitario: fila.precio,
             ivaCfdi,
             movimientoId: inventario.ultimoMovimientoId || undefined,
-            almacenTipo: AlmacenTipo.RECEPCION,
+            almacenTipo,
           },
           manager,
         );

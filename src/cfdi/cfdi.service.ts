@@ -220,9 +220,14 @@ private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
         this.getXmlValue(conceptoXml, /ClaveUnidad="([^"]+)"/) || '';
 
       const tasaMatch = conceptoXml.match(/TasaOCuota="([^"]+)"/);
-      const ivaCfdi = tasaMatch ? parseFloat(tasaMatch[1]) * 100 : null;
+      const tasaOcuota = tasaMatch ? parseFloat(tasaMatch[1]) : 0;
       const objImp = conceptoXml.match(/ObjetoImp="([^"]+)"/)?.[1] || '00';
       objetoImp = objImp; // Update the outer scope variable
+
+      let ivaCfdi: number | null = null;
+      if (objImp === '02' || objImp === '03') {
+        ivaCfdi = tasaOcuota > 0 ? 16 : 0;
+      }
 
       return {
         cantidad,

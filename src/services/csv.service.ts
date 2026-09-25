@@ -143,7 +143,14 @@ export class CsvService {
       distribucionImpuestos[impuestoAplicado]++;
 
       const precioVentaStr = getVal(fila, 'P. venta');
-      const precioVenta = precioVentaStr ? Number(precioVentaStr.replace(/[$,]/g, '')) : undefined;
+      let precioVenta = precioVentaStr ? Number(precioVentaStr.replace(/[$,]/g, '')) : undefined;
+      const objetoImp = getVal(fila, 'ObjetoImp');
+
+      // Si el precio en CSV incluye IVA 16%, dividir para obtener precio sin IVA
+      if (objetoImp === '16' && precioVenta) {
+        precioVenta = precioVenta / 1.16;
+      }
+
       let margenCalculado: number | undefined;
       if (precioVenta && precio > 0) {
         margenCalculado = ((precioVenta - precio) / precio) * 100;

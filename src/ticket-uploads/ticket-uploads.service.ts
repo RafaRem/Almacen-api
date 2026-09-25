@@ -16,7 +16,9 @@ interface MulterFile {
 
 @Injectable()
 export class TicketUploadsService {
-  private readonly uploadsDir = path.join(process.cwd(), 'uploads', 'ticket');
+  private readonly uploadsDir = fs.existsSync('/uploads')
+    ? '/uploads/ticket'
+    : path.join(process.cwd(), 'uploads', 'ticket');
 
   constructor(
     @InjectRepository(ConfiguracionSistema)
@@ -40,17 +42,18 @@ export class TicketUploadsService {
       'image/png',
       'image/gif',
       'image/webp',
+      'image/svg+xml',
     ];
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        'Tipo de archivo no permitido. Solo JPG, PNG, GIF, WEBP',
+        'Tipo de archivo no permitido. Solo JPG, PNG, GIF, WEBP, SVG',
       );
     }
 
-    const maxSize = 2 * 1024 * 1024;
+    const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
       throw new BadRequestException(
-        'El archivo excede el tamaño máximo de 2MB',
+        'El archivo excede el tamaño máximo de 5MB',
       );
     }
 

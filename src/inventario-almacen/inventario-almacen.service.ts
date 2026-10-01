@@ -145,7 +145,7 @@ export class InventarioAlmacenService {
     }
 
     for (const item of resultado) {
-      if (item.precioUnitarioLote > 0) {
+      if (item.precioUnitarioLote > 0 && item.precioVenta == null) {
         item.precioVenta = this.calcularPrecioVenta(
           item.precioUnitarioLote,
           item.producto?.margenRecomendado,
@@ -187,7 +187,7 @@ export class InventarioAlmacenService {
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
       }
-      if (precioVentaFijo !== undefined && precioVentaFijo !== null) {
+      if (precioVentaFijo !== undefined && precioVentaFijo !== null && precioVentaFijo > 0) {
         inventario.precioVenta = precioVentaFijo;
       }
       const saved = await repo.save(inventario);
@@ -220,7 +220,7 @@ export class InventarioAlmacenService {
         cantidadActual: cantidad,
         ivaCfdi: ivaCfdi ?? null,
         precioUnitarioLote: precioLote,
-        precioVenta: precioVentaFijo ?? null,
+        precioVenta: (precioVentaFijo !== undefined && precioVentaFijo !== null && precioVentaFijo > 0) ? precioVentaFijo : null,
       });
     }
 
@@ -589,6 +589,15 @@ export class InventarioAlmacenService {
       if (inventarioDestino) {
         inventarioDestino.cantidadActual =
           Number(inventarioDestino.cantidadActual) + cantidad;
+
+        // Si el lote es el mismo y origen tiene precioVenta, copiar al destino solo si destino no lo tiene
+        if (
+          inventarioOrigen.loteId === inventarioDestino.loteId &&
+          inventarioOrigen.precioVenta != null &&
+          inventarioDestino.precioVenta == null
+        ) {
+          inventarioDestino.precioVenta = inventarioOrigen.precioVenta;
+        }
       } else {
         inventarioDestino = manager.create(InventarioAlmacen, {
           productoId,
@@ -720,6 +729,15 @@ export class InventarioAlmacenService {
           if (inventarioDestino) {
             inventarioDestino.cantidadActual =
               Number(inventarioDestino.cantidadActual) + item.cantidad;
+
+            // Si el lote es el mismo y origen tiene precioVenta, copiar al destino solo si destino no lo tiene
+            if (
+              inventarioOrigen.loteId === inventarioDestino.loteId &&
+              inventarioOrigen.precioVenta != null &&
+              inventarioDestino.precioVenta == null
+            ) {
+              inventarioDestino.precioVenta = inventarioOrigen.precioVenta;
+            }
           } else {
             inventarioDestino = manager.create(InventarioAlmacen, {
               productoId: item.productoId,
@@ -846,6 +864,26 @@ export class InventarioAlmacenService {
     }
     inventario.ivaPersonalizado = ivaPersonalizado;
     return this.inventarioRepository.save(inventario);
+  }
+
+  async updatePrecioVenta(
+    id: string,
+    precioVenta: number | null,
+  ): Promise<InventarioAlmacen> {
+    const inventario = await this.inventarioRepository.findOne({
+      where: { id },
+      relations: ['lote', 'producto'],
+    });
+    if (!inventario) {
+      throw new NotFoundException('Inventario no encontrado');
+    }
+    const precioAnterior = inventario.precioVenta;
+    inventario.precioVenta = precioVenta;
+    const saved = await this.inventarioRepository.save(inventario);
+
+    console.log(`[DEBUG inventario] PrecioVenta actualizado: id=${id}, anterior=${precioAnterior}, nuevo=${precioVenta}, producto=${inventario.productoId}, lote=${inventario.lote?.numeroLote}`);
+
+    return saved;
   }
 
   async findByProductoId(

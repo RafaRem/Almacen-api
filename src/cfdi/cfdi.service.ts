@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import { XMLParser } from 'fast-xml-parser';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
@@ -177,9 +178,24 @@ export class CfdiService {
     return xml.replace(/<\?xml[^>]+\?>/g, '').trim();
   }
 
-private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
+  private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
+    // Normalizar formato SAT:
+    // 1. Eliminar BOM si está presente
+    let normalized = xml;
+    if (normalized.charCodeAt(0) === 0xFEFF) {
+      normalized = normalized.slice(1);
+    }
+    // 2. Eliminar todos los newlines (pueden romper el parsing)
+    normalized = normalized.replace(/[\n\r]+/g, ' ');
+    // 3. Convertir formato SAT a XML estándar:
+    //    SAT usa ="" para abrir atributos y "" para cerrar/representar comillas dentro
+    //    Step A: ="" → =" (mantiene el =, solo elimina el "" redundante del opening)
+    normalized = normalized.replace(/=""/g, '="');
+    //    Step B: "" → " (convierte el closing pair o comillas literales a comilla simple)
+    normalized = normalized.replace(/""/g, '"');
+
     const getValue = (pattern: RegExp): string => {
-      const match = xml.match(pattern);
+      const match = normalized.match(pattern);
       return match ? match[1] : '';
     };
 
@@ -202,7 +218,7 @@ private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
     let objetoImp = '00';
 
     const conceptoMatches =
-      xml.match(/<cfdi:Concepto[^>]*>[\s\S]*?<\/cfdi:Concepto>/g) || [];
+      normalized.match(/<cfdi:Concepto[^>]*>[\s\S]*?<\/cfdi:Concepto>/g) || [];
 
     const conceptos: ConceptoDto[] = conceptoMatches.map((conceptoXml) => {
       const cantidad =
@@ -222,7 +238,7 @@ private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
       const tasaMatch = conceptoXml.match(/TasaOCuota="([^"]+)"/);
       const tasaOcuota = tasaMatch ? parseFloat(tasaMatch[1]) : 0;
       const objImp = conceptoXml.match(/ObjetoImp="([^"]+)"/)?.[1] || '00';
-      objetoImp = objImp; // Update the outer scope variable
+      objetoImp = objImp;
 
       let ivaCfdi: number | null = null;
       if (objImp === '02' || objImp === '03') {
@@ -294,6 +310,7 @@ private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
       fechaCaducidad?: string;
       stockMinimo?: number;
       stockMaximo?: number;
+      precioVenta?: number;
     }[],
     conceptos: ConceptoDto[],
     userId: string,
@@ -317,7 +334,7 @@ private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
       );
 
       const lote = await this.crearOLocalizarLote(
-        `LOTE-${serie || 'X'}-${folio || '0'}-${prodDto.productoId}`,
+        prodDto.numeroLote || `LOTE-${serie || 'X'}-${folio || '0'}-${prodDto.productoId}`,
         prodDto.fechaCaducidad,
         laboratorioId,
         recepcionId,
@@ -363,6 +380,7 @@ private extractCfdiData(xml: string): CfdiPreviewDto & { uuidCfdi?: string } {
         manager,
         TipoMovimiento.ENTRADA_BODEGA,
         userId,
+        prodDto.precioVenta,
       );
 
       await this.detalleLoteService.create(

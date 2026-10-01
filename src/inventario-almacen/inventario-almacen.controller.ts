@@ -242,16 +242,19 @@ export class InventarioAlmacenController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(
+  async update(
     @Param('id') id: string,
     @Body() updateDto: UpdateInventarioAlmacenDto,
   ) {
-    if (updateDto.ivaPersonalizado === undefined) {
-      throw new BadRequestException('ivaPersonalizado es requerido');
+    if (updateDto.ivaPersonalizado === undefined && updateDto.precioVenta === undefined) {
+      throw new BadRequestException('Al menos un campo (ivaPersonalizado o precioVenta) es requerido');
     }
-    return this.inventarioService.updateIvaPersonalizado(
-      id,
-      updateDto.ivaPersonalizado,
-    );
+    if (updateDto.ivaPersonalizado !== undefined) {
+      await this.inventarioService.updateIvaPersonalizado(id, updateDto.ivaPersonalizado);
+    }
+    if (updateDto.precioVenta !== undefined) {
+      return this.inventarioService.updatePrecioVenta(id, updateDto.precioVenta);
+    }
+    return { success: true };
   }
 }

@@ -84,10 +84,10 @@ const VALID_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Serie="A" Folio="12345" Fecha="2026-06-01T12:00:00" SubTotal="1000.00" Total="1160.00">
   <cfdi:Emisor Rfc="LAB123456789" Nombre="Laboratorio Test"/>
   <cfdi:Conceptos>
-    <cfdi:Concepto Cantidad="10" NoIdentificacion="PROD001" Descripcion="Producto Test 1" ValorUnitario="50.00" ClaveProdServ="51101700" ClaveUnidad="H87" Importe="500.00">
+    <cfdi:Concepto Cantidad="10" NoIdentificacion="PROD001" Descripcion="Producto Test 1" ValorUnitario="50.00" ClaveProdServ="51101700" ClaveUnidad="H87" Importe="500.00" ObjetoImp="02">
       <cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="500.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="80.00"/></cfdi:Traslados></cfdi:Impuestos>
     </cfdi:Concepto>
-    <cfdi:Concepto Cantidad="5" NoIdentificacion="PROD002" Descripcion="Producto Test 2" ValorUnitario="100.00" ClaveProdServ="51101700" ClaveUnidad="H87" Importe="500.00">
+    <cfdi:Concepto Cantidad="5" NoIdentificacion="PROD002" Descripcion="Producto Test 2" ValorUnitario="100.00" ClaveProdServ="51101700" ClaveUnidad="H87" Importe="500.00" ObjetoImp="02">
       <cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="500.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="80.00"/></cfdi:Traslados></cfdi:Impuestos>
     </cfdi:Concepto>
   </cfdi:Conceptos>
@@ -222,6 +222,7 @@ describe('CfdiService', () => {
           numeroLote: 'LOTE-TEST',
           stockMinimo: 5,
           stockMaximo: 50,
+          precioVenta: 0,
         },
       ],
     };
@@ -282,6 +283,7 @@ describe('CfdiService', () => {
         expect.any(Object),
         'ENTRADA_BODEGA',
         'user-1',
+        expect.any(Number),
       );
     });
 

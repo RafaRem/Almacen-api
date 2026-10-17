@@ -835,6 +835,7 @@ describe('VentasService', () => {
     const baseInventario = {
       precioUnitarioLote: 45,
       precioVenta: 61.2,
+      ivaCfdi: 16,
       almacenTipo: 2,
       lote: { fechaCaducidad: null },
     };

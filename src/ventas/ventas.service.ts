@@ -107,6 +107,7 @@ export class VentasService {
 
       let subtotal = 0;
       let descuentoTotal = 0;
+      let baseForIva = 0;
       const detalles: Partial<DetalleVenta>[] = [];
       const movimientosLotes: {
         productoId: string;
@@ -329,6 +330,12 @@ export class VentasService {
         subtotal += subtotalLinea;
         descuentoTotal += descuentoLinea;
 
+        // Solo aplicar IVA si el producto tiene tasa > 0
+        const ivaTasaProducto = inventarioProducto.ivaPersonalizado ?? inventarioProducto.ivaCfdi ?? 0;
+        if (ivaTasaProducto > 0) {
+          baseForIva += subtotalLinea;
+        }
+
         const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || '';
 
         detalles.push({
@@ -344,7 +351,7 @@ export class VentasService {
       }
 
       const ivaRate = await this.getIvaRate();
-      const iva = subtotal * ivaRate;
+      const iva = baseForIva * ivaRate;
       const total = subtotal + iva;
 
       let pagosData: {

@@ -140,7 +140,7 @@ export class ReportesService {
         cantidad,
         precioVenta: precioUnitario,
         descuentoLinea,
-        total: parseFloat(r.subtotal) || 0,
+        subtotal: parseFloat(r.subtotal) || 0,
         utilidadBruta: Number(utilidadBruta.toFixed(2)),
         utilidad: Number(utilidadLinea.toFixed(2)),
       };

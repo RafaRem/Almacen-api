@@ -1019,6 +1019,7 @@ export class VentasService {
   ): Promise<PreviewDescuentoResult> {
     let subtotal = 0;
     let descuentoTotal = 0;
+    let baseForIva = 0;
     const descuentoPorProducto: PreviewProductoDescuento[] = [];
 
     let categoriaClienteId: string | undefined;
@@ -1164,6 +1165,11 @@ export class VentasService {
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
+      const ivaTasaProducto = inventarioProducto?.ivaPersonalizado ?? inventarioProducto?.ivaCfdi ?? 0;
+      if (ivaTasaProducto > 0) {
+        baseForIva += subtotalLinea;
+      }
+
       const motivos: string[] = [];
       if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
         motivos.push(mejorDescuentoInfo.motivo);
@@ -1185,7 +1191,7 @@ export class VentasService {
     }
 
     const ivaRate = await this.getIvaRate();
-    const iva = subtotal * ivaRate;
+    const iva = baseForIva * ivaRate;
     const total = subtotal + iva;
 
     return {

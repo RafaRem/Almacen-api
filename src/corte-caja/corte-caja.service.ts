@@ -130,7 +130,11 @@ export class CorteCajaService {
         SUM(dv.subtotal) as base_imponible
       FROM detalle_venta dv
       JOIN lotes l ON l.id = dv.loteid
-      JOIN inventario_almacen ia ON ia."loteId" = l.id
+      JOIN (
+        SELECT DISTINCT ON ("loteId") id, "loteId", iva_cfdi
+        FROM inventario_almacen
+        ORDER BY "loteId", id
+      ) ia ON ia."loteId" = l.id
       JOIN corte_caja_venta ccv ON ccv.venta_id = dv.ventaid
       WHERE ccv.corte_caja_id = $1
       GROUP BY ia.iva_cfdi

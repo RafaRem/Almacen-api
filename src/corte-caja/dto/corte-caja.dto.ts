@@ -2,6 +2,17 @@ export class AperturaCajaDto {
   usuarioId: string;
 }
 
+export class ImpuestosDesgloseDto {
+  ivaCero: {
+    cobrado: number;
+    ventasGravadas: number;
+  };
+  ivaDieciseis: {
+    cobrado: number;
+    ventasGravadas: number;
+  };
+}
+
 export class ResumenCorteCajaDto {
   totalVentas: number;
   cantidadVentas: number;
@@ -10,6 +21,7 @@ export class ResumenCorteCajaDto {
     total: number;
     cantidad: number;
   }[];
+  impuestos: ImpuestosDesgloseDto;
 }
 
 export class VentaDelCorteDto {

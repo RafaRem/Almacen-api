@@ -4,7 +4,7 @@ import { Repository, DataSource, EntityManager } from 'typeorm';
 import { CorteCaja, CorteCajaStatus } from './entities/corte-caja.entity';
 import { CorteCajaVenta } from './entities/corte-caja-venta.entity';
 import { Venta } from '../ventas/entities/venta.entity';
-import { ResumenCorteCajaDto, VentaDelCorteDto } from './dto/corte-caja.dto';
+import { ResumenCorteCajaDto, VentaDelCorteDto, ImpuestosDesgloseDto } from './dto/corte-caja.dto';
 
 @Injectable()
 export class CorteCajaService {
@@ -108,6 +108,8 @@ export class CorteCajaService {
       desgloseMetodosPago[venta.metodopago].cantidad += 1;
     }
 
+    const impuestos = await this.getImpuestosDelCorte(corteId);
+
     return {
       totalVentas: ventas.reduce((sum, v) => sum + v.total, 0),
       cantidadVentas: ventas.length,
@@ -116,6 +118,51 @@ export class CorteCajaService {
         total: data.total,
         cantidad: data.cantidad,
       })),
+      impuestos,
+    };
+  }
+
+  private async getImpuestosDelCorte(corteId: string): Promise<ImpuestosDesgloseDto> {
+    const result = await this.dataSource.query(
+      `
+      SELECT
+        COALESCE(ia.iva_cfdi, 0) as iva_tasa,
+        SUM(dv.subtotal) as base_imponible
+      FROM detalle_venta dv
+      JOIN detalle_lote dl ON dl.id = dv.detalle_lote_id
+      JOIN inventario_almacen ia ON ia.id = dl.inventario_almacen_id
+      JOIN corte_caja_venta ccv ON ccv.venta_id = dv.venta_id
+      WHERE ccv.corte_caja_id = $1
+      GROUP BY ia.iva_cfdi
+      `,
+      [corteId],
+    );
+
+    let ivaCeroVentasGravadas = 0;
+    let ivaDieciseisVentasGravadas = 0;
+    let ivaDieciseisCobrado = 0;
+
+    for (const row of result) {
+      const tasa = Number(row.iva_tasa) || 0;
+      const base = Number(row.base_imponible) || 0;
+
+      if (tasa === 0) {
+        ivaCeroVentasGravadas += base;
+      } else if (tasa === 16) {
+        ivaDieciseisVentasGravadas += base;
+        ivaDieciseisCobrado += base * tasa / 100;
+      }
+    }
+
+    return {
+      ivaCero: {
+        cobrado: 0,
+        ventasGravadas: Math.round(ivaCeroVentasGravadas * 100) / 100,
+      },
+      ivaDieciseis: {
+        cobrado: Math.round(ivaDieciseisCobrado * 100) / 100,
+        ventasGravadas: Math.round(ivaDieciseisVentasGravadas * 100) / 100,
+      },
     };
   }
 

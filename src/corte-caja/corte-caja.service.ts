@@ -129,9 +129,9 @@ export class CorteCajaService {
         COALESCE(ia.iva_cfdi, 0) as iva_tasa,
         SUM(dv.subtotal) as base_imponible
       FROM detalle_venta dv
-      JOIN detalle_lote dl ON dl.id = dv.detalle_lote_id
-      JOIN inventario_almacen ia ON ia.id = dl.inventario_almacen_id
-      JOIN corte_caja_venta ccv ON ccv.venta_id = dv.venta_id
+      JOIN lotes l ON l.id = dv.loteid
+      JOIN inventario_almacen ia ON ia."loteId" = l.id
+      JOIN corte_caja_venta ccv ON ccv.venta_id = dv.ventaid
       WHERE ccv.corte_caja_id = $1
       GROUP BY ia.iva_cfdi
       `,

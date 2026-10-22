@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -55,6 +56,7 @@ import { CorteCajaModule } from './corte-caja/corte-caja.module';
       inject: [ConfigService],
       useFactory: getDatabaseConfig,
     }),
+    ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,
     LaboratoriosModule,

@@ -145,6 +145,12 @@ variable "github_token_secret_name" {
   default     = "github-token"
 }
 
+variable "facturapi_key_secret_name" {
+  description = "Key Vault secret name containing the Facturapi API key used by the backend."
+  type        = string
+  default     = "facturapi-key"
+}
+
 variable "backend_container_image" {
   description = "Optional full container image override. If null, uses the ACR image created by this stack."
   type        = string

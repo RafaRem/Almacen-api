@@ -35,10 +35,17 @@ export class FacturasController {
   findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
+    @Query('clienteId') clienteId?: string,
+    @Query('folio') folio?: string,
+    @Query('serie') serie?: string,
+    @Query('fechaFrom') fechaFrom?: string,
+    @Query('fechaTo') fechaTo?: string,
+    @Query('statusId') statusId?: string,
   ) {
     return this.facturasService.findAll(
       parseInt(page, 10),
       parseInt(limit, 10),
+      { clienteId, folio, serie, fechaFrom, fechaTo, statusId },
     );
   }
 
@@ -70,10 +77,19 @@ export class FacturasController {
     return this.facturasService.marcarComoTimbradaDemo(id);
   }
 
+  @Post(':id/timbrar')
+  @HttpCode(HttpStatus.OK)
+  timbrar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.facturasService.timbrar(id);
+  }
+
   @Post(':id/cancelar')
   @HttpCode(HttpStatus.OK)
-  cancelar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.cancelar(id);
+  cancelar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('motivo') motivo?: string,
+  ) {
+    return this.facturasService.cancelar(id, motivo);
   }
 
   @Delete(':id')

@@ -85,6 +85,24 @@ export class Factura {
   @Column({ type: 'varchar', length: 36, nullable: true })
   uuid: string;
 
+  @Column({ type: 'varchar', length: 64, name: 'facturapiid', nullable: true })
+  facturapiId: string;
+
+  @Column({
+    type: 'varchar',
+    length: 2,
+    name: 'cancelacionmotivo',
+    nullable: true,
+  })
+  cancelacionMotivo: string;
+
+  @Column({
+    type: 'timestamp',
+    name: 'fechacancelacion',
+    nullable: true,
+  })
+  fechaCancelacion: Date;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   xmlPath: string;
 

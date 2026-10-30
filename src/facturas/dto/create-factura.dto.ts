@@ -42,9 +42,8 @@ export class CreateFacturaDto {
   @IsUUID()
   clienteId?: string;
 
-  @IsOptional()
   @IsUUID()
-  ventaId?: string;
+  ventaId: string;
 
   @IsOptional()
   @IsString()

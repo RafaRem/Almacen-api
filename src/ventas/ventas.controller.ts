@@ -35,6 +35,8 @@ export class VentasController {
     @Query('statusId') statusId?: string,
     @Query('usuarioId') usuarioId?: string,
     @Query('metodoPago') metodoPago?: string,
+    @Query('folio') folio?: string,
+    @Query('facturaStatusId') facturaStatusId?: string,
   ) {
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : undefined;
@@ -45,6 +47,8 @@ export class VentasController {
       statusId,
       usuarioId,
       metodoPago,
+      folio,
+      facturaStatusId,
     });
   }
 

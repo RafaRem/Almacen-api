@@ -549,9 +549,19 @@ export class VentasService {
       statusId?: string;
       usuarioId?: string;
       metodoPago?: string;
+      folio?: string;
+      facturaStatusId?: string;
     },
   ): Promise<{ data: Venta[]; total: number }> {
-    let countSql = `SELECT COUNT(*) as total FROM ventas v WHERE 1=1`;
+    const filtrarPorFactura =
+      filters?.facturaStatusId !== undefined &&
+      filters?.facturaStatusId !== null &&
+      String(filters.facturaStatusId).trim() !== '';
+    const facturaJoin = filtrarPorFactura
+      ? 'LEFT JOIN facturas f ON f.ventaid = v.id'
+      : '';
+
+    let countSql = `SELECT COUNT(*) as total FROM ventas v ${facturaJoin} WHERE 1=1`;
     let sql = `
       SELECT v.id, v.folio, v.subtotal, v.descuentoaplicado, v.iva, v.total,
              v.metodopago, v.statusid, v.createdat, v.updatedat,
@@ -560,6 +570,7 @@ export class VentasService {
              cl.id as cl_id, cl.nombre as cl_nombre, cl."apellidoPaterno" as cl_ap, cl."apellidoMaterno" as cl_am, cl.empresa as cl_empresa,
              u.id as u_id, u.name as u_name
       FROM ventas v
+      ${facturaJoin}
       LEFT JOIN cuenta_por_cobrar c ON c.venta_id = v.id
       LEFT JOIN clientes cl ON cl.id = v.clienteid
       LEFT JOIN users u ON u.id = v.usuarioid
@@ -606,6 +617,29 @@ export class VentasService {
         const countPlaceholders = metodos.map((_, i) => `$${countOffset + i}`).join(', ');
         countSql += ` AND v.metodopago IN (${countPlaceholders})`;
         params.push(...metodos);
+      }
+    }
+
+    if (filters?.folio) {
+      const folioNum = parseInt(filters.folio, 10);
+      if (!Number.isNaN(folioNum)) {
+        sql += ` AND v.folio = $${p++}`;
+        countSql += ` AND v.folio = $${p - 1}`;
+        params.push(folioNum);
+      }
+    }
+
+    if (filtrarPorFactura) {
+      const facturaStatus = parseInt(String(filters!.facturaStatusId), 10);
+      if (!Number.isNaN(facturaStatus)) {
+        if (facturaStatus === 0) {
+          sql += ` AND f.id IS NULL`;
+          countSql += ` AND f.id IS NULL`;
+        } else {
+          sql += ` AND f."statusId" = $${p++}`;
+          countSql += ` AND f."statusId" = $${p - 1}`;
+          params.push(facturaStatus);
+        }
       }
     }
 

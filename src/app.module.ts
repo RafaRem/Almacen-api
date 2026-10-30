@@ -48,7 +48,7 @@ import { CorteCajaModule } from './corte-caja/corte-caja.module';
       envFilePath: ['.env.dev', '.env'],
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads'),
+      rootPath: process.env.UPLOADS_DIR || join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
     TypeOrmModule.forRootAsync({

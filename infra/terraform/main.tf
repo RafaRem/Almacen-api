@@ -368,6 +368,21 @@ resource "azurerm_container_app" "api" {
       }
 
       env {
+        name        = "FACTURAPI_KEY"
+        secret_name = "facturapi-key"
+      }
+
+      env {
+        name  = "UPLOADS_DIR"
+        value = "/uploads"
+      }
+
+      env {
+        name  = "TZ"
+        value = "America/Mexico_City"
+      }
+
+      env {
         name  = "JWT_EXPIRES_IN"
         value = "1d"
       }
@@ -380,11 +395,6 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "REDIS_PORT"
         value = tostring(var.redis_port)
-      }
-
-      env {
-        name        = "FACTURAPI_KEY"
-        secret_name = "facturapi-key"
       }
 
       startup_probe {

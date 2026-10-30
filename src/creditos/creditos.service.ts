@@ -44,15 +44,19 @@ export class CreditosService {
     clienteId: string,
     createDto: CreateCreditoDto,
     usuarioId?: string,
+    manager?: EntityManager,
   ): Promise<Credito> {
-    const existente = await this.findByCliente(clienteId);
+    const repo = manager
+      ? manager.getRepository(Credito)
+      : this.creditoRepository;
+    const existente = await repo.findOne({ where: { clienteId } });
     if (existente) {
       const anterior = {
         limite: Number(existente.limite),
         saldoActual: Number(existente.saldoActual),
       };
       Object.assign(existente, createDto);
-      const saved = await this.creditoRepository.save(existente);
+      const saved = await repo.save(existente);
       await this.registrarMovimiento(
         clienteId,
         usuarioId,
@@ -63,18 +67,19 @@ export class CreditosService {
           saldoActualAnterior: anterior.saldoActual,
           saldoActualNuevo: Number(saved.saldoActual),
         },
+        manager,
       );
       return saved;
     }
 
-    const credito = this.creditoRepository.create({
+    const credito = repo.create({
       ...createDto,
       clienteId,
       saldoActual: createDto.saldoActual ?? 0,
       idStatus: createDto.idStatus ?? 1,
       fechaDeCorte: createDto.fechaDeCorte ?? 15,
     });
-    const saved = await this.creditoRepository.save(credito);
+    const saved = await repo.save(credito);
     await this.registrarMovimiento(
       clienteId,
       usuarioId,
@@ -83,6 +88,7 @@ export class CreditosService {
         limiteNuevo: Number(saved.limite),
         saldoActualNuevo: Number(saved.saldoActual),
       },
+      manager,
     );
     return saved;
   }
@@ -91,8 +97,12 @@ export class CreditosService {
     clienteId: string,
     updateDto: Partial<CreateCreditoDto>,
     usuarioId?: string,
+    manager?: EntityManager,
   ): Promise<Credito> {
-    const credito = await this.findByCliente(clienteId);
+    const repo = manager
+      ? manager.getRepository(Credito)
+      : this.creditoRepository;
+    const credito = await repo.findOne({ where: { clienteId } });
     if (!credito) {
       throw new NotFoundException(
         `Crédito para cliente ${clienteId} no encontrado`,
@@ -104,7 +114,7 @@ export class CreditosService {
       saldoActual: Number(credito.saldoActual),
     };
     Object.assign(credito, updateDto);
-    const saved = await this.creditoRepository.save(credito);
+    const saved = await repo.save(credito);
     await this.registrarMovimiento(
       clienteId,
       usuarioId,
@@ -115,6 +125,7 @@ export class CreditosService {
         saldoActualAnterior: anterior.saldoActual,
         saldoActualNuevo: Number(saved.saldoActual),
       },
+      manager,
     );
     return saved;
   }
@@ -199,8 +210,12 @@ export class CreditosService {
       saldoActualNuevo?: number;
       observaciones?: string;
     },
+    manager?: EntityManager,
   ): Promise<void> {
-    const movimiento = this.movimientoRepository.create({
+    const repo = manager
+      ? manager.getRepository(MovimientoCredito)
+      : this.movimientoRepository;
+    const movimiento = repo.create({
       clienteId,
       usuarioId: usuarioId || 'SYSTEM',
       tipo,
@@ -210,6 +225,6 @@ export class CreditosService {
       saldoActualNuevo: datos.saldoActualNuevo,
       observaciones: datos.observaciones,
     });
-    await this.movimientoRepository.save(movimiento);
+    await repo.save(movimiento);
   }
 }

@@ -275,6 +275,12 @@ resource "azurerm_container_app" "api" {
     identity            = azurerm_user_assigned_identity.container_apps.id
   }
 
+  secret {
+    name                = "facturapi-key"
+    key_vault_secret_id = "${azurerm_key_vault.main.vault_uri}secrets/${var.facturapi_key_secret_name}"
+    identity            = azurerm_user_assigned_identity.container_apps.id
+  }
+
   ingress {
     external_enabled = true
     target_port      = var.container_target_port
@@ -374,6 +380,11 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "REDIS_PORT"
         value = tostring(var.redis_port)
+      }
+
+      env {
+        name        = "FACTURAPI_KEY"
+        secret_name = "facturapi-key"
       }
 
       startup_probe {

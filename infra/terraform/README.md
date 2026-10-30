@@ -8,7 +8,7 @@ Terraform stack for the backend-only Azure deployment:
 - Azure Files mounted at `/uploads`
 - Log Analytics for Container Apps logs
 - PostgreSQL public firewall access from all public IPs, with database authentication still required
-- Azure Key Vault for `DATABASE_PASSWORD`, `JWT_SECRET`, and `GITHUB_TOKEN`
+- Azure Key Vault for `DATABASE_PASSWORD`, `JWT_SECRET`, `GITHUB_TOKEN`, and `FACTURAPI_KEY`
 - HTTP startup, readiness, and liveness probes against `/health`
 - Resource Group/Key Vault stay in `eastus`; PostgreSQL and Container Apps use `eastus2` because this subscription is restricted/saturated for those services in `eastus`.
 - Terraform state is stored remotely in Azure Storage: `rg-nueva-era-prod` / `stnuevaeraprod2xg97h` / `tfstate` / `almacen-api-prod.tfstate`.
@@ -95,6 +95,7 @@ az provider register --namespace Microsoft.OperationalInsights
 
 ## Notes
 
+- `FACTURAPI_KEY` is injected from the versionless Key Vault reference `facturapi-key` using the Container App managed identity. Store the key in Key Vault before applying this stack; its value must not be passed to Terraform or committed to Git.
 - This stack starts with PostgreSQL `B_Standard_B1ms` for the lowest monthly cost.
 - The backend image defaults to the ACR image path created by this stack: `almacen-api:latest`.
 - GitHub Actions should build and push the backend image to ACR. Terraform only creates the registry and points Container Apps at `almacen-api:latest`.

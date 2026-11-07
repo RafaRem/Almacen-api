@@ -24,6 +24,7 @@ import { CuentasCobrarService } from '../cuentas-cobrar/cuentas-cobrar.service';
 import { CreditosService } from '../creditos/creditos.service';
 import { FormaPago } from '../common/enums/forma-pago.enum';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
+import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { ClientesService } from '../clientes/clientes.service';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { CuentaPorCobrar, StatusCuentaCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
@@ -55,6 +56,7 @@ export class VentasService {
     private inventarioAlmacenService: InventarioAlmacenService,
     private movimientosAlmacenService: MovimientosAlmacenService,
     private configuracionesService: ConfiguracionesService,
+    private configuracionService: ConfiguracionService,
     private clientesService: ClientesService,
     private cuentasCobrarService: CuentasCobrarService,
     private creditosService: CreditosService,
@@ -921,6 +923,128 @@ export class VentasService {
     result.utilidadTotal = Number(utilidadTotal.toFixed(2));
     result.utilidadBrutaTotal = Number(utilidadBrutaTotal.toFixed(2));
     return result;
+  }
+
+  async getTicketData(id: string): Promise<any> {
+    const venta = await this.findOne(id);
+    const ivaGlobal = await this.configuracionesService.getIvaGlobal();
+    const ticketConfig =
+      await this.configuracionService.getConfiguracion('ticket-mensaje');
+    const mensaje =
+      ticketConfig?.valor?.mensaje || '¡Gracias por su preferencia!';
+
+    const manager = this.ventasRepository.manager;
+
+    const loteIds = [
+      ...new Set(venta.detalles.map((d) => d.loteId).filter(Boolean)),
+    ];
+    const tasaPorLote = new Map<string, number>();
+    if (loteIds.length > 0) {
+      const rows = await manager.query(
+        `SELECT DISTINCT ON ("loteId") "loteId",
+                COALESCE(iva_personalizado, iva_cfdi, 0) AS tasa
+         FROM inventario_almacen
+         WHERE "loteId" = ANY($1)
+         ORDER BY "loteId", (iva_personalizado IS NULL), id`,
+        [loteIds],
+      );
+      for (const row of rows) {
+        tasaPorLote.set(row.loteId, Number(row.tasa) || 0);
+      }
+    }
+
+    const productoIds = [
+      ...new Set(
+        venta.detalles
+          .filter((d) => !d.loteId)
+          .map((d) => d.productoId)
+          .filter(Boolean),
+      ),
+    ];
+    const tasaPorProducto = new Map<string, number>();
+    if (productoIds.length > 0) {
+      const rows = await manager.query(
+        `SELECT DISTINCT ON ("productoId") "productoId",
+                COALESCE(iva_personalizado, iva_cfdi, 0) AS tasa
+         FROM inventario_almacen
+         WHERE "productoId" = ANY($1)
+         ORDER BY "productoId", COALESCE(iva_personalizado, iva_cfdi, 0) DESC`,
+        [productoIds],
+      );
+      for (const row of rows) {
+        tasaPorProducto.set(row.productoId, Number(row.tasa) || 0);
+      }
+    }
+
+    const items = venta.detalles.map((d) => {
+      const tasaProducto = d.loteId
+        ? (tasaPorLote.get(d.loteId) ?? 0)
+        : (tasaPorProducto.get(d.productoId) ?? 0);
+      const ivaTasa = tasaProducto > 0 ? ivaGlobal : 0;
+
+      return {
+        productoId: d.productoId,
+        nombre: d.producto?.nombre || 'Producto',
+        cantidad: Number(d.cantidad) || 0,
+        precioUnitario: Number(d.precioUnitario) || 0,
+        importeBruto: Number(d.importeBruto) || 0,
+        subtotal: Number(d.subtotal) || 0,
+        ivaTasa,
+        numeroLote: d.lote?.numeroLote || 'N/A',
+        fechaCaducidad: d.lote?.fechaCaducidad || null,
+        descuentos: venta.descuentos
+          .filter((dd: any) => dd.detalleVentaId === d.id)
+          .map((dd: any) => ({
+            tipo: dd.tipo,
+            porcentaje: Number(dd.porcentaje) || 0,
+            monto: Number(dd.monto) || 0,
+            motivoGenerado: dd.motivoGenerado || '',
+          })),
+      };
+    });
+
+    const ivaLineas = [
+      { tasa: ivaGlobal, importe: Number(venta.iva) || 0 },
+    ];
+
+    const cuenta = await manager.getRepository(CuentaPorCobrar).findOne({
+      where: { ventaId: id },
+    });
+
+    const esCredito =
+      venta.metodoPago === MetodoPago.CREDITO || !!cuenta;
+
+    return {
+      venta: {
+        id: venta.id,
+        folio: venta.folio,
+        subtotal: Number(venta.subtotal) || 0,
+        descuentoAplicado: Number(venta.descuentoAplicado) || 0,
+        iva: Number(venta.iva) || 0,
+        total: Number(venta.total) || 0,
+        metodoPago: venta.metodoPago,
+        createdAt: venta.createdAt,
+      },
+      cliente: venta.cliente || null,
+      vendedor: venta.usuario || null,
+      items,
+      pagos: venta.pagos,
+      descuentos: venta.descuentos,
+      ivaGlobal,
+      ivaLineas,
+      esCredito,
+      cuentaPorCobrar: cuenta
+        ? {
+            id: cuenta.id,
+            montoOriginal: Number(cuenta.montoOriginal) || 0,
+            montoPendiente: Number(cuenta.montoPendiente) || 0,
+            creditoAFavor: Number(cuenta.creditoAFavor) || 0,
+            idStatus: cuenta.idStatus,
+            fechaVencimiento: cuenta.fechaVencimiento,
+          }
+        : null,
+      mensaje,
+    };
   }
 
   async findByFolio(folio: number): Promise<Venta | null> {

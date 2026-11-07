@@ -100,6 +100,12 @@ export class VentasController {
     });
   }
 
+  @Get(':id/ticket-data')
+  @UseGuards(JwtAuthGuard)
+  getTicketData(@Param('id') id: string) {
+    return this.ventasService.getTicketData(id);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {

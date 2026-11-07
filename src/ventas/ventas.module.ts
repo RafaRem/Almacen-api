@@ -14,6 +14,7 @@ import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almace
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { MovimientosAlmacenModule } from '../movimientos-almacen/movimientos-almacen.module';
 import { ConfiguracionesModule } from '../configuraciones/configuraciones.module';
+import { ConfiguracionModule } from '../configuracion/configuracion.module';
 import { ClientesModule } from '../clientes/clientes.module';
 import { CuentasCobrarModule } from '../cuentas-cobrar/cuentas-cobrar.module';
 import { CreditosModule } from '../creditos/creditos.module';
@@ -37,6 +38,7 @@ import { CorteCajaModule } from '../corte-caja/corte-caja.module';
     InventarioAlmacenModule,
     MovimientosAlmacenModule,
     ConfiguracionesModule,
+    ConfiguracionModule,
     ClientesModule,
     CuentasCobrarModule,
     CreditosModule,

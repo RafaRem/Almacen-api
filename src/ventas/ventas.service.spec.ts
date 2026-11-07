@@ -11,6 +11,7 @@ import { DescuentosService } from '../descuentos/descuentos.service';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
 import { MovimientosAlmacenService } from '../movimientos-almacen/movimientos-almacen.service';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
+import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { ClientesService } from '../clientes/clientes.service';
 import { CuentasCobrarService } from '../cuentas-cobrar/cuentas-cobrar.service';
 import { CorteCajaService } from '../corte-caja/corte-caja.service';
@@ -94,6 +95,12 @@ const mockConfiguracionesService = {
   getIvaGlobal: jest.fn().mockResolvedValue(16),
 };
 
+const mockConfiguracionService = {
+  getConfiguracion: jest
+    .fn()
+    .mockResolvedValue({ valor: { mensaje: '¡Gracias por su preferencia!' } }),
+};
+
 const mockClientesService = {
   findOne: jest.fn(),
 };
@@ -169,6 +176,10 @@ describe('VentasService', () => {
         {
           provide: ConfiguracionesService,
           useValue: mockConfiguracionesService,
+        },
+        {
+          provide: ConfiguracionService,
+          useValue: mockConfiguracionService,
         },
         { provide: ClientesService, useValue: mockClientesService },
         { provide: LotesService, useValue: mockLotesService },

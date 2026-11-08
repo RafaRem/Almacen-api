@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +13,8 @@ import { PagoVenta } from './entities/pago-venta.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { DetalleVentaLote } from './entities/detalle-venta-lote.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
+import { UpdatePagosVentaDto } from './dto/update-pagos-venta.dto';
+import { Factura, FacturaStatus } from '../facturas/entities/factura.entity';
 import { ProductosService } from '../productos/productos.service';
 import { LotesService } from '../lotes/lotes.service';
 import { DescuentosService } from '../descuentos/descuentos.service';
@@ -942,6 +945,330 @@ export class VentasService {
     result.utilidadTotal = Number(utilidadTotal.toFixed(2));
     result.utilidadBrutaTotal = Number(utilidadBrutaTotal.toFixed(2));
     return result;
+  }
+
+  async getPagoEditable(
+    id: string,
+    usuario?: { id?: string; tipo?: string; name?: string; email?: string },
+  ): Promise<{
+    puedeEditar: boolean;
+    motivoBloqueo: string | null;
+    esCredito: boolean;
+    facturaStatusId: number | null;
+    facturaTimbrada: boolean;
+    facturaGlobalTimbrada: boolean;
+    corteEstado: string | null;
+    corteCerrado: boolean;
+  }> {
+    this.assertAdmin(usuario);
+
+    const venta = await this.ventasRepository.findOne({ where: { id } });
+    if (!venta) {
+      throw new NotFoundException(`Venta con ID ${id} no encontrada`);
+    }
+
+    const info = await this.evaluarEdicionPago(venta);
+    return {
+      puedeEditar: !info.motivoBloqueo,
+      motivoBloqueo: info.motivoBloqueo,
+      esCredito: info.esCredito,
+      facturaStatusId: info.facturaStatusId,
+      facturaTimbrada: info.facturaTimbrada,
+      facturaGlobalTimbrada: info.facturaGlobalTimbrada,
+      corteEstado: info.corteEstado,
+      corteCerrado: info.corteCerrado,
+    };
+  }
+
+  async updatePagosVenta(
+    id: string,
+    dto: UpdatePagosVentaDto,
+    usuario?: { id?: string; tipo?: string; name?: string; email?: string },
+  ): Promise<any> {
+    this.assertAdmin(usuario);
+
+    const venta = await this.ventasRepository.findOne({ where: { id } });
+    if (!venta) {
+      throw new NotFoundException(`Venta con ID ${id} no encontrada`);
+    }
+
+    const info = await this.evaluarEdicionPago(venta);
+    if (info.motivoBloqueo) {
+      throw new BadRequestException(info.motivoBloqueo);
+    }
+
+    const pagosActuales = info.pagos;
+    if (dto.pagos.length === 0) {
+      throw new BadRequestException('Debe conservar al menos un pago');
+    }
+
+    const updates = new Map<
+      string,
+      { formaPago: FormaPago; monto: number; referencia?: string }
+    >();
+    for (const pago of dto.pagos) {
+      if (updates.has(pago.id)) {
+        throw new BadRequestException(`Pago duplicado: ${pago.id}`);
+      }
+      const actual = pagosActuales.find((p) => p.id === pago.id);
+      if (!actual) {
+        throw new BadRequestException(
+          `El pago ${pago.id} no pertenece a la venta`,
+        );
+      }
+      updates.set(pago.id, {
+        formaPago: pago.formaPago,
+        monto: this.round2(Number(pago.monto)),
+        referencia: pago.referencia,
+      });
+    }
+
+    const conservados = pagosActuales.filter((p) => updates.has(p.id));
+    const omitidos = pagosActuales.filter((p) => !updates.has(p.id));
+
+    const cambios = conservados.map((p) => {
+      const update = updates.get(p.id)!;
+      return `${p.formaPago}(${Number(p.monto).toFixed(2)})→${update.formaPago}(${update.monto.toFixed(2)})`;
+    });
+
+    for (const pago of conservados) {
+      const update = updates.get(pago.id)!;
+      pago.formaPago = update.formaPago;
+      pago.monto = update.monto;
+      if (update.referencia !== undefined) {
+        pago.referencia = update.referencia || null;
+      }
+    }
+
+    const totalFinal = this.round2(
+      conservados.reduce((sum, p) => sum + Number(p.monto), 0),
+    );
+    const totalVenta = this.round2(Number(venta.total));
+    if (Math.abs(totalFinal - totalVenta) > 0.01) {
+      throw new BadRequestException(
+        `La suma de los pagos (${totalFinal.toFixed(2)}) no coincide con el total de la venta (${totalVenta.toFixed(2)})`,
+      );
+    }
+
+    const {
+      pagos: pagosFinales,
+      fusiones,
+      eliminados: duplicados,
+    } = this.normalizarPagos(conservados);
+    const pagosEliminados = [...omitidos, ...duplicados];
+    const usuarioLabel =
+      usuario?.name || usuario?.email || usuario?.id || 'admin';
+
+    const facturaBorradorActualizada = await this.dataSource.transaction(
+      async (manager) => {
+        for (const pago of pagosFinales) {
+          await manager.update(PagoVenta, pago.id, {
+            formaPago: pago.formaPago,
+            monto: pago.monto,
+            referencia: pago.referencia ?? null,
+          });
+        }
+
+        if (pagosEliminados.length > 0) {
+          await manager.delete(
+            PagoVenta,
+            pagosEliminados.map((p) => p.id),
+          );
+        }
+
+        const metodoPago = this.derivarMetodoPago(pagosFinales);
+        const detalleFusiones = fusiones.length
+          ? `; fusiones ${fusiones.join(' | ')}`
+          : '';
+        const absorbidos = omitidos
+          .map((p) => `${p.formaPago}(${Number(p.monto).toFixed(2)})`)
+          .join(', ');
+        const detalleAbsorbidos = absorbidos
+          ? `; absorbidos ${absorbidos}`
+          : '';
+        const nota = `[${new Date().toISOString()}] ${usuarioLabel}: pago corregido ${cambios.join(', ')}${detalleFusiones}${detalleAbsorbidos}`;
+        const observaciones = venta.observaciones
+          ? `${venta.observaciones}\n${nota}`
+          : nota;
+
+        await manager.update(Venta, id, { metodoPago, observaciones });
+
+        const formaPagoPrincipal = this.formaPagoPrincipal(pagosFinales);
+        const result = await manager.update(
+          Factura,
+          { ventaId: id, statusId: FacturaStatus.BORRADOR },
+          { formaPago: formaPagoPrincipal },
+        );
+        return (result.affected || 0) > 0;
+      },
+    );
+
+    this.logger.log(
+      `Pago corregido venta ${venta.folio} (${id}) por ${usuarioLabel}: ${cambios.join(', ')}${fusiones.length ? `; fusiones ${fusiones.join(' | ')}` : ''}${omitidos.length ? `; absorbidos ${omitidos.map((p) => `${p.formaPago}(${Number(p.monto).toFixed(2)})`).join(', ')}` : ''}; facturaBorrador=${facturaBorradorActualizada}`,
+    );
+
+    const actualizada = await this.findOne(id);
+    return {
+      ...actualizada,
+      advertenciaCorteCerrado: info.corteCerrado,
+      facturaBorradorActualizada,
+    };
+  }
+
+  private assertAdmin(usuario?: { tipo?: string }): void {
+    if (!usuario || usuario.tipo !== 'admin') {
+      throw new ForbiddenException(
+        'Solo un administrador puede corregir el pago de una venta',
+      );
+    }
+  }
+
+  private async evaluarEdicionPago(venta: Venta): Promise<{
+    pagos: PagoVenta[];
+    esCredito: boolean;
+    facturaStatusId: number | null;
+    facturaTimbrada: boolean;
+    facturaGlobalTimbrada: boolean;
+    corteEstado: string | null;
+    corteCerrado: boolean;
+    motivoBloqueo: string | null;
+  }> {
+    const [
+      pagos,
+      facturaRows,
+      facturaTimbradaRows,
+      globalRows,
+      corteRows,
+      cuentaRows,
+    ] = (await Promise.all([
+        this.pagosRepository.find({ where: { ventaId: venta.id } }),
+        this.dataSource.query(
+          `SELECT "statusId" FROM facturas WHERE ventaid = $1 ORDER BY fecha DESC LIMIT 1`,
+          [venta.id],
+        ),
+        this.dataSource.query(
+          `SELECT 1 FROM facturas WHERE ventaid = $1 AND "statusId" = 2 LIMIT 1`,
+          [venta.id],
+        ),
+        this.dataSource.query(
+          `SELECT 1 FROM factura_global_detalle d
+           JOIN factura_global g ON g.id = d.factura_global_id
+           WHERE d.venta_id = $1 AND d.activo = true AND g.estado = 'TIMBRADA'
+           LIMIT 1`,
+          [venta.id],
+        ),
+        this.dataSource.query(
+          `SELECT cc.status FROM corte_caja_venta ccv
+           JOIN corte_caja cc ON cc.id = ccv.corte_caja_id
+           WHERE ccv.venta_id = $1
+           ORDER BY cc.fecha_apertura DESC
+           LIMIT 1`,
+          [venta.id],
+        ),
+        this.dataSource.query(
+          `SELECT 1 FROM cuenta_por_cobrar WHERE venta_id = $1 LIMIT 1`,
+          [venta.id],
+        ),
+      ])) as [
+      PagoVenta[],
+      Array<{ statusId: number }>,
+      unknown[],
+      unknown[],
+      Array<{ status: string }>,
+      unknown[],
+    ];
+
+    const facturaStatusId =
+      facturaRows[0]?.statusId != null ? Number(facturaRows[0].statusId) : null;
+    const facturaTimbrada = facturaTimbradaRows.length > 0;
+    const facturaGlobalTimbrada = globalRows.length > 0;
+    const corteEstado = corteRows[0]?.status || null;
+    const corteCerrado = corteEstado === 'CERRADA';
+    const esCredito =
+      venta.metodoPago === MetodoPago.CREDITO || cuentaRows.length > 0;
+
+    let motivoBloqueo: string | null = null;
+    if (venta.statusId !== 1) {
+      motivoBloqueo = 'La venta está cancelada';
+    } else if (facturaTimbrada) {
+      motivoBloqueo = 'La venta ya tiene una factura timbrada';
+    } else if (facturaGlobalTimbrada) {
+      motivoBloqueo = 'La venta pertenece a una factura global timbrada';
+    } else if (esCredito) {
+      motivoBloqueo = 'Las ventas a crédito no se pueden corregir';
+    } else if (pagos.length === 0) {
+      motivoBloqueo = 'La venta no tiene pagos registrados';
+    }
+
+    return {
+      pagos,
+      esCredito,
+      facturaStatusId,
+      facturaTimbrada,
+      facturaGlobalTimbrada,
+      corteEstado,
+      corteCerrado,
+      motivoBloqueo,
+    };
+  }
+
+  private round2(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private normalizarPagos(pagos: PagoVenta[]): {
+    pagos: PagoVenta[];
+    fusiones: string[];
+    eliminados: PagoVenta[];
+  } {
+    const porForma = new Map<FormaPago, PagoVenta>();
+    const mayorReferencia = new Map<FormaPago, number>();
+    const fusiones: string[] = [];
+    const eliminados: PagoVenta[] = [];
+
+    for (const pago of pagos) {
+      const existente = porForma.get(pago.formaPago);
+      if (!existente) {
+        porForma.set(pago.formaPago, pago);
+        mayorReferencia.set(pago.formaPago, Number(pago.monto));
+        continue;
+      }
+
+      const montoExistente = Number(existente.monto);
+      const montoNuevo = Number(pago.monto);
+      const mayor =
+        mayorReferencia.get(pago.formaPago) ?? montoExistente;
+      if (montoNuevo > mayor && pago.referencia) {
+        existente.referencia = pago.referencia;
+        mayorReferencia.set(pago.formaPago, montoNuevo);
+      } else if (!existente.referencia && pago.referencia) {
+        existente.referencia = pago.referencia;
+      }
+
+      const total = this.round2(montoExistente + montoNuevo);
+      fusiones.push(
+        `${pago.formaPago}: ${montoExistente.toFixed(2)} + ${montoNuevo.toFixed(2)} = ${total.toFixed(2)}`,
+      );
+      existente.monto = total;
+      eliminados.push(pago);
+    }
+
+    return { pagos: Array.from(porForma.values()), fusiones, eliminados };
+  }
+
+  private derivarMetodoPago(pagos: PagoVenta[]): MetodoPago {
+    if (pagos.length === 0) return MetodoPago.EFECTIVO;
+    const metodos = pagos.map((p) =>
+      this.convertirFormaPagoAMetodoPago(p.formaPago),
+    );
+    const primero = metodos[0];
+    return metodos.every((m) => m === primero) ? primero : MetodoPago.EFECTIVO;
+  }
+
+  private formaPagoPrincipal(pagos: PagoVenta[]): FormaPago {
+    if (pagos.length === 0) return FormaPago.EFECTIVO;
+    return [...pagos].sort((a, b) => Number(b.monto) - Number(a.monto))[0]
+      .formaPago;
   }
 
   async getTicketData(id: string): Promise<any> {

@@ -8,10 +8,12 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { VentasService } from './ventas.service';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { PreviewDescuentoDto } from './dto/preview-descuento.dto';
+import { UpdatePagosVentaDto } from './dto/update-pagos-venta.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('ventas')
@@ -106,10 +108,36 @@ export class VentasController {
     return this.ventasService.getTicketData(id);
   }
 
+  @Get(':id/pago-editable')
+  @UseGuards(JwtAuthGuard)
+  getPagoEditable(@Param('id') id: string, @Request() req) {
+    if (req.user?.tipo !== 'admin') {
+      throw new ForbiddenException(
+        'Solo un administrador puede corregir el pago de una venta',
+      );
+    }
+    return this.ventasService.getPagoEditable(id, req.user);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {
     return this.ventasService.findOne(id);
+  }
+
+  @Patch(':id/metodo-pago')
+  @UseGuards(JwtAuthGuard)
+  updateMetodoPago(
+    @Param('id') id: string,
+    @Body() dto: UpdatePagosVentaDto,
+    @Request() req,
+  ) {
+    if (req.user?.tipo !== 'admin') {
+      throw new ForbiddenException(
+        'Solo un administrador puede corregir el pago de una venta',
+      );
+    }
+    return this.ventasService.updatePagosVenta(id, dto, req.user);
   }
 
   @Patch(':id/cancelar')

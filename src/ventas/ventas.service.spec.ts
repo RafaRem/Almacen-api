@@ -18,7 +18,8 @@ import { CorteCajaService } from '../corte-caja/corte-caja.service';
 import { CreditosService } from '../creditos/creditos.service';
 import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Factura, FacturaStatus } from '../facturas/entities/factura.entity';
 
 const mockQueryBuilder = {
   leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -45,6 +46,8 @@ const mockManager = {
   create: jest.fn(),
   save: jest.fn(),
   find: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
 };
 
 const mockDetallesQueryBuilder = {
@@ -266,6 +269,201 @@ describe('VentasService', () => {
       expect(service.convertirFormaPagoAMetodoPago('99')).toBe(
         MetodoPago.TARJETA,
       );
+    });
+  });
+
+  describe('getPagoEditable()', () => {
+    it('rechaza usuarios que no son admin', async () => {
+      await expect(
+        service.getPagoEditable('venta-1', { tipo: 'usuario' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('bloquea ventas a crédito', async () => {
+      mockVentasRepository.findOne.mockResolvedValue({
+        id: 'venta-1',
+        folio: 1,
+        statusId: 1,
+        metodoPago: MetodoPago.CREDITO,
+      });
+      mockPagosRepository.find.mockResolvedValue([
+        { id: 'pago-1', formaPago: '01', monto: 100 },
+      ]);
+      mockDataSource.query.mockResolvedValue([]);
+
+      const info = await service.getPagoEditable('venta-1', { tipo: 'admin' });
+
+      expect(info.puedeEditar).toBe(false);
+      expect(info.esCredito).toBe(true);
+      expect(info.motivoBloqueo).toContain('crédito');
+    });
+
+    it('bloquea ventas con factura timbrada', async () => {
+      mockVentasRepository.findOne.mockResolvedValue({
+        id: 'venta-1',
+        folio: 1,
+        statusId: 1,
+        metodoPago: MetodoPago.EFECTIVO,
+      });
+      mockPagosRepository.find.mockResolvedValue([
+        { id: 'pago-1', formaPago: '01', monto: 100 },
+      ]);
+      mockDataSource.query
+        .mockResolvedValueOnce([{ statusId: 2 }])
+        .mockResolvedValueOnce([{ timbrada: 1 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const info = await service.getPagoEditable('venta-1', { tipo: 'admin' });
+
+      expect(info.facturaTimbrada).toBe(true);
+      expect(info.puedeEditar).toBe(false);
+      expect(info.motivoBloqueo).toContain('timbrada');
+    });
+  });
+
+  describe('updatePagosVenta()', () => {
+    it('actualiza pagos, método y factura borrador', async () => {
+      const venta = {
+        id: 'venta-1',
+        folio: 1,
+        statusId: 1,
+        metodoPago: MetodoPago.EFECTIVO,
+        total: 100,
+        observaciones: null,
+      };
+      mockVentasRepository.findOne.mockResolvedValue(venta);
+      mockPagosRepository.find.mockResolvedValue([
+        { id: 'pago-1', formaPago: '01', monto: 100, referencia: null },
+      ]);
+      mockDataSource.query.mockResolvedValue([]);
+      mockDataSource.transaction.mockImplementation(
+        (cb: (manager: typeof mockManager) => Promise<boolean>) =>
+          cb(mockManager),
+      );
+      mockManager.update.mockResolvedValue({ affected: 1 });
+      const findOneSpy = jest.spyOn(service, 'findOne').mockResolvedValue(
+        { ...venta, pagos: [] } as unknown as Awaited<
+          ReturnType<VentasService['findOne']>
+        >,
+      );
+
+      try {
+        const result = (await service.updatePagosVenta(
+          'venta-1',
+          {
+            pagos: [
+              { id: 'pago-1', formaPago: '04' as any, monto: 100 },
+            ],
+          },
+          { id: 'u1', tipo: 'admin', name: 'Admin' },
+        )) as { facturaBorradorActualizada: boolean };
+
+        expect(mockManager.update).toHaveBeenCalledWith(
+          PagoVenta,
+          'pago-1',
+          expect.objectContaining({ formaPago: '04' }),
+        );
+        expect(mockManager.update).toHaveBeenCalledWith(
+          Venta,
+          'venta-1',
+          expect.objectContaining({ metodoPago: MetodoPago.TARJETA }),
+        );
+        expect(mockManager.update).toHaveBeenCalledWith(
+          Factura,
+          { ventaId: 'venta-1', statusId: FacturaStatus.BORRADOR },
+          { formaPago: '04' },
+        );
+        expect(result.facturaBorradorActualizada).toBe(true);
+      } finally {
+        findOneSpy.mockRestore();
+      }
+    });
+
+    it('fusiona pagos duplicados al conservar una sola fila con la suma', async () => {
+      const venta = {
+        id: 'venta-1',
+        folio: 1,
+        statusId: 1,
+        metodoPago: MetodoPago.EFECTIVO,
+        total: 100,
+        observaciones: null,
+      };
+      mockVentasRepository.findOne.mockResolvedValue(venta);
+      mockPagosRepository.find.mockResolvedValue([
+        { id: 'pago-1', formaPago: '01', monto: 50, referencia: 'A' },
+        { id: 'pago-2', formaPago: '04', monto: 50, referencia: 'B' },
+      ]);
+      mockDataSource.query.mockResolvedValue([]);
+      mockDataSource.transaction.mockImplementation(
+        (cb: (manager: typeof mockManager) => Promise<boolean>) =>
+          cb(mockManager),
+      );
+      mockManager.update.mockResolvedValue({ affected: 1 });
+      mockManager.delete.mockResolvedValue({ affected: 1 });
+      const findOneSpy = jest.spyOn(service, 'findOne').mockResolvedValue(
+        { ...venta, pagos: [] } as unknown as Awaited<
+          ReturnType<VentasService['findOne']>
+        >,
+      );
+
+      try {
+        await service.updatePagosVenta(
+          'venta-1',
+          {
+            pagos: [
+              { id: 'pago-1', formaPago: '01' as any, monto: 100 },
+            ],
+          },
+          { id: 'u1', tipo: 'admin', name: 'Admin' },
+        );
+
+        expect(mockManager.update).toHaveBeenCalledWith(
+          PagoVenta,
+          'pago-1',
+          expect.objectContaining({ formaPago: '01', monto: 100 }),
+        );
+        expect(mockManager.delete).toHaveBeenCalledWith(PagoVenta, [
+          'pago-2',
+        ]);
+        expect(mockManager.update).toHaveBeenCalledWith(
+          Venta,
+          'venta-1',
+          expect.objectContaining({ metodoPago: MetodoPago.EFECTIVO }),
+        );
+      } finally {
+        findOneSpy.mockRestore();
+      }
+    });
+
+    it('rechaza si la suma final no coincide con el total', async () => {
+      const venta = {
+        id: 'venta-1',
+        folio: 1,
+        statusId: 1,
+        metodoPago: MetodoPago.EFECTIVO,
+        total: 100,
+        observaciones: null,
+      };
+      mockVentasRepository.findOne.mockResolvedValue(venta);
+      mockPagosRepository.find.mockResolvedValue([
+        { id: 'pago-1', formaPago: '01', monto: 50, referencia: null },
+        { id: 'pago-2', formaPago: '04', monto: 50, referencia: null },
+      ]);
+      mockDataSource.query.mockResolvedValue([]);
+
+      await expect(
+        service.updatePagosVenta(
+          'venta-1',
+          {
+            pagos: [
+              { id: 'pago-1', formaPago: '01' as any, monto: 50 },
+            ],
+          },
+          { id: 'u1', tipo: 'admin', name: 'Admin' },
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

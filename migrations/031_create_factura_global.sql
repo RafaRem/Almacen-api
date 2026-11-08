@@ -4,7 +4,7 @@
 CREATE SEQUENCE IF NOT EXISTS factura_global_folio_seq START 1;
 
 CREATE TABLE IF NOT EXISTS factura_global (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   periodicidad varchar(2) NOT NULL,
   variante varchar(50) NOT NULL DEFAULT 'publicoGeneral',
   serie varchar(10),
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS factura_global (
 );
 
 CREATE TABLE IF NOT EXISTS factura_global_detalle (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   factura_global_id uuid NOT NULL REFERENCES factura_global(id) ON DELETE CASCADE,
   venta_id uuid NOT NULL REFERENCES ventas(id),
   folio int NOT NULL,

@@ -10,7 +10,7 @@ export class CreateFacturaGlobal1781000000013 implements MigrationInterface {
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "factura_global" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "periodicidad" varchar(2) NOT NULL,
         "variante" varchar(50) NOT NULL DEFAULT 'publicoGeneral',
         "serie" varchar(10),
@@ -39,7 +39,7 @@ export class CreateFacturaGlobal1781000000013 implements MigrationInterface {
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "factura_global_detalle" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "factura_global_id" uuid NOT NULL,
         "venta_id" uuid NOT NULL,
         "folio" int NOT NULL,

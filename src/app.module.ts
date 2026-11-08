@@ -40,6 +40,7 @@ import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
 import { RecepcionModule } from './recepciones/recepcion.module';
 import { UpdatesModule } from './updates/updates.module';
 import { CorteCajaModule } from './corte-caja/corte-caja.module';
+import { FacturacionGlobalModule } from './facturacion-global/facturacion-global.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { CorteCajaModule } from './corte-caja/corte-caja.module';
     DashboardModule,
     UpdatesModule,
     CorteCajaModule,
+    FacturacionGlobalModule,
   ],
   controllers: [AppController],
   providers: [AppService],

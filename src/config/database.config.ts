@@ -37,6 +37,8 @@ import { FacturaDetalle } from '../facturas/entities/factura-detalle.entity';
 import { CuentaPorCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 import { Abono } from '../abonos/entities/abono.entity';
 import { CorteCaja } from '../corte-caja/entities/corte-caja.entity';
+import { FacturaGlobal } from '../facturacion-global/entities/factura-global.entity';
+import { FacturaGlobalDetalle } from '../facturacion-global/entities/factura-global-detalle.entity';
 import { CorteCajaVenta } from '../corte-caja/entities/corte-caja-venta.entity';
 
 export const databaseEntities = [
@@ -78,6 +80,8 @@ export const databaseEntities = [
   Abono,
   CorteCaja,
   CorteCajaVenta,
+  FacturaGlobal,
+  FacturaGlobalDetalle,
 ];
 
 export const getDatabaseConfig = (

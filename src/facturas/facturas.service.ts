@@ -86,6 +86,22 @@ export class FacturasService {
           `La venta ${ventaId} ya tiene una factura asociada`,
         );
       }
+
+      const enGlobal = await this.facturaRepository.manager.query(
+        `SELECT 1
+         FROM factura_global_detalle d
+         JOIN factura_global g ON g.id = d.factura_global_id
+         WHERE d.venta_id = $1
+           AND d.activo = true
+           AND g.estado IN ('BORRADOR', 'TIMBRADA')
+         LIMIT 1`,
+        [ventaId],
+      );
+      if (enGlobal.length > 0) {
+        throw new BadRequestException(
+          'La venta pertenece a una factura global activa. Cancela o corrige la factura global antes de facturarla individualmente.',
+        );
+      }
     }
 
     let nuevoFolio: number;

@@ -562,16 +562,28 @@ export class VentasService {
     const facturaJoin = filtrarPorFactura
       ? 'LEFT JOIN facturas f ON f.ventaid = v.id'
       : '';
+    const globalJoin = `LEFT JOIN (
+        SELECT DISTINCT ON (d.venta_id)
+               d.venta_id, g.id, g.estado, g.serie, g.folio
+        FROM factura_global_detalle d
+        JOIN factura_global g ON g.id = d.factura_global_id
+        WHERE d.activo = true
+          AND g.estado IN ('BORRADOR', 'TIMBRADA')
+        ORDER BY d.venta_id, g.created_at DESC
+      ) fg ON fg.venta_id = v.id`;
 
-    let countSql = `SELECT COUNT(*) as total FROM ventas v ${facturaJoin} WHERE 1=1`;
+    let countSql = `SELECT COUNT(*) as total FROM ventas v ${globalJoin} ${facturaJoin} WHERE 1=1`;
     let sql = `
       SELECT v.id, v.folio, v.subtotal, v.descuentoaplicado, v.iva, v.total,
              v.metodopago, v.statusid, v.createdat, v.updatedat,
              v.clienteid, v.usuarioid,
              c.id as cuenta_id, c.monto_pendiente, c.id_status as cuenta_status,
              cl.id as cl_id, cl.nombre as cl_nombre, cl."apellidoPaterno" as cl_ap, cl."apellidoMaterno" as cl_am, cl.empresa as cl_empresa,
-             u.id as u_id, u.name as u_name
+             u.id as u_id, u.name as u_name,
+             fg.id as fg_id, fg.estado as fg_estado,
+             fg.serie as fg_serie, fg.folio as fg_folio
       FROM ventas v
+      ${globalJoin}
       ${facturaJoin}
       LEFT JOIN cuenta_por_cobrar c ON c.venta_id = v.id
       LEFT JOIN clientes cl ON cl.id = v.clienteid
@@ -635,8 +647,11 @@ export class VentasService {
       const facturaStatus = parseInt(String(filters!.facturaStatusId), 10);
       if (!Number.isNaN(facturaStatus)) {
         if (facturaStatus === 0) {
-          sql += ` AND f.id IS NULL`;
-          countSql += ` AND f.id IS NULL`;
+          sql += ` AND f.id IS NULL AND fg.id IS NULL`;
+          countSql += ` AND f.id IS NULL AND fg.id IS NULL`;
+        } else if (facturaStatus === 4) {
+          sql += ` AND fg.id IS NOT NULL`;
+          countSql += ` AND fg.id IS NOT NULL`;
         } else {
           sql += ` AND f."statusId" = $${p++}`;
           countSql += ` AND f."statusId" = $${p - 1}`;
@@ -697,6 +712,10 @@ export class VentasService {
         id: r.u_id,
         name: r.u_name,
       } : null,
+      facturaGlobalId: r.fg_id || null,
+      facturaGlobalEstado: r.fg_estado || null,
+      facturaGlobalSerie: r.fg_serie || null,
+      facturaGlobalFolio: r.fg_folio ? parseInt(r.fg_folio, 10) : null,
       cuentaPorCobrarId: r.cuenta_id || null,
       montoPendiente: r.monto_pendiente ? parseFloat(r.monto_pendiente) : null,
       cuentaPorCobrarStatus: r.cuenta_status ? parseInt(r.cuenta_status, 10) : null,

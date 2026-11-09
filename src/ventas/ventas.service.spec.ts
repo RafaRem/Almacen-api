@@ -28,6 +28,7 @@ const mockQueryBuilder = {
   take: jest.fn().mockReturnThis(),
   andWhere: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
+  getMany: jest.fn(),
   getManyAndCount: jest.fn(),
   getOne: jest.fn(),
   select: jest.fn().mockReturnThis(),
@@ -468,63 +469,115 @@ describe('VentasService', () => {
   });
 
   describe('findAll()', () => {
+    const baseRow = {
+      id: 'venta-1',
+      folio: '1',
+      subtotal: '100.00',
+      descuentoaplicado: '0.00',
+      iva: '16.00',
+      total: '116.00',
+      metodopago: 'EFECTIVO',
+      statusid: 1,
+      createdat: new Date('2024-01-15T10:00:00Z'),
+      updatedat: new Date('2024-01-15T10:00:00Z'),
+      clienteid: null,
+      usuarioid: 'user-1',
+      cuenta_id: null,
+      monto_pendiente: null,
+      cuenta_status: null,
+      cl_id: null,
+      cl_nombre: null,
+      cl_ap: null,
+      cl_am: null,
+      cl_empresa: null,
+      u_id: 'user-1',
+      u_name: 'Admin',
+      fg_id: null,
+      fg_estado: null,
+      fg_serie: null,
+      fg_folio: null,
+    };
+
+    const mockFindAllQuery = (
+      rows: Record<string, unknown>[] = [baseRow],
+      total = rows.length,
+    ) => {
+      mockDataSource.query.mockImplementation((sql: string) =>
+        sql.includes('COUNT(*)')
+          ? Promise.resolve([{ total: String(total) }])
+          : Promise.resolve(rows),
+      );
+    };
+
     beforeEach(() => {
-      mockQueryBuilder.getManyAndCount.mockResolvedValue([
-        [{ id: 'venta-1', folio: 1 }],
-        1,
-      ]);
+      mockQueryBuilder.getMany.mockResolvedValue([]);
     });
 
     it('should return paginated sales', async () => {
+      mockFindAllQuery();
       const result = await service.findAll(0, 10);
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('LIMIT 10'),
+        expect.any(Array),
+      );
     });
 
     it('should apply date filters', async () => {
+      mockFindAllQuery();
       await service.findAll(0, 10, {
         fechaFrom: '2024-01-01',
         fechaTo: '2024-12-31',
       });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'DATE(venta.createdAt) >= :fechaFrom',
-        { fechaFrom: '2024-01-01' },
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'DATE(venta.createdAt) <= :fechaTo',
-        { fechaTo: '2024-12-31' },
-      );
+      const [sql, params] = mockDataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('DATE(v.createdat) >= $1');
+      expect(sql).toContain('DATE(v.createdat) <= $2');
+      expect(params).toEqual(['2024-01-01', '2024-12-31']);
     });
 
     it('should apply clienteId filter', async () => {
+      mockFindAllQuery();
       await service.findAll(0, 20, { clienteId: 'cliente-1' });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.clienteId = :clienteId',
-        { clienteId: 'cliente-1' },
-      );
+      const [sql, params] = mockDataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('v.clienteid = $1');
+      expect(params).toEqual(['cliente-1']);
     });
 
     it('should apply usuarioId filter', async () => {
+      mockFindAllQuery();
       await service.findAll(0, 20, { usuarioId: 'user-1' });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.usuarioId = :usuarioId',
-        { usuarioId: 'user-1' },
-      );
+      const [sql, params] = mockDataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('v.usuarioid = $1');
+      expect(params).toEqual(['user-1']);
     });
 
     it('should use default pagination when not specified', async () => {
+      mockFindAllQuery();
       await service.findAll();
-      expect(mockQueryBuilder.skip).not.toHaveBeenCalled();
-      expect(mockQueryBuilder.take).not.toHaveBeenCalled();
+      const [sql] = mockDataSource.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).not.toContain('LIMIT');
+      expect(sql).not.toContain('OFFSET');
     });
 
     it('should apply statusId filter as number', async () => {
+      mockFindAllQuery();
       await service.findAll(0, 20, { statusId: '1' });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'venta.statusId = :statusId',
-        { statusId: 1 },
-      );
+      const [sql, params] = mockDataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('v.statusid = $1');
+      expect(params).toEqual([1]);
     });
   });
 

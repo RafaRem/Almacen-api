@@ -26,6 +26,12 @@ function round2(value: number): number {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
+type VentaPendienteGlobal = Awaited<
+  ReturnType<VentasService['findOne']>
+> & {
+  tieneDatosFiscales: boolean;
+};
+
 @Injectable()
 export class FacturacionGlobalService {
   private readonly logger = new Logger(FacturacionGlobalService.name);
@@ -106,12 +112,21 @@ export class FacturacionGlobalService {
     };
   }
 
-  private async getVentasPendientes(inicio: string, fin: string) {
-    const rows = await this.dataSource.query(
-      `SELECT v.id
+  private async getVentasPendientes(
+    inicio: string,
+    fin: string,
+  ): Promise<VentaPendienteGlobal[]> {
+    const rows = await this.dataSource.query<
+      Array<{ id: string; tiene_datos_fiscales: boolean }>
+    >(
+      `SELECT v.id,
+              EXISTS (
+                SELECT 1 FROM facturacion_cliente fc
+                WHERE fc.cliente_id = v.clienteid
+                  AND fc.status_id = 1
+              ) AS tiene_datos_fiscales
        FROM ventas v
        WHERE v.statusid = 1
-         AND v.clienteid IS NULL
          AND v.metodopago <> 'CREDITO'
          AND v.createdat >= $1::date
          AND v.createdat < ($2::date + interval '1 day')
@@ -130,9 +145,13 @@ export class FacturacionGlobalService {
       [inicio, fin],
     );
 
-    const ventas: any[] = [];
+    const ventas: VentaPendienteGlobal[] = [];
     for (const row of rows) {
-      ventas.push(await this.ventasService.findOne(row.id));
+      const venta = (await this.ventasService.findOne(
+        row.id,
+      )) as VentaPendienteGlobal;
+      venta.tieneDatosFiscales = Boolean(row.tiene_datos_fiscales);
+      ventas.push(venta);
     }
     return ventas;
   }
@@ -239,10 +258,24 @@ export class FacturacionGlobalService {
       ivaCalculado += vIva;
       subtotal += Number(venta.subtotal) || 0;
 
+      const clienteNombre = venta.cliente
+        ? [
+            venta.cliente.nombre,
+            venta.cliente.apellidoPaterno,
+            venta.cliente.apellidoMaterno,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .trim()
+        : 'Cliente General';
+
       return {
         id: venta.id,
         folio: venta.folio,
         fecha: venta.createdAt,
+        clienteId: venta.clienteId || null,
+        clienteNombre,
+        tieneDatosFiscales: Boolean(venta.tieneDatosFiscales),
         subtotal: Number(venta.subtotal) || 0,
         iva: Number(venta.iva) || 0,
         total: Number(venta.total) || 0,
@@ -272,6 +305,9 @@ export class FacturacionGlobalService {
         total: round2(subtotal + ivaCalculado),
         base16: round2(base16),
         base0: round2(base0),
+        ventasConDatosFiscales: ventasResumen.filter(
+          (v) => v.tieneDatosFiscales,
+        ).length,
       },
     };
   }

@@ -1045,21 +1045,45 @@ export class InventarioAlmacenService {
       let loteDestinoIdResolved = loteDestinoId;
 
       if (tipoDestino === 'nuevo') {
-        if (!nuevoNumeroLote) {
-          throw new BadRequestException('Debe proporcionar un número de lote para el nuevo lote');
+        const numeroNuevo = (nuevoNumeroLote || '').trim();
+        if (!numeroNuevo) {
+          throw new BadRequestException(
+            'Debe proporcionar un número de lote para el nuevo lote',
+          );
         }
         const loteRepo = manager.getRepository(Lote);
-        const existente = await loteRepo.findOne({ where: { numeroLote: nuevoNumeroLote } });
-        if (existente) {
-          throw new BadRequestException(`El número de lote "${nuevoNumeroLote}" ya existe`);
+        const loteOrigen = await loteRepo.findOne({
+          where: { id: loteOrigenId },
+        });
+        if (!loteOrigen) {
+          throw new BadRequestException('Lote de origen no encontrado');
         }
-        const loteOrigen = await loteRepo.findOne({ where: { id: loteOrigenId } });
-        if (!loteOrigen?.laboratorioId) {
-          throw new BadRequestException('El lote de origen no tiene laboratorio asignado');
+        if (!loteOrigen.laboratorioId) {
+          throw new BadRequestException(
+            'El lote de origen no tiene laboratorio asignado',
+          );
+        }
+        if (
+          loteOrigen.numeroLote.trim().toLowerCase() ===
+          numeroNuevo.toLowerCase()
+        ) {
+          throw new BadRequestException(
+            'El número de lote debe ser distinto al lote de origen',
+          );
+        }
+        const existente = await loteRepo.findOne({
+          where: { numeroLote: numeroNuevo },
+        });
+        if (existente) {
+          throw new BadRequestException(
+            `El número de lote "${numeroNuevo}" ya existe`,
+          );
         }
         const nuevoLote = loteRepo.create({
-          numeroLote: nuevoNumeroLote,
-          fechaCaducidad: nuevaFechaCaducidad ? new Date(nuevaFechaCaducidad) : loteOrigen.fechaCaducidad,
+          numeroLote: numeroNuevo,
+          fechaCaducidad: nuevaFechaCaducidad
+            ? new Date(nuevaFechaCaducidad)
+            : loteOrigen.fechaCaducidad,
           laboratorioId: loteOrigen.laboratorioId,
           statusId: 1,
         });
@@ -1098,7 +1122,7 @@ export class InventarioAlmacenService {
 
       const observaciones = JSON.stringify({
         loteDestinoId: loteDestinoIdResolved,
-        loteDestinoNumero: nuevoNumeroLote || 'existente',
+        loteDestinoNumero: (nuevoNumeroLote || '').trim() || 'existente',
       });
 
       const movimiento = manager.create(MovimientoAlmacen, {
@@ -1141,9 +1165,14 @@ export class InventarioAlmacenService {
         }
       }
 
-      const loteDestinoNumero = nuevoNumeroLote
-        || (await manager.getRepository(Lote).findOne({ where: { id: loteDestinoIdResolved } }))?.numeroLote
-        || 'desconocido';
+      const loteDestinoNumero =
+        (nuevoNumeroLote || '').trim() ||
+        (
+          await manager
+            .getRepository(Lote)
+            .findOne({ where: { id: loteDestinoIdResolved } })
+        )?.numeroLote ||
+        'desconocido';
 
       return { origen: inventarioOrigen, destino: savedDestino, loteDestinoNumero };
     });

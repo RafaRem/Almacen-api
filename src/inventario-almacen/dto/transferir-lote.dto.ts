@@ -1,4 +1,14 @@
-import { IsUUID, IsNumber, IsEnum, IsString, IsOptional, Min, IsIn, IsDateString } from 'class-validator';
+import {
+  IsUUID,
+  IsNumber,
+  IsEnum,
+  IsString,
+  IsNotEmpty,
+  Min,
+  IsIn,
+  IsDateString,
+  ValidateIf,
+} from 'class-validator';
 import { AlmacenTipo } from '../../common/enums/almacen-tipo.enum';
 
 export class TransferirLoteDto {
@@ -19,15 +29,16 @@ export class TransferirLoteDto {
   @IsIn(['existente', 'nuevo'])
   tipoDestino: string;
 
-  @IsOptional()
+  @ValidateIf((o) => o.tipoDestino === 'existente')
   @IsUUID()
   loteDestinoId?: string;
 
-  @IsOptional()
+  @ValidateIf((o) => o.tipoDestino === 'nuevo')
   @IsString()
+  @IsNotEmpty()
   nuevoNumeroLote?: string;
 
-  @IsOptional()
+  @ValidateIf((o) => o.tipoDestino === 'nuevo')
   @IsDateString()
   nuevaFechaCaducidad?: string;
 }

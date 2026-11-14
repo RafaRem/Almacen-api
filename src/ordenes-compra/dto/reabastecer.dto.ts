@@ -24,4 +24,8 @@ export class ReabastecerDto {
   @IsOptional()
   @IsBoolean()
   preview?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmarPendiente?: boolean;
 }

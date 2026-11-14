@@ -56,6 +56,12 @@ export class OrdenesCompraController {
     return this.ordenesCompraService.findBorradores();
   }
 
+  @Get('vinculables')
+  @UseGuards(JwtAuthGuard)
+  findVinculables() {
+    return this.ordenesCompraService.findVinculables();
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {
@@ -94,6 +100,12 @@ export class OrdenesCompraController {
   @UseGuards(JwtAuthGuard)
   recibir(@Param('id') id: string, @Body() recibirDto: RecibirOrdenCompraDto) {
     return this.ordenesCompraService.recibir(id, recibirDto);
+  }
+
+  @Post(':id/cerrar-parcial')
+  @UseGuards(JwtAuthGuard)
+  cerrarParcial(@Param('id') id: string) {
+    return this.ordenesCompraService.cerrarParcial(id);
   }
 
   @Patch(':id/status')

@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, EntityManager } from 'typeorm';
+import { Repository, EntityManager, In } from 'typeorm';
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { OrdenCompra } from './entities/orden-compra.entity';
 import { DetalleOrdenCompra } from './entities/detalle-orden-compra.entity';
@@ -135,6 +135,14 @@ export class OrdenesCompraService {
     return { data, total, page, limit };
   }
 
+  async findVinculables(): Promise<OrdenCompra[]> {
+    return this.ordenesRepository.find({
+      where: { status: In(['BORRADOR', 'PENDIENTE']) } as any,
+      relations: ['proveedor'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async findBorradores(): Promise<OrdenCompra[]> {
     return this.ordenesRepository.find({
       where: { status: 'BORRADOR' } as any,
@@ -249,11 +257,55 @@ export class OrdenesCompraService {
     return this.findOne(ordenId);
   }
 
+  private async getOrdenesPendientesSinRecepcion(
+    productoId: string,
+    proveedorId: string,
+  ): Promise<any[]> {
+    const detalles = await this.detallesRepository.find({
+      where: { productoId },
+      relations: [
+        'ordenCompra',
+        'ordenCompra.proveedor',
+        'ordenCompra.detalles',
+      ],
+    });
+
+    return (detalles || [])
+      .filter(
+        (detalle) =>
+          detalle.ordenCompra &&
+          detalle.ordenCompra.status === 'PENDIENTE' &&
+          detalle.ordenCompra.proveedorId === proveedorId,
+      )
+      .filter(
+        (detalle) =>
+          !(detalle.ordenCompra.detalles || []).some(
+            (d) => Number(d.cantidadRecibida) > 0,
+          ),
+      )
+      .map((detalle) => ({
+        id: detalle.ordenCompra.id,
+        folio: detalle.ordenCompra.folio,
+        proveedorId: detalle.ordenCompra.proveedorId,
+        proveedorNombre: detalle.ordenCompra.proveedor?.nombre || null,
+        fechaOrden: detalle.ordenCompra.fechaOrden,
+        fechaEsperada: detalle.ordenCompra.fechaEsperada,
+        cantidad: Number(detalle.cantidad) || 0,
+        cantidadRecibida: Number(detalle.cantidadRecibida) || 0,
+        cantidadPendiente: Math.max(
+          0,
+          (Number(detalle.cantidad) || 0) -
+            (Number(detalle.cantidadRecibida) || 0),
+        ),
+      }));
+  }
+
   async reabastecer(dto: {
     productoId: string;
     proveedorId?: string;
     cantidad?: number;
     preview?: boolean;
+    confirmarPendiente?: boolean;
   }): Promise<any> {
     this.logger.log(
       `reabastecer llamado con productoId=${dto.productoId}, proveedorId=${dto.proveedorId || 'ninguno'}, cantidad=${dto.cantidad}, preview=${dto.preview}`,
@@ -332,9 +384,16 @@ export class OrdenesCompraService {
           requiresProveedor: true,
           proveedores,
           producto: { id: producto.id, nombre: producto.nombre },
+          ordenesPendientes: [],
+          requiereConfirmacionPendiente: false,
         };
       }
     }
+
+    const ordenesPendientes = await this.getOrdenesPendientesSinRecepcion(
+      dto.productoId,
+      proveedor.id,
+    );
 
     // Calcular stock
     const stockResult = await this.inventarioRepository
@@ -365,6 +424,8 @@ export class OrdenesCompraService {
         stockMaximo: producto.stockMaximo || 10,
         stockMinimo: producto.stockMinimo,
         producto: { id: producto.id, nombre: producto.nombre },
+        ordenesPendientes,
+        requiereConfirmacionPendiente: ordenesPendientes.length > 0,
       };
     }
 
@@ -376,6 +437,14 @@ export class OrdenesCompraService {
       throw new BadRequestException('El producto tiene suficiente stock');
     }
     this.logger.log(`Cantidad a reabastecer: ${cantidad}`);
+
+    if (ordenesPendientes.length > 0 && !dto.confirmarPendiente) {
+      return {
+        requiresConfirmacionPendiente: true,
+        ordenesPendientes,
+        producto: { id: producto.id, nombre: producto.nombre },
+      };
+    }
 
     // Buscar OC BORRADOR del proveedor
     const ocExistente = await this.ordenesRepository.findOne({
@@ -417,12 +486,68 @@ export class OrdenesCompraService {
   }
 
   async cambiarStatus(id: string, status: string): Promise<OrdenCompra> {
-    const VALID_STATUSES = ['BORRADOR', 'PENDIENTE', 'COMPLETADA', 'CANCELADA'];
+    const VALID_STATUSES = [
+      'BORRADOR',
+      'PENDIENTE',
+      'COMPLETADA',
+      'CERRADA_PARCIAL',
+      'CANCELADA',
+    ];
     if (!VALID_STATUSES.includes(status)) {
       throw new BadRequestException(`Status inválido: ${status}`);
     }
     const orden = await this.findOne(id);
+
+    if (orden.status === 'CERRADA_PARCIAL' && status !== 'CERRADA_PARCIAL') {
+      throw new BadRequestException(
+        'Una orden cerrada parcialmente no puede reabrirse',
+      );
+    }
+
     orden.status = status;
+    await this.ordenesRepository.save(orden);
+    return this.findOne(id);
+  }
+
+  async cerrarParcial(id: string): Promise<OrdenCompra> {
+    const orden = await this.findOne(id);
+
+    if (orden.status !== 'PENDIENTE') {
+      throw new BadRequestException(
+        'Solo las órdenes pendientes pueden cerrarse parcialmente',
+      );
+    }
+
+    const detalles = orden.detalles || [];
+    if (detalles.length === 0) {
+      throw new BadRequestException('La orden no tiene detalles');
+    }
+
+    const hayRecepcion = detalles.some(
+      (detalle) => Number(detalle.cantidadRecibida) > 0,
+    );
+    if (!hayRecepcion) {
+      throw new BadRequestException(
+        'La orden no tiene recepción parcial para cerrar',
+      );
+    }
+
+    const todosCompletos = detalles.every(
+      (detalle) =>
+        Number(detalle.cantidadRecibida) >= Number(detalle.cantidad),
+    );
+    if (todosCompletos) {
+      throw new BadRequestException('La orden ya está completamente recibida');
+    }
+
+    orden.status = 'CERRADA_PARCIAL';
+    const nota = 'Cerrada con recepción parcial';
+    orden.observaciones = orden.observaciones
+      ? orden.observaciones.includes(nota)
+        ? orden.observaciones
+        : `${orden.observaciones}\n${nota}`
+      : nota;
+
     await this.ordenesRepository.save(orden);
     return this.findOne(id);
   }
@@ -435,6 +560,11 @@ export class OrdenesCompraService {
 
     if (orden.status === 'COMPLETADA') {
       throw new BadRequestException('La orden ya está completada');
+    }
+    if (orden.status === 'CERRADA_PARCIAL') {
+      throw new BadRequestException(
+        'La orden está cerrada con recepción parcial',
+      );
     }
     if (orden.status === 'CANCELADA') {
       throw new BadRequestException('No se puede recibir una orden cancelada');
@@ -565,6 +695,11 @@ export class OrdenesCompraService {
     if (orden.status === 'COMPLETADA') {
       throw new BadRequestException(
         'No se puede eliminar una orden completada',
+      );
+    }
+    if (orden.status === 'CERRADA_PARCIAL') {
+      throw new BadRequestException(
+        'No se puede eliminar una orden cerrada parcialmente',
       );
     }
     orden.status = 'CANCELADA';

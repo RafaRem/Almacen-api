@@ -166,6 +166,24 @@ describe('OrdenesCompraService', () => {
     });
   });
 
+  describe('findVinculables()', () => {
+    it('devuelve las órdenes configuradas como vinculables', async () => {
+      ordenesRepository.find = jest.fn().mockResolvedValue([
+        { ...orden, status: 'BORRADOR' },
+        { ...orden, id: 'oc-2', folio: 'OC-2', status: 'PENDIENTE' },
+      ]);
+
+      const result = await service.findVinculables();
+
+      expect(result).toHaveLength(2);
+      expect(ordenesRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relations: ['proveedor'],
+        }),
+      );
+    });
+  });
+
   describe('findAll()', () => {
     it('returns all orders without filters', async () => {
       ordenesRepository.createQueryBuilder = jest.fn(() => ({
@@ -464,6 +482,7 @@ describe('OrdenesCompraService', () => {
       detallesRepository.findOne = jest.fn();
       detallesRepository.create = jest.fn();
       detallesRepository.save = jest.fn();
+      detallesRepository.find = jest.fn().mockResolvedValue([]);
     });
 
     it('throws NotFoundException when product not found', async () => {
@@ -514,6 +533,8 @@ describe('OrdenesCompraService', () => {
         requiresProveedor: true,
         proveedores: mockProveedores,
         producto: { id: 'prod-2', nombre: 'Ibuprofeno' },
+        ordenesPendientes: [],
+        requiereConfirmacionPendiente: false,
       });
     });
 
@@ -613,6 +634,156 @@ describe('OrdenesCompraService', () => {
       spyAddDetalle.mockRestore();
     });
 
+    it('requiere confirmación cuando el producto está en una OC pendiente sin recepción', async () => {
+      productoRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(productoConProveedor);
+      inventarioRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: 30 }),
+      }));
+      detallesRepository.find = jest.fn().mockResolvedValue([
+        {
+          productoId: 'prod-1',
+          cantidad: 20,
+          cantidadRecibida: 0,
+          ordenCompra: {
+            id: 'oc-pendiente',
+            folio: 'OC-PENDIENTE',
+            proveedorId: 'prov-1',
+            status: 'PENDIENTE',
+            proveedor: { nombre: 'Proveedor A' },
+            detalles: [{ cantidad: 20, cantidadRecibida: 0 }],
+          },
+        },
+      ]);
+
+      const result = await service.reabastecer({ productoId: 'prod-1' });
+
+      expect(result.requiresConfirmacionPendiente).toBe(true);
+      expect(result.ordenesPendientes).toHaveLength(1);
+      expect(result.ordenesPendientes[0].folio).toBe('OC-PENDIENTE');
+    });
+
+    it('no alerta si la OC pendiente es de otro proveedor', async () => {
+      productoRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(productoConProveedor);
+      inventarioRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: 30 }),
+      }));
+      detallesRepository.find = jest.fn().mockResolvedValue([
+        {
+          productoId: 'prod-1',
+          cantidad: 20,
+          cantidadRecibida: 0,
+          ordenCompra: {
+            id: 'oc-otro',
+            folio: 'OC-OTRO',
+            proveedorId: 'prov-2',
+            status: 'PENDIENTE',
+            detalles: [{ cantidad: 20, cantidadRecibida: 0 }],
+          },
+        },
+      ]);
+      ordenesRepository.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(orden);
+      ordenesRepository.create = jest.fn().mockReturnValue(orden);
+      ordenesRepository.save = jest.fn().mockResolvedValue(orden);
+      ordenesRepository.createQueryBuilder = mockQueryBuilder(null);
+
+      const result = await service.reabastecer({ productoId: 'prod-1' });
+
+      expect(result.requiresConfirmacionPendiente).toBeUndefined();
+      expect(result.esNueva).toBe(true);
+    });
+
+    it('no alerta si la OC pendiente ya tiene recepción parcial', async () => {
+      productoRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(productoConProveedor);
+      inventarioRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: 30 }),
+      }));
+      detallesRepository.find = jest.fn().mockResolvedValue([
+        {
+          productoId: 'prod-1',
+          cantidad: 20,
+          cantidadRecibida: 0,
+          ordenCompra: {
+            id: 'oc-parcial',
+            folio: 'OC-PARCIAL',
+            proveedorId: 'prov-1',
+            status: 'PENDIENTE',
+            detalles: [{ cantidad: 10, cantidadRecibida: 5 }],
+          },
+        },
+      ]);
+      ordenesRepository.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(orden);
+      ordenesRepository.create = jest.fn().mockReturnValue(orden);
+      ordenesRepository.save = jest.fn().mockResolvedValue(orden);
+      ordenesRepository.createQueryBuilder = mockQueryBuilder(null);
+
+      const result = await service.reabastecer({ productoId: 'prod-1' });
+
+      expect(result.requiresConfirmacionPendiente).toBeUndefined();
+      expect(result.esNueva).toBe(true);
+    });
+
+    it('permite continuar cuando confirmarPendiente es true', async () => {
+      productoRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(productoConProveedor);
+      inventarioRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: 30 }),
+      }));
+      detallesRepository.find = jest.fn().mockResolvedValue([
+        {
+          productoId: 'prod-1',
+          cantidad: 20,
+          cantidadRecibida: 0,
+          ordenCompra: {
+            id: 'oc-pendiente',
+            folio: 'OC-PENDIENTE',
+            proveedorId: 'prov-1',
+            status: 'PENDIENTE',
+            detalles: [{ cantidad: 20, cantidadRecibida: 0 }],
+          },
+        },
+      ]);
+      ordenesRepository.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(orden);
+      ordenesRepository.create = jest.fn().mockReturnValue(orden);
+      ordenesRepository.save = jest.fn().mockResolvedValue(orden);
+      ordenesRepository.createQueryBuilder = mockQueryBuilder(null);
+
+      const result = await service.reabastecer({
+        productoId: 'prod-1',
+        confirmarPendiente: true,
+      });
+
+      expect(result.requiresConfirmacionPendiente).toBeUndefined();
+      expect(result.esNueva).toBe(true);
+    });
+
     it('crea nueva OC cuando no hay BORRADOR del proveedor', async () => {
       productoRepository.findOne = jest
         .fn()
@@ -636,6 +807,65 @@ describe('OrdenesCompraService', () => {
       expect(result.esNueva).toBe(true);
       expect(result.yaExistia).toBe(false);
       expect(result.orden).toBeDefined();
+    });
+  });
+
+  describe('cerrarParcial()', () => {
+    const ordenPendiente = {
+      ...orden,
+      status: 'PENDIENTE',
+      observaciones: null,
+      detalles: [
+        { ...detalle, cantidad: 10, cantidadRecibida: 5 },
+      ],
+    };
+
+    it('cierra la orden con recepción parcial', async () => {
+      ordenesRepository.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(ordenPendiente)
+        .mockResolvedValue(ordenPendiente);
+      ordenesRepository.save = jest.fn().mockResolvedValue(ordenPendiente);
+
+      const result = await service.cerrarParcial('oc-1');
+
+      expect(result.status).toBe('CERRADA_PARCIAL');
+      expect(result.observaciones).toContain('recepción parcial');
+      expect(ordenesRepository.save).toHaveBeenCalled();
+    });
+
+    it('rechaza una orden sin recepción', async () => {
+      const sinRecepcion = {
+        ...ordenPendiente,
+        detalles: [{ ...detalle, cantidad: 10, cantidadRecibida: 0 }],
+      };
+      ordenesRepository.findOne = jest.fn().mockResolvedValue(sinRecepcion);
+
+      await expect(service.cerrarParcial('oc-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('rechaza una orden completamente recibida', async () => {
+      const completa = {
+        ...ordenPendiente,
+        detalles: [{ ...detalle, cantidad: 10, cantidadRecibida: 10 }],
+      };
+      ordenesRepository.findOne = jest.fn().mockResolvedValue(completa);
+
+      await expect(service.cerrarParcial('oc-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('rechaza una orden que no está PENDIENTE', async () => {
+      ordenesRepository.findOne = jest
+        .fn()
+        .mockResolvedValue({ ...ordenPendiente, status: 'BORRADOR' });
+
+      await expect(service.cerrarParcial('oc-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
   });
 });

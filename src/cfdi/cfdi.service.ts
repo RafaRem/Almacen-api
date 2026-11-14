@@ -68,6 +68,7 @@ export class CfdiService {
       folio: string;
       status: string;
       productosVinculados: number;
+      productosNoVinculados: string[];
     };
   }> {
     const xmlContent = dto.xmlContent || '';
@@ -119,7 +120,7 @@ export class CfdiService {
       });
       const recepcion = await recepcionRepo.save(recepcionEntity);
 
-      const { productosCreados, productosExistentes } =
+      const { productosCreados, productosExistentes, productoIdMap } =
         await this.processProductos(
           dto.productos || [],
           cfdiData.conceptos,
@@ -133,12 +134,25 @@ export class CfdiService {
         );
 
       let ordenCompraVinculada:
-        | { folio: string; status: string; productosVinculados: number }
+        | {
+            folio: string;
+            status: string;
+            productosVinculados: number;
+            productosNoVinculados: string[];
+          }
         | undefined;
       if (dto.ordenCompraId) {
+        const productosVinculacion = (dto.productos || [])
+          .filter((producto) => Number(producto.cantidad) > 0)
+          .map((producto) => ({
+            productoId:
+              productoIdMap.get(producto.productoId) || producto.productoId,
+            cantidad: producto.cantidad,
+          }));
+
         ordenCompraVinculada = await this.vincularConOrdenCompra(
           dto.ordenCompraId,
-          dto.productos || [],
+          productosVinculacion,
           manager,
           cfdiData.emisor.rfc,
           proveedor.id,
@@ -311,6 +325,7 @@ export class CfdiService {
       stockMinimo?: number;
       stockMaximo?: number;
       precioVenta?: number;
+      margenRecomendado?: number;
     }[],
     conceptos: ConceptoDto[],
     userId: string,
@@ -323,9 +338,11 @@ export class CfdiService {
   ): Promise<{
     productosCreados: { nombre: string; codigoBarras: string }[];
     productosExistentes: { nombre: string; codigoBarras: string }[];
+    productoIdMap: Map<string, string>;
   }> {
     const productosCreados: { nombre: string; codigoBarras: string }[] = [];
     const productosExistentes: { nombre: string; codigoBarras: string }[] = [];
+    const productoIdMap = new Map<string, string>();
     const productoRepo = manager.getRepository(Producto);
 
     for (const prodDto of productosDto) {
@@ -347,6 +364,16 @@ export class CfdiService {
         where: { codigoBarras: prodDto.productoId },
       });
 
+      const margenCalculado = this.calcularMargen(
+        prodDto.precioVenta,
+        concepto?.valorUnitario,
+      );
+      const margenRecomendado =
+        margenCalculado ??
+        (prodDto.margenRecomendado != null
+          ? Number(prodDto.margenRecomendado)
+          : null);
+
       if (!producto) {
         producto = await this.crearNuevoProducto(
           concepto,
@@ -354,6 +381,7 @@ export class CfdiService {
           laboratorioId,
           manager,
           cfdiData.objetoImp || '00',
+          margenRecomendado,
         );
         productosCreados.push({
           nombre: producto.nombre,
@@ -363,12 +391,17 @@ export class CfdiService {
         // Actualizar impuestoAplicado en producto existente
         await productoRepo.update(producto.id, {
           impuestoAplicado: cfdiData.objetoImp || '00',
+          ...(margenRecomendado != null
+            ? { margenRecomendado }
+            : {}),
         });
         productosExistentes.push({
           nombre: producto.nombre,
           codigoBarras: producto.codigoBarras,
         });
       }
+
+      productoIdMap.set(prodDto.productoId, producto.id);
 
       const inventario = await this.inventarioAlmacenService.agregarStock(
         producto.id,
@@ -397,7 +430,24 @@ export class CfdiService {
       );
     }
 
-    return { productosCreados, productosExistentes };
+    return { productosCreados, productosExistentes, productoIdMap };
+  }
+
+  private calcularMargen(
+    precioVenta?: number,
+    costo?: number,
+  ): number | null {
+    const precio = Number(precioVenta);
+    const costoUnitario = Number(costo);
+    if (
+      !Number.isFinite(precio) ||
+      !Number.isFinite(costoUnitario) ||
+      precio <= 0 ||
+      costoUnitario <= 0
+    ) {
+      return null;
+    }
+    return Math.round((precio / costoUnitario - 1) * 10000) / 100;
   }
 
   private async crearNuevoProducto(
@@ -406,6 +456,7 @@ export class CfdiService {
     laboratorioId: string,
     manager: EntityManager,
     impuestoAplicado: string = '00',
+    margenRecomendado?: number | null,
   ): Promise<Producto> {
     const repo = manager.getRepository(Producto);
     const productoData: Partial<Producto> = {
@@ -414,6 +465,7 @@ export class CfdiService {
       descripcion: concepto?.descripcion || '',
       stockMinimo: prodDto.stockMinimo || 10,
       stockMaximo: prodDto.stockMaximo || 100,
+      margenRecomendado: margenRecomendado ?? null,
       claveProdServ: concepto?.claveProdServ || undefined,
       claveUnidad: concepto?.claveUnidad || undefined,
       laboratorioId: laboratorioId,
@@ -492,7 +544,12 @@ export class CfdiService {
     manager: EntityManager,
     emisorRfc: string,
     proveedorId: string,
-  ): Promise<{ folio: string; status: string; productosVinculados: number }> {
+  ): Promise<{
+    folio: string;
+    status: string;
+    productosVinculados: number;
+    productosNoVinculados: string[];
+  }> {
     const ordenRepo = manager.getRepository(OrdenCompra);
     const detalleRepo = manager.getRepository(DetalleOrdenCompra);
 
@@ -511,6 +568,11 @@ export class CfdiService {
     if (orden.status === 'COMPLETADA') {
       throw new BadRequestException('La orden de compra ya está completada');
     }
+    if (orden.status === 'CERRADA_PARCIAL') {
+      throw new BadRequestException(
+        'La orden de compra está cerrada con recepción parcial',
+      );
+    }
     if (orden.status === 'CANCELADA') {
       throw new BadRequestException('La orden de compra está cancelada');
     }
@@ -525,9 +587,13 @@ export class CfdiService {
     const detallesMap = new Map(orden.detalles.map((d) => [d.productoId, d]));
 
     let productosVinculados = 0;
+    const productosNoVinculados: string[] = [];
     for (const producto of productos) {
       const detalle = detallesMap.get(producto.productoId);
-      if (!detalle) continue;
+      if (!detalle) {
+        productosNoVinculados.push(producto.productoId);
+        continue;
+      }
 
       const nuevaRecibida = detalle.cantidadRecibida + producto.cantidad;
       if (nuevaRecibida > detalle.cantidad) {
@@ -575,6 +641,7 @@ export class CfdiService {
           ? 'PENDIENTE'
           : statusActual,
       productosVinculados,
+      productosNoVinculados,
     };
   }
 

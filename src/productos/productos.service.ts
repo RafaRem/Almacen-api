@@ -186,6 +186,7 @@ export class ProductosService {
       codigoBarras: string;
       existe: boolean;
       nombre?: string;
+      margenRecomendado?: number | null;
       tieneInventario: boolean;
     }[]
   > {
@@ -193,7 +194,12 @@ export class ProductosService {
       .createQueryBuilder('producto')
       .where('producto.codigoBarras IN (:...codigosBarras)')
       .setParameter('codigosBarras', codigosBarras)
-      .select(['producto.codigoBarras', 'producto.nombre', 'producto.id'])
+      .select([
+        'producto.codigoBarras',
+        'producto.nombre',
+        'producto.id',
+        'producto.margenRecomendado',
+      ])
       .getMany();
 
     const inventorySet = new Set<string>();
@@ -215,6 +221,7 @@ export class ProductosService {
         codigoBarras: codigo,
         existe: !!existente,
         nombre: existente?.nombre,
+        margenRecomendado: existente?.margenRecomendado ?? null,
         tieneInventario: existente ? inventorySet.has(existente.id) : false,
       };
     });

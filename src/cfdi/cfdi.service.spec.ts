@@ -316,6 +316,92 @@ describe('CfdiService', () => {
       expect(mockQueryRunner.release).toHaveBeenCalled();
     });
 
+    it('guarda el margen recomendado calculado desde precio y costo', async () => {
+      mockLaboratorioRepository.findOne.mockResolvedValue({ id: 'lab-1' });
+      mockProveedoresService.findByRfc.mockResolvedValue({
+        id: 'prov-1',
+        rfc: 'LAB123456789',
+      });
+      mockProductoRepository.findOne.mockResolvedValue({
+        id: 'prod-internal',
+        codigoBarras: 'PROD001',
+        margenRecomendado: null,
+      });
+      mockProductoRepository.update.mockResolvedValue({});
+
+      await service.procesarRecepcion(
+        {
+          ...dto,
+          productos: [
+            {
+              ...dto.productos[0],
+              precioVenta: 60,
+            },
+          ],
+        } as any,
+        userId,
+      );
+
+      expect(mockProductoRepository.update).toHaveBeenCalledWith(
+        'prod-internal',
+        expect.objectContaining({ margenRecomendado: 20 }),
+      );
+    });
+
+    it('vincula la OC usando el UUID interno resuelto desde el código', async () => {
+      mockLaboratorioRepository.findOne.mockResolvedValue({ id: 'lab-1' });
+      mockProveedoresService.findByRfc.mockResolvedValue({
+        id: 'prov-1',
+        rfc: 'LAB123456789',
+      });
+      mockProductoRepository.findOne.mockResolvedValue({
+        id: 'prod-internal',
+        codigoBarras: 'PROD001',
+      });
+      mockOrdenCompraRepository.findOne
+        .mockResolvedValueOnce({
+          id: 'oc-1',
+          folio: 'OC-1',
+          proveedorId: 'prov-1',
+          status: 'PENDIENTE',
+          detalles: [
+            {
+              id: 'det-1',
+              productoId: 'prod-internal',
+              cantidad: 10,
+              cantidadRecibida: 0,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          id: 'oc-1',
+          folio: 'OC-1',
+          proveedorId: 'prov-1',
+          status: 'PENDIENTE',
+          detalles: [
+            {
+              id: 'det-1',
+              productoId: 'prod-internal',
+              cantidad: 10,
+              cantidadRecibida: 10,
+            },
+          ],
+        });
+      mockDetalleOrdenCompraRepository.update.mockResolvedValue({});
+
+      const result = await service.procesarRecepcion(
+        { ...dto, ordenCompraId: 'oc-1' } as any,
+        userId,
+      );
+
+      expect(mockDetalleOrdenCompraRepository.update).toHaveBeenCalledWith(
+        'det-1',
+        { cantidadRecibida: 10 },
+      );
+      expect(result.ordenCompraVinculada?.productosVinculados).toBe(1);
+      expect(result.ordenCompraVinculada?.productosNoVinculados).toEqual([]);
+    });
+
     it('should reject duplicate UUID', async () => {
       mockRecepcionesService.findByUuid.mockResolvedValue({
         id: 'rec-existing',

@@ -138,6 +138,7 @@ describe('ProductosService', () => {
           codigoBarras: producto.codigoBarras,
           nombre: producto.nombre,
           id: producto.id,
+          margenRecomendado: producto.margenRecomendado,
         },
       ]),
     };
@@ -161,12 +162,14 @@ describe('ProductosService', () => {
         codigoBarras: producto.codigoBarras,
         existe: true,
         nombre: producto.nombre,
+        margenRecomendado: 20,
         tieneInventario: true,
       },
       {
         codigoBarras: 'missing-code',
         existe: false,
         nombre: undefined,
+        margenRecomendado: null,
         tieneInventario: false,
       },
     ]);

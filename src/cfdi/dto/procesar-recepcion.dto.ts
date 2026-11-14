@@ -101,6 +101,10 @@ export class ProductoRecepcionDto {
   @IsOptional()
   precioVenta?: number;
 
+  @IsNumber()
+  @IsOptional()
+  margenRecomendado?: number;
+
   @IsString()
   @IsOptional()
   claveProdServ?: string;

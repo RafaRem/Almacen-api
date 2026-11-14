@@ -6,7 +6,9 @@ import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
+import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { BadRequestException } from '@nestjs/common';
 
 describe('InventarioAlmacenService', () => {
   let service: InventarioAlmacenService;
@@ -39,6 +41,33 @@ describe('InventarioAlmacenService', () => {
     }).compile();
 
     service = module.get<InventarioAlmacenService>(InventarioAlmacenService);
+  });
+
+  describe('updatePrecioVenta()', () => {
+    it('actualiza el margen del producto desde el precio del lote', async () => {
+      const inventario = {
+        id: 'inv-1',
+        productoId: 'prod-1',
+        precioUnitarioLote: 100,
+        precioVenta: 100,
+        lote: { numeroLote: 'L1' },
+      };
+      (mockInventarioRepository as any).findOne = jest
+        .fn()
+        .mockResolvedValue(inventario);
+      (mockInventarioRepository as any).save = jest
+        .fn()
+        .mockResolvedValue(inventario);
+      (mockProductoRepository as any).update = jest
+        .fn()
+        .mockResolvedValue({});
+
+      await service.updatePrecioVenta('inv-1', 125);
+
+      expect(mockProductoRepository.update).toHaveBeenCalledWith('prod-1', {
+        margenRecomendado: 25,
+      });
+    });
   });
 
   describe('queryLotesPorFIFO (via reducirStockFIFO)', () => {
@@ -86,6 +115,104 @@ describe('InventarioAlmacenService', () => {
       );
       expect(mockOrderBy).toHaveBeenCalledWith('lote.fechaCaducidad', 'ASC');
       expect(mockSetLock).toHaveBeenCalledWith('pessimistic_write');
+    });
+  });
+
+  describe('validarLoteDestino', () => {
+    const makeManager = ({
+      lote = { id: 'lote-destino', statusId: '1' },
+      inventarios = [] as any[],
+      detalles = [] as any[],
+    } = {}) => ({
+      getRepository: (entity: unknown) => {
+        if (entity === Lote) {
+          return { findOne: jest.fn().mockResolvedValue(lote) };
+        }
+        if (entity === InventarioAlmacen) {
+          return { find: jest.fn().mockResolvedValue(inventarios) };
+        }
+        if (entity === DetalleLote) {
+          return { find: jest.fn().mockResolvedValue(detalles) };
+        }
+        throw new Error('Repositorio no esperado');
+      },
+    });
+
+    it('rechaza el mismo lote origen', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager(),
+          'producto-1',
+          'lote-1',
+          'lote-1',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rechaza un lote destino inexistente', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager({ lote: null }),
+          'producto-1',
+          'lote-1',
+          'lote-destino',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rechaza un lote destino inactivo', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager({ lote: { id: 'lote-destino', statusId: '2' } }),
+          'producto-1',
+          'lote-1',
+          'lote-destino',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rechaza un lote destino de otro producto', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager({ inventarios: [{ productoId: 'producto-2' }] }),
+          'producto-1',
+          'lote-1',
+          'lote-destino',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('acepta un lote destino activo del mismo producto', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager({ inventarios: [{ productoId: 'producto-1' }] }),
+          'producto-1',
+          'lote-1',
+          'lote-destino',
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('usa detalle_lote cuando no hay inventario', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager({ detalles: [{ productoId: 'producto-1' }] }),
+          'producto-1',
+          'lote-1',
+          'lote-destino',
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rechaza un lote sin asociación a producto', async () => {
+      await expect(
+        (service as any).validarLoteDestino(
+          makeManager(),
+          'producto-1',
+          'lote-1',
+          'lote-destino',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

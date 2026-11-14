@@ -881,6 +881,22 @@ export class InventarioAlmacenService {
     inventario.precioVenta = precioVenta;
     const saved = await this.inventarioRepository.save(inventario);
 
+    const precioNumerico = Number(precioVenta);
+    const costoUnitario = Number(inventario.precioUnitarioLote);
+    if (
+      Number.isFinite(precioNumerico) &&
+      Number.isFinite(costoUnitario) &&
+      precioNumerico > 0 &&
+      costoUnitario > 0
+    ) {
+      const margen = Math.round(
+        (precioNumerico / costoUnitario - 1) * 10000,
+      ) / 100;
+      await this.productoRepository.update(inventario.productoId, {
+        margenRecomendado: margen,
+      });
+    }
+
     console.log(`[DEBUG inventario] PrecioVenta actualizado: id=${id}, anterior=${precioAnterior}, nuevo=${precioVenta}, producto=${inventario.productoId}, lote=${inventario.lote?.numeroLote}`);
 
     return saved;
@@ -1014,6 +1030,67 @@ export class InventarioAlmacenService {
     };
   }
 
+  private async validarLoteDestino(
+    manager: EntityManager,
+    productoId: string,
+    loteOrigenId: string,
+    loteDestinoId: string,
+  ): Promise<void> {
+    if (loteDestinoId === loteOrigenId) {
+      throw new BadRequestException(
+        'El lote destino debe ser distinto al lote de origen',
+      );
+    }
+
+    const loteDestino = await manager
+      .getRepository(Lote)
+      .findOne({ where: { id: loteDestinoId } });
+
+    if (!loteDestino) {
+      throw new BadRequestException('El lote destino no existe');
+    }
+
+    if (Number(loteDestino.statusId) !== 1) {
+      throw new BadRequestException('El lote destino no está activo');
+    }
+
+    const inventarios = await manager
+      .getRepository(InventarioAlmacen)
+      .find({
+        where: { loteId: loteDestinoId },
+        select: ['productoId'],
+      });
+
+    if (inventarios.length > 0) {
+      if (!inventarios.some((inv) => inv.productoId === productoId)) {
+        throw new BadRequestException(
+          'El lote destino no pertenece al producto',
+        );
+      }
+      return;
+    }
+
+    const detalles = await manager
+      .getRepository(DetalleLote)
+      .find({
+        where: { loteId: loteDestinoId },
+        select: ['productoId'],
+      });
+
+    if (detalles.length > 0) {
+      if (!detalles.some((det) => det.productoId === productoId)) {
+        throw new BadRequestException(
+          'El lote destino no pertenece al producto',
+        );
+      }
+      return;
+    }
+
+    throw new BadRequestException(
+      'El lote destino no está asociado a un producto',
+    );
+  }
+
   async transferirLote(
     productoId: string,
     loteOrigenId: string,
@@ -1093,6 +1170,15 @@ export class InventarioAlmacenService {
 
       if (!loteDestinoIdResolved) {
         throw new BadRequestException('No se pudo determinar el lote de destino');
+      }
+
+      if (tipoDestino === 'existente') {
+        await this.validarLoteDestino(
+          manager,
+          productoId,
+          loteOrigenId,
+          loteDestinoIdResolved,
+        );
       }
 
       inventarioOrigen.cantidadActual = stockActual - cantidad;

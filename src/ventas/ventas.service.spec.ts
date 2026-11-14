@@ -90,6 +90,7 @@ const mockDescuentosService = {
 const mockInventarioAlmacenService = {
   findByProductoId: jest.fn(),
   reducirStockFIFO: jest.fn(),
+  reducirStockLotesSeleccionados: jest.fn(),
   getStockTotal: jest.fn(),
   agregarStock: jest.fn(),
   calcularPrecioVenta: jest.fn(),
@@ -1250,17 +1251,48 @@ describe('VentasService', () => {
       );
     });
 
-    it('should throw error when productos have duplicates', async () => {
+    it('should allow the same product in separate lines with selected lots', async () => {
+      mockInventarioAlmacenService.reducirStockLotesSeleccionados.mockResolvedValue(
+        {
+          success: true,
+          lotsUsed: [
+            {
+              loteId: 'lote-1',
+              numeroLote: 'L001',
+              cantidad: 2,
+              precio: 45,
+              costoUnitario: 30,
+            },
+          ],
+          movimientoId: 'mov-1',
+        },
+      );
+
       const dto = {
         productos: [
-          { productoId: 'prod-1', cantidad: 3 },
-          { productoId: 'prod-1', cantidad: 2 },
+          {
+            productoId: 'prod-1',
+            cantidad: 2,
+            lotes: [{ loteId: 'lote-1', cantidad: 2 }],
+          },
+          {
+            productoId: 'prod-1',
+            cantidad: 1,
+            lotes: [{ loteId: 'lote-2', cantidad: 1 }],
+          },
         ],
         metodoPago: MetodoPago.EFECTIVO,
       };
-      await expect(service.create(dto as any, usuarioId)).rejects.toThrow(
-        'No puede haber productos duplicados en la venta',
-      );
+
+      const result = await service.create(dto as any, usuarioId);
+
+      expect(result).toBeDefined();
+      expect(
+        mockInventarioAlmacenService.reducirStockLotesSeleccionados,
+      ).toHaveBeenCalledTimes(2);
+      expect(
+        mockInventarioAlmacenService.reducirStockFIFO,
+      ).not.toHaveBeenCalled();
     });
 
     it('should throw error when cantidad <= 0', async () => {

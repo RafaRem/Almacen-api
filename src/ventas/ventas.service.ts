@@ -97,18 +97,10 @@ export class VentasService {
       throw new Error('La venta debe tener al menos un producto');
     }
 
-    const productoIds = createVentaDto.productos.map((p) => p.productoId);
-    const uniqueProductoIds = new Set(productoIds);
-    if (uniqueProductoIds.size !== productoIds.length) {
-      throw new Error('No puede haber productos duplicados en la venta');
-    }
-
     return this.dataSource.transaction(async (manager) => {
       this.logger.log(
         `Venta create: ${createVentaDto.productos.length} producto(s)`,
       );
-
-      const seenProductos = new Set<string>();
 
       let subtotal = 0;
       let descuentoTotal = 0;
@@ -120,8 +112,18 @@ export class VentasService {
         numeroLote: string;
         cantidad: number;
         movimientoId: string;
+        detalleIndex: number;
       }[] = [];
       const descuentosInfo: DescuentoInfoEntry[] = [];
+      const cantidadTotalPorProducto = new Map<string, number>();
+      for (const productoVenta of createVentaDto.productos) {
+        cantidadTotalPorProducto.set(
+          productoVenta.productoId,
+          (cantidadTotalPorProducto.get(productoVenta.productoId) || 0) +
+            Number(productoVenta.cantidad || 0),
+        );
+      }
+      const descuentosCalculadosPorProducto = new Map<string, any>();
 
       let categoriaClienteId: string | undefined;
       let clienteClase: string | undefined;
@@ -137,14 +139,10 @@ export class VentasService {
         }
       }
 
-      for (const productoVenta of createVentaDto.productos) {
-        if (seenProductos.has(productoVenta.productoId)) {
-          throw new BadRequestException(
-            `Producto ${productoVenta.productoId} duplicado en la misma venta`,
-          );
-        }
-        seenProductos.add(productoVenta.productoId);
-
+      for (const [
+        detalleIndex,
+        productoVenta,
+      ] of createVentaDto.productos.entries()) {
         if (productoVenta.cantidad == null || productoVenta.cantidad <= 0) {
           throw new BadRequestException(
             `Cantidad debe ser mayor a 0 para producto ${productoVenta.productoId}`,
@@ -173,21 +171,53 @@ export class VentasService {
           await this.inventarioAlmacenService.findByProductoId(
             productoVenta.productoId,
           );
-        if (!inventarioProducto?.precioVenta) {
+        const lotesSeleccionados = productoVenta.lotes?.length
+          ? productoVenta.lotes
+          : null;
+        const tieneLotesSeleccionados = lotesSeleccionados !== null;
+        if (!tieneLotesSeleccionados && !inventarioProducto?.precioVenta) {
           throw new BadRequestException(
             `Producto ${producto.nombre} no tiene precio de venta asignado. Configure precioVenta en Inventario.`,
           );
         }
 
-        const resultadoFEPU =
-          await this.inventarioAlmacenService.reducirStockFIFO(
-            productoVenta.productoId,
-            productoVenta.cantidad,
-            AlmacenTipo.VENTAS,
-            usuarioId,
-            undefined,
-            manager,
+        let resultadoFEPU;
+        if (lotesSeleccionados) {
+          const totalLotes = lotesSeleccionados.reduce(
+            (sum, lote) => sum + Number(lote.cantidad || 0),
+            0,
           );
+          if (totalLotes !== Number(productoVenta.cantidad)) {
+            throw new BadRequestException(
+              `La suma de lotes (${totalLotes}) no coincide con la cantidad del producto (${productoVenta.cantidad})`,
+            );
+          }
+          const loteIds = lotesSeleccionados.map((lote) => lote.loteId);
+          if (new Set(loteIds).size !== loteIds.length) {
+            throw new BadRequestException(
+              `El producto ${productoVenta.productoId} tiene lotes duplicados en la misma línea`,
+            );
+          }
+          resultadoFEPU =
+            await this.inventarioAlmacenService.reducirStockLotesSeleccionados(
+              productoVenta.productoId,
+              lotesSeleccionados,
+              AlmacenTipo.VENTAS,
+              usuarioId,
+              undefined,
+              manager,
+            );
+        } else {
+          resultadoFEPU =
+            await this.inventarioAlmacenService.reducirStockFIFO(
+              productoVenta.productoId,
+              productoVenta.cantidad,
+              AlmacenTipo.VENTAS,
+              usuarioId,
+              undefined,
+              manager,
+            );
+        }
 
         if (!resultadoFEPU.success) {
           throw new BadRequestException(resultadoFEPU.message);
@@ -200,6 +230,7 @@ export class VentasService {
             numeroLote: loteInfo.numeroLote,
             cantidad: loteInfo.cantidad,
             movimientoId: resultadoFEPU.movimientoId!,
+            detalleIndex,
           });
         }
 
@@ -220,112 +251,147 @@ export class VentasService {
         const costoUnitario =
           totalCantidad > 0 ? totalCosto / totalCantidad : 0;
 
-        const precioVenta = inventarioProducto.precioVenta;
+        const precioVenta = lotesSeleccionados
+          ? totalCantidad > 0
+            ? totalPrecio / totalCantidad
+            : 0
+          : Number(inventarioProducto?.precioVenta || 0);
 
         const fechaCaducidad = parseDate(
           inventarioProducto?.lote?.fechaCaducidad,
         );
 
         let descuentoLinea = 0;
-        let montoProductoLinea = 0;
 
         if (createVentaDto.descuentosPreview) {
-          try {
-            const calculo =
-              await this.descuentosService.calcularDescuentosAcumulables(
+          const cantidadTotalProducto =
+            cantidadTotalPorProducto.get(productoVenta.productoId) ||
+            productoVenta.cantidad;
+          const esPrimeraLinea = !descuentosCalculadosPorProducto.has(
+            productoVenta.productoId,
+          );
+
+          if (esPrimeraLinea) {
+            try {
+              const calculo =
+                await this.descuentosService.calcularDescuentosAcumulables(
+                  productoVenta.productoId,
+                  cantidadTotalProducto,
+                  producto.laboratorioId,
+                  categoriaClienteId,
+                  fechaCaducidad,
+                  precioVenta,
+                );
+              descuentosCalculadosPorProducto.set(
                 productoVenta.productoId,
-                productoVenta.cantidad,
-                producto.laboratorioId,
-                categoriaClienteId,
-                fechaCaducidad,
-                precioVenta,
+                calculo,
               );
 
-            descuentoLinea = calculo.descuentoTotal;
-
-            if (calculo.descuentoProducto) {
-              montoProductoLinea = Number(
-                (calculo.descuentoProducto.monto || 0).toFixed(2),
-              );
-              if (calculo.descuentoProducto.descuentoId) {
+              if (calculo.descuentoProducto) {
+                const montoProducto = Number(
+                  (calculo.descuentoProducto.monto || 0).toFixed(2),
+                );
+                if (calculo.descuentoProducto.descuentoId) {
+                  descuentosInfo.push({
+                    productoId: productoVenta.productoId,
+                    descuentoId: calculo.descuentoProducto.descuentoId,
+                    tipo: calculo.descuentoProducto.tipo,
+                    porcentaje: calculo.descuentoProducto.porcentaje,
+                    monto: montoProducto,
+                    motivo: calculo.descuentoProducto.motivo,
+                  });
+                }
+              }
+              if (calculo.descuentoCategoria) {
+                const montoCategoria = Number(
+                  (calculo.descuentoCategoria.monto || 0).toFixed(2),
+                );
                 descuentosInfo.push({
                   productoId: productoVenta.productoId,
-                  descuentoId: calculo.descuentoProducto.descuentoId,
-                  tipo: calculo.descuentoProducto.tipo,
-                  porcentaje: calculo.descuentoProducto.porcentaje,
-                  monto: montoProductoLinea,
-                  motivo: calculo.descuentoProducto.motivo,
+                  descuentoId: calculo.descuentoCategoria.descuentoId,
+                  tipo: calculo.descuentoCategoria.tipo,
+                  porcentaje: calculo.descuentoCategoria.porcentaje,
+                  monto: montoCategoria,
+                  motivo: calculo.descuentoCategoria.motivo,
                 });
               }
-            }
-            if (calculo.descuentoCategoria) {
-              const montoCategoria = Number(
-                (calculo.descuentoCategoria.monto || 0).toFixed(2),
+            } catch (e) {
+              this.logger.error(
+                `Error calculando descuentos para producto ${productoVenta.productoId}: ${e.message}`,
               );
-              descuentosInfo.push({
-                productoId: productoVenta.productoId,
-                descuentoId: calculo.descuentoCategoria.descuentoId,
-                tipo: calculo.descuentoCategoria.tipo,
-                porcentaje: calculo.descuentoCategoria.porcentaje,
-                monto: montoCategoria,
-                motivo: calculo.descuentoCategoria.motivo,
-              });
             }
-          } catch (e) {
-            this.logger.error(
-              `Error calculando descuentos para producto ${productoVenta.productoId}: ${e.message}`,
-            );
-          }
 
-          if (createVentaDto.descuentosPreview?.descuentoPorProducto) {
-            const dp =
-              createVentaDto.descuentosPreview.descuentoPorProducto.find(
-                (d) => d.productoId === productoVenta.productoId,
-              );
-
-            if (dp) {
-              const tolerancia = 0.01;
-              const diferencia = Math.abs(dp.descuento - descuentoLinea);
-
-              if (diferencia > tolerancia) {
-                this.logger.warn(
-                  `Descuento no coincide, se actualiza por mejor descuento: calculado ${descuentoLinea} vs preview ${dp.descuento}`,
-                );
-              } else {
-                // Eliminar entradas existentes para este producto del array (reemplazar con preview)
-                const idxToRemove = descuentosInfo.findIndex(
+            if (createVentaDto.descuentosPreview?.descuentoPorProducto) {
+              const dp =
+                createVentaDto.descuentosPreview.descuentoPorProducto.find(
                   (d) => d.productoId === productoVenta.productoId,
                 );
-                if (idxToRemove !== -1) {
-                  descuentosInfo.splice(idxToRemove, 2); // Elimina hasta 2 entradas (producto + categoria)
-                }
 
-                if (
-                  dp.mejorDescuento?.descuentoId &&
-                  dp.mejorDescuento.tipo !== 'NINGUNO'
-                ) {
-                  descuentosInfo.push({
-                    productoId: productoVenta.productoId,
-                    descuentoId: dp.mejorDescuento.descuentoId,
-                    tipo: dp.mejorDescuento.tipo,
-                    porcentaje: dp.mejorDescuento.porcentaje,
-                    monto: dp.descuentoProducto,
-                    motivo: dp.mejorDescuento.motivo,
-                  });
-                }
+              if (dp) {
+                const calculado =
+                  descuentosCalculadosPorProducto.get(
+                    productoVenta.productoId,
+                  ) || { descuentoTotal: 0 };
+                const tolerancia = 0.01;
+                const diferencia = Math.abs(
+                  dp.descuento - Number(calculado.descuentoTotal || 0),
+                );
 
-                if (dp.descuentoCategoriaInfo) {
-                  descuentosInfo.push({
-                    productoId: productoVenta.productoId,
-                    descuentoId: dp.descuentoCategoriaInfo.descuentoId ?? null,
-                    tipo: dp.descuentoCategoriaInfo.tipo,
-                    porcentaje: dp.descuentoCategoriaInfo.porcentaje,
-                    monto: dp.descuentoCategoria,
-                    motivo: dp.descuentoCategoriaInfo.motivo,
-                  });
+                if (diferencia > tolerancia) {
+                  this.logger.warn(
+                    `Descuento no coincide, se actualiza por mejor descuento: calculado ${calculado.descuentoTotal} vs preview ${dp.descuento}`,
+                  );
+                } else {
+                  for (let i = descuentosInfo.length - 1; i >= 0; i--) {
+                    if (
+                      descuentosInfo[i].productoId ===
+                      productoVenta.productoId
+                    ) {
+                      descuentosInfo.splice(i, 1);
+                    }
+                  }
+
+                  if (
+                    dp.mejorDescuento?.descuentoId &&
+                    dp.mejorDescuento.tipo !== 'NINGUNO'
+                  ) {
+                    descuentosInfo.push({
+                      productoId: productoVenta.productoId,
+                      descuentoId: dp.mejorDescuento.descuentoId,
+                      tipo: dp.mejorDescuento.tipo,
+                      porcentaje: dp.mejorDescuento.porcentaje,
+                      monto: dp.descuentoProducto,
+                      motivo: dp.mejorDescuento.motivo,
+                    });
+                  }
+
+                  if (dp.descuentoCategoriaInfo) {
+                    descuentosInfo.push({
+                      productoId: productoVenta.productoId,
+                      descuentoId:
+                        dp.descuentoCategoriaInfo.descuentoId ?? null,
+                      tipo: dp.descuentoCategoriaInfo.tipo,
+                      porcentaje: dp.descuentoCategoriaInfo.porcentaje,
+                      monto: dp.descuentoCategoria,
+                      motivo: dp.descuentoCategoriaInfo.motivo,
+                    });
+                  }
                 }
               }
             }
+          }
+
+          const calculo = descuentosCalculadosPorProducto.get(
+            productoVenta.productoId,
+          );
+          if (calculo) {
+            descuentoLinea = Number(
+              (
+                Number(calculo.descuentoTotal || 0) *
+                (Number(productoVenta.cantidad) /
+                  Number(cantidadTotalProducto || 1))
+              ).toFixed(2),
+            );
           }
         }
 
@@ -336,7 +402,10 @@ export class VentasService {
         descuentoTotal += descuentoLinea;
 
         // Solo aplicar IVA si el producto tiene tasa > 0
-        const ivaTasaProducto = inventarioProducto.ivaPersonalizado ?? inventarioProducto.ivaCfdi ?? 0;
+        const ivaTasaProducto =
+          inventarioProducto?.ivaPersonalizado ??
+          inventarioProducto?.ivaCfdi ??
+          0;
         if (ivaTasaProducto > 0) {
           baseForIva += subtotalLinea;
         }
@@ -474,9 +543,9 @@ export class VentasService {
       }
       const savedDetalles = await manager.save(DetalleVenta, detalles);
 
-      for (const detalle of savedDetalles) {
+      for (const [detalleIndex, detalle] of savedDetalles.entries()) {
         const lotesDeProducto = movimientosLotes.filter(
-          (ml) => ml.productoId === detalle.productoId,
+          (ml) => ml.detalleIndex === detalleIndex,
         );
         for (const loteInfo of lotesDeProducto) {
           const detalleLote = this.detallesRepository.manager.create(

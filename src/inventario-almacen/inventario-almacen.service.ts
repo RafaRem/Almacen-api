@@ -103,9 +103,11 @@ export class InventarioAlmacenService {
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote,
           precio: inv.precioUnitarioLote,
+          precioVenta: inv.precioVenta,
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
           iva_cfdi: inv.ivaCfdi,
+          statusId: inv.lote?.statusId,
         });
       } else {
         agrupado.set(key, {
@@ -123,9 +125,11 @@ export class InventarioAlmacenService {
               loteId: inv.loteId,
               numeroLote: inv.lote?.numeroLote,
               precio: inv.precioUnitarioLote,
+              precioVenta: inv.precioVenta,
               fechaCaducidad: inv.lote?.fechaCaducidad,
               cantidad: Number(inv.cantidadActual),
               iva_cfdi: inv.ivaCfdi,
+              statusId: inv.lote?.statusId,
             },
           ],
         });
@@ -417,6 +421,129 @@ export class InventarioAlmacenService {
     } else {
       return this.dataSource.transaction(executeReduce);
     }
+  }
+
+  async reducirStockLotesSeleccionados(
+    productoId: string,
+    allocations: { loteId: string; cantidad: number }[],
+    almacenTipoOrigen: AlmacenTipo,
+    userId: string = SYSTEM_USER_ID,
+    metadata?: MovimientoMetadata,
+    managerArg?: EntityManager,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    lotsUsed: {
+      loteId: string;
+      numeroLote: string;
+      cantidad: number;
+      precio: number;
+      costoUnitario: number;
+    }[];
+    movimientoId?: string;
+  }> {
+    const totalSolicitado = allocations.reduce(
+      (sum, allocation) => sum + Number(allocation.cantidad || 0),
+      0,
+    );
+
+    if (!allocations.length || totalSolicitado <= 0) {
+      return {
+        success: false,
+        message: 'Cantidad inválida para reducir stock',
+        lotsUsed: [],
+      };
+    }
+
+    const executeReduce = async (manager: EntityManager) => {
+      const loteIds = [
+        ...new Set(allocations.map((allocation) => allocation.loteId)),
+      ];
+      const inventarios = await manager
+        .createQueryBuilder(InventarioAlmacen, 'inv')
+        .innerJoinAndSelect('inv.lote', 'lote')
+        .where('inv.productoId = :productoId', { productoId })
+        .andWhere('inv.almacenTipo = :almacenTipo', {
+          almacenTipo: almacenTipoOrigen,
+        })
+        .andWhere('inv.loteId IN (:...loteIds)', { loteIds })
+        .setLock('pessimistic_write')
+        .getMany();
+
+      const inventarioPorLote = new Map(
+        inventarios.map((inventario) => [inventario.loteId, inventario]),
+      );
+
+      const lotsUsed: {
+        loteId: string;
+        numeroLote: string;
+        cantidad: number;
+        precio: number;
+        costoUnitario: number;
+      }[] = [];
+
+      for (const allocation of allocations) {
+        const inventario = inventarioPorLote.get(allocation.loteId);
+        if (!inventario) {
+          throw new BadRequestException(
+            `No se encontró inventario para el lote ${allocation.loteId}`,
+          );
+        }
+        if (Number(inventario.lote?.statusId) !== 1) {
+          throw new BadRequestException(
+            `El lote ${inventario.lote?.numeroLote || allocation.loteId} no está activo`,
+          );
+        }
+        const cantidad = Number(allocation.cantidad);
+        if (cantidad <= 0 || Number(inventario.cantidadActual) < cantidad) {
+          throw new BadRequestException(
+            `Stock insuficiente en el lote ${inventario.lote?.numeroLote || allocation.loteId}`,
+          );
+        }
+        if (inventario.precioVenta == null) {
+          throw new Error(
+            `Precio de venta no asignado para producto ${productoId} (lote: ${inventario.lote?.numeroLote || inventario.loteId}). Configure precioVenta en Inventario.`,
+          );
+        }
+
+        inventario.cantidadActual =
+          Number(inventario.cantidadActual) - cantidad;
+        await manager.save(inventario);
+
+        lotsUsed.push({
+          loteId: inventario.loteId,
+          numeroLote: inventario.lote?.numeroLote || 'N/A',
+          cantidad,
+          precio: inventario.precioVenta,
+          costoUnitario: Number(inventario.precioUnitarioLote) || 0,
+        });
+      }
+
+      const movimiento = manager.create(MovimientoAlmacen, {
+        productoId,
+        loteId: allocations[0].loteId,
+        almacenOrigen: almacenTipoOrigen,
+        almacenDestino: AlmacenTipo.CLIENTE,
+        cantidad: totalSolicitado,
+        userId,
+        observaciones: metadata?.referenciaExterna || 'Venta',
+        tipoMovimiento: TipoMovimiento.VENTA,
+        origenOperacion: metadata?.origenOperacion || OrigenOperacion.POS,
+      });
+      const savedMovimiento = await manager.save(movimiento);
+
+      return {
+        success: true,
+        message: `Vendido ${totalSolicitado} unidades usando lotes seleccionados`,
+        lotsUsed,
+        movimientoId: savedMovimiento.id,
+      };
+    };
+
+    if (managerArg) {
+      return executeReduce(managerArg);
+    }
+    return this.dataSource.transaction(executeReduce);
   }
 
   async consultarLotesFIFO(

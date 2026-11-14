@@ -118,6 +118,129 @@ describe('InventarioAlmacenService', () => {
     });
   });
 
+  describe('reducirStockLotesSeleccionados', () => {
+    const makeManager = (inventarios: any[]) => {
+      const getMany = jest.fn().mockResolvedValue(inventarios);
+      const qb = {
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
+        getMany,
+      };
+      const manager = {
+        createQueryBuilder: jest.fn().mockReturnValue(qb),
+        create: jest.fn().mockImplementation((_entity, data) => ({
+          ...data,
+          id: 'mov-1',
+        })),
+        save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+      } as unknown as EntityManager;
+      return { manager, qb, getMany };
+    };
+
+    it('descuenta cada lote seleccionado y registra un movimiento', async () => {
+      const inv1 = {
+        productoId: 'p1',
+        loteId: 'lote-1',
+        cantidadActual: 5,
+        precioVenta: 20,
+        precioUnitarioLote: 10,
+        lote: { numeroLote: 'L1', statusId: '1' },
+      };
+      const inv2 = {
+        productoId: 'p1',
+        loteId: 'lote-2',
+        cantidadActual: 4,
+        precioVenta: 25,
+        precioUnitarioLote: 12,
+        lote: { numeroLote: 'L2', statusId: '1' },
+      };
+      const { manager } = makeManager([inv1, inv2]);
+
+      const result = await service.reducirStockLotesSeleccionados(
+        'p1',
+        [
+          { loteId: 'lote-1', cantidad: 2 },
+          { loteId: 'lote-2', cantidad: 3 },
+        ],
+        AlmacenTipo.VENTAS,
+        'user-1',
+        undefined,
+        manager,
+      );
+
+      expect(result.success).toBe(true);
+      expect(inv1.cantidadActual).toBe(3);
+      expect(inv2.cantidadActual).toBe(1);
+      expect(result.lotsUsed).toEqual([
+        {
+          loteId: 'lote-1',
+          numeroLote: 'L1',
+          cantidad: 2,
+          precio: 20,
+          costoUnitario: 10,
+        },
+        {
+          loteId: 'lote-2',
+          numeroLote: 'L2',
+          cantidad: 3,
+          precio: 25,
+          costoUnitario: 12,
+        },
+      ]);
+      expect(manager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'mov-1' }),
+      );
+    });
+
+    it('rechaza si un lote no tiene stock suficiente', async () => {
+      const inv1 = {
+        productoId: 'p1',
+        loteId: 'lote-1',
+        cantidadActual: 1,
+        precioVenta: 20,
+        precioUnitarioLote: 10,
+        lote: { numeroLote: 'L1', statusId: '1' },
+      };
+      const { manager } = makeManager([inv1]);
+
+      await expect(
+        service.reducirStockLotesSeleccionados(
+          'p1',
+          [{ loteId: 'lote-1', cantidad: 2 }],
+          AlmacenTipo.VENTAS,
+          'user-1',
+          undefined,
+          manager,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rechaza un lote inactivo', async () => {
+      const inv1 = {
+        productoId: 'p1',
+        loteId: 'lote-1',
+        cantidadActual: 5,
+        precioVenta: 20,
+        precioUnitarioLote: 10,
+        lote: { numeroLote: 'L1', statusId: '0' },
+      };
+      const { manager } = makeManager([inv1]);
+
+      await expect(
+        service.reducirStockLotesSeleccionados(
+          'p1',
+          [{ loteId: 'lote-1', cantidad: 1 }],
+          AlmacenTipo.VENTAS,
+          'user-1',
+          undefined,
+          manager,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
   describe('validarLoteDestino', () => {
     const makeManager = ({
       lote = { id: 'lote-destino', statusId: '1' },

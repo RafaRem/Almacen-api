@@ -15,6 +15,16 @@ import { Type } from 'class-transformer';
 import { MetodoPago } from '../../common/enums/metodo-pago.enum';
 import { PagoDetalleDto } from './pago-detalle.dto';
 
+export class LoteVentaDto {
+  @IsUUID()
+  @IsNotEmpty()
+  loteId: string;
+
+  @IsInt()
+  @Min(1)
+  cantidad: number;
+}
+
 export class ProductoVentaDto {
   @IsUUID()
   @IsNotEmpty()
@@ -24,6 +34,12 @@ export class ProductoVentaDto {
   @ValidateIf((o) => o.loteId !== null)
   @IsUUID()
   loteId?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LoteVentaDto)
+  lotes?: LoteVentaDto[];
 
   @IsInt()
   @Min(1)

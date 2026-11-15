@@ -37,16 +37,10 @@ export class TicketUploadsService {
       throw new BadRequestException('No se proporcionó archivo');
     }
 
-    const allowedMimeTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'image/svg+xml',
-    ];
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        'Tipo de archivo no permitido. Solo JPG, PNG, GIF, WEBP, SVG',
+        'Tipo de archivo no permitido. Solo JPG, PNG o WEBP',
       );
     }
 

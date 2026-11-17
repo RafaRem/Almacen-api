@@ -163,6 +163,7 @@ describe('ProductosService', () => {
         existe: true,
         nombre: producto.nombre,
         margenRecomendado: 20,
+        piezasPorCajaDefault: null,
         tieneInventario: true,
       },
       {
@@ -170,6 +171,7 @@ describe('ProductosService', () => {
         existe: false,
         nombre: undefined,
         margenRecomendado: null,
+        piezasPorCajaDefault: null,
         tieneInventario: false,
       },
     ]);

@@ -5,8 +5,10 @@ import { InventarioAlmacenService } from './inventario-almacen.service';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { BadRequestException } from '@nestjs/common';
 
@@ -15,9 +17,18 @@ describe('InventarioAlmacenService', () => {
 
   const mockInventarioRepository = {};
   const mockProductoRepository = {};
+  const mockPresentacionRepository = {};
   const mockLoteRepository = {};
   const mockMovimientoRepository = {};
   const mockDataSource = {};
+  const mockPreciosLoteService = {
+    findByLotes: jest.fn().mockResolvedValue([]),
+    getPrecio: jest.fn().mockResolvedValue(null),
+    setPrecio: jest.fn().mockResolvedValue(null),
+    setPrecioPorTipo: jest.fn().mockResolvedValue(null),
+    clearPrecio: jest.fn().mockResolvedValue(undefined),
+    clearPrecioPorTipo: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +44,14 @@ describe('InventarioAlmacenService', () => {
         },
         { provide: getRepositoryToken(Lote), useValue: mockLoteRepository },
         {
+          provide: getRepositoryToken(ProductoPresentacion),
+          useValue: mockPresentacionRepository,
+        },
+        {
+          provide: PreciosLoteService,
+          useValue: mockPreciosLoteService,
+        },
+        {
           provide: getRepositoryToken(MovimientoAlmacen),
           useValue: mockMovimientoRepository,
         },
@@ -44,29 +63,82 @@ describe('InventarioAlmacenService', () => {
   });
 
   describe('updatePrecioVenta()', () => {
-    it('actualiza el margen del producto desde el precio del lote', async () => {
-      const inventario = {
-        id: 'inv-1',
-        productoId: 'prod-1',
-        precioUnitarioLote: 100,
-        precioVenta: 100,
-        lote: { numeroLote: 'L1' },
-      };
+    const prepareUpdate = (inventario: any) => {
       (mockInventarioRepository as any).findOne = jest
         .fn()
         .mockResolvedValue(inventario);
       (mockInventarioRepository as any).save = jest
         .fn()
-        .mockResolvedValue(inventario);
+        .mockImplementation((value) => Promise.resolve(value));
       (mockProductoRepository as any).update = jest
         .fn()
         .mockResolvedValue({});
+      (mockPresentacionRepository as any).findOne = jest
+        .fn()
+        .mockResolvedValue(null);
+      const manager = {
+        getRepository: jest.fn((entity: unknown) => {
+          if (entity === ProductoPresentacion) return mockPresentacionRepository;
+          if (entity === Producto) return mockProductoRepository;
+          if (entity === InventarioAlmacen) return mockInventarioRepository;
+          throw new Error('Unexpected repository');
+        }),
+      };
+      (mockDataSource as any).transaction = jest.fn((callback) =>
+        callback(manager),
+      );
+      return manager;
+    };
+
+    it('actualiza el margen del producto desde el precio del lote', async () => {
+      prepareUpdate({
+        id: 'inv-1',
+        productoId: 'prod-1',
+        loteId: 'lote-1',
+        precioUnitarioLote: 100,
+        precioVenta: 100,
+        lote: { numeroLote: 'L1' },
+      });
 
       await service.updatePrecioVenta('inv-1', 125);
 
       expect(mockProductoRepository.update).toHaveBeenCalledWith('prod-1', {
         margenRecomendado: 25,
       });
+      expect(mockPreciosLoteService.setPrecio).not.toHaveBeenCalled();
+    });
+
+    it('actualiza precios canónicos cuando existen presentaciones', async () => {
+      prepareUpdate({
+        id: 'inv-1',
+        productoId: 'prod-1',
+        loteId: 'lote-1',
+        precioUnitarioLote: 100,
+        precioVenta: 100,
+        lote: { numeroLote: 'L1' },
+      });
+      (mockPresentacionRepository as any).findOne = jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve({ id: `pres-${where.tipo}`, tipo: where.tipo }),
+        );
+
+      await service.updatePrecioVenta('inv-1', 125, 1400);
+
+      expect(mockPreciosLoteService.setPrecio).toHaveBeenCalledWith(
+        expect.objectContaining({
+          presentacionId: 'pres-PIEZA',
+          precio: 125,
+        }),
+        expect.any(Object),
+      );
+      expect(mockPreciosLoteService.setPrecio).toHaveBeenCalledWith(
+        expect.objectContaining({
+          presentacionId: 'pres-CAJA',
+          precio: 1400,
+        }),
+        expect.any(Object),
+      );
     });
   });
 
@@ -75,8 +147,11 @@ describe('InventarioAlmacenService', () => {
       const mockGetMany = jest.fn().mockResolvedValue([]);
       const mockSetLock = jest.fn().mockReturnValue({ getMany: mockGetMany });
       const mockOrderBy = jest.fn().mockReturnValue({ setLock: mockSetLock });
-      const mockAndWhere = jest.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockWhere = jest.fn().mockReturnValue({ andWhere: mockAndWhere });
+      const chain: any = {};
+      const mockAndWhere = jest.fn(() => chain);
+      chain.andWhere = mockAndWhere;
+      chain.orderBy = mockOrderBy;
+      const mockWhere = jest.fn(() => chain);
       const mockInnerJoin = jest.fn().mockReturnValue({ where: mockWhere });
       const mockCreateQueryBuilder = jest.fn().mockReturnValue({
         innerJoinAndSelect: mockInnerJoin,
@@ -112,6 +187,11 @@ describe('InventarioAlmacenService', () => {
       expect(mockAndWhere).toHaveBeenCalledWith(
         'inv.almacenTipo = :almacenTipo',
         { almacenTipo: AlmacenTipo.VENTAS },
+      );
+      expect(mockAndWhere).toHaveBeenCalledWith('inv.cantidadActual > 0');
+      expect(mockAndWhere).toHaveBeenCalledWith(
+        'CAST(lote.statusId AS text) = :loteActivo',
+        { loteActivo: '1' },
       );
       expect(mockOrderBy).toHaveBeenCalledWith('lote.fechaCaducidad', 'ASC');
       expect(mockSetLock).toHaveBeenCalledWith('pessimistic_write');

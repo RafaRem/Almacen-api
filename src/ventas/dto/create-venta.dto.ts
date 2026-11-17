@@ -36,6 +36,10 @@ export class ProductoVentaDto {
   loteId?: string | null;
 
   @IsOptional()
+  @IsUUID()
+  presentacionId?: string | null;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => LoteVentaDto)
@@ -44,6 +48,11 @@ export class ProductoVentaDto {
   @IsInt()
   @Min(1)
   cantidad: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  factorUnidades?: number;
 }
 
 export class DescuentosPreviewDto {

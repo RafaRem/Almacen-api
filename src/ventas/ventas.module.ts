@@ -20,6 +20,7 @@ import { CuentasCobrarModule } from '../cuentas-cobrar/cuentas-cobrar.module';
 import { CreditosModule } from '../creditos/creditos.module';
 import { CuentaPorCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 import { CorteCajaModule } from '../corte-caja/corte-caja.module';
+import { PreciosLoteModule } from '../precios-lote/precios-lote.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { CorteCajaModule } from '../corte-caja/corte-caja.module';
     CuentasCobrarModule,
     CreditosModule,
     CorteCajaModule,
+    PreciosLoteModule,
   ],
   controllers: [VentasController],
   providers: [VentasService],

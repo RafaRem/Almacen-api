@@ -12,6 +12,9 @@ import { InventarioAlmacenService } from '../inventario-almacen/inventario-almac
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
 import { RecepcionesService } from '../recepciones/recepciones.service';
+import { PresentacionesService } from '../productos/presentaciones.service';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 
 const mockProductoRepository = {
   findOne: jest.fn(),
@@ -54,8 +57,22 @@ const mockOrdenCompraRepository = {
 const mockDetalleOrdenCompraRepository = {
   update: jest.fn(),
 };
+const mockInventarioAlmacenRepository = {
+  save: jest.fn().mockImplementation((value) => Promise.resolve(value)),
+};
+const mockPresentacionesService = {
+  inferFactor: jest.fn().mockReturnValue(0),
+  ensurePresentations: jest.fn().mockResolvedValue([]),
+  findByProducto: jest.fn().mockResolvedValue([]),
+  validarRecepcionCaja: jest.fn().mockResolvedValue(undefined),
+};
+const mockPreciosLoteService = {
+  setPrecio: jest.fn().mockResolvedValue(null),
+  clearPrecio: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockManager = {
+  save: jest.fn((_entity, value) => Promise.resolve(value)),
   getRepository: jest.fn().mockImplementation((entity) => {
     if (entity === Producto) return mockProductoRepository;
     if (entity === Lote) return mockLoteRepository;
@@ -63,6 +80,7 @@ const mockManager = {
     if (entity === Recepcion) return mockRecepcionRepository;
     if (entity === OrdenCompra) return mockOrdenCompraRepository;
     if (entity === DetalleOrdenCompra) return mockDetalleOrdenCompraRepository;
+    if (entity === InventarioAlmacen) return mockInventarioAlmacenRepository;
     return {};
   }),
 };
@@ -96,6 +114,8 @@ const VALID_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </cfdi:Complemento>
 </cfdi:Comprobante>`;
 
+const BOX_XML = VALID_XML.replace(/ClaveUnidad="H87"/g, 'ClaveUnidad="XBX"');
+
 describe('CfdiService', () => {
   let service: CfdiService;
 
@@ -119,6 +139,14 @@ describe('CfdiService', () => {
         { provide: DetalleLoteService, useValue: mockDetalleLoteService },
         { provide: ProveedoresService, useValue: mockProveedoresService },
         { provide: RecepcionesService, useValue: mockRecepcionesService },
+        {
+          provide: PresentacionesService,
+          useValue: mockPresentacionesService,
+        },
+        {
+          provide: PreciosLoteService,
+          useValue: mockPreciosLoteService,
+        },
         {
           provide: getRepositoryToken(OrdenCompra),
           useValue: mockOrdenCompraRepository,
@@ -300,6 +328,63 @@ describe('CfdiService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(mockQueryRunner.rollbackTransaction).not.toHaveBeenCalled();
       expect(mockQueryRunner.release).toHaveBeenCalled();
+    });
+
+    it('escribe presentaciones y precios canónicos en la primera recepción de caja', async () => {
+      mockLaboratorioRepository.findOne.mockResolvedValue({ id: 'lab-1' });
+      mockProductoRepository.findOne.mockResolvedValue(null);
+      mockProductoRepository.create.mockReturnValue({});
+      mockProductoRepository.save.mockResolvedValue({
+        id: 'prod-1',
+        nombre: 'Producto caja',
+        codigoBarras: 'PROD001',
+      });
+      mockPresentacionesService.ensurePresentations.mockResolvedValue([
+        { id: 'pres-pieza', tipo: 'PIEZA' },
+        { id: 'pres-caja', tipo: 'CAJA' },
+      ]);
+
+      await service.procesarRecepcion(
+        {
+          xmlContent: BOX_XML,
+          productos: [
+            {
+              productoId: 'PROD001',
+              esNuevo: true,
+              cantidad: 2,
+              piezasPorCaja: 12,
+              precioVentaPieza: 20,
+              precioVentaCaja: 240,
+              fechaCaducidad: '2026-12-31',
+              numeroLote: 'LOTE-CAJA',
+            },
+          ],
+        } as any,
+        userId,
+      );
+
+      expect(mockPresentacionesService.ensurePresentations).toHaveBeenCalledWith(
+        'prod-1',
+        12,
+        expect.any(Object),
+      );
+      expect(mockPreciosLoteService.setPrecio).toHaveBeenCalledWith(
+        expect.objectContaining({
+          presentacionId: 'pres-pieza',
+          precio: 20,
+        }),
+        expect.any(Object),
+      );
+      expect(mockPreciosLoteService.setPrecio).toHaveBeenCalledWith(
+        expect.objectContaining({
+          presentacionId: 'pres-caja',
+          precio: 240,
+        }),
+        expect.any(Object),
+      );
+      expect(
+        mockPresentacionesService.findByProducto,
+      ).not.toHaveBeenCalled();
     });
 
     it('should rollback transaction on error', async () => {

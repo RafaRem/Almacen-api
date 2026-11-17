@@ -200,6 +200,9 @@ export class FacturacionGlobalService {
   }
 
   private getTasaProducto(detalle: any, tasas: Map<string, number>): number {
+    if (detalle.ivaTasa != null) {
+      return Number(detalle.ivaTasa) || 0;
+    }
     return detalle.loteId
       ? (tasas.get(`lote:${detalle.loteId}`) ?? 0)
       : (tasas.get(`prod:${detalle.productoId}`) ?? 0);
@@ -238,8 +241,7 @@ export class FacturacionGlobalService {
       let vIva = 0;
 
       for (const detalle of venta.detalles || []) {
-        const tasaProducto = this.getTasaProducto(detalle, tasas);
-        const tasa = tasaProducto > 0 ? ivaGlobal : 0;
+        const tasa = this.getTasaProducto(detalle, tasas);
         const base = Number(detalle.subtotal) || 0;
 
         if (tasa > 0) {
@@ -366,8 +368,7 @@ export class FacturacionGlobalService {
 
     for (const venta of ventas) {
       for (const detalle of venta.detalles || []) {
-        const tasaProducto = this.getTasaProducto(detalle, tasas);
-        const tasa = tasaProducto > 0 ? ivaGlobal : 0;
+        const tasa = this.getTasaProducto(detalle, tasas);
         const price = Number(detalle.precioUnitario) || 0;
         const quantity = Number(detalle.cantidad) || 0;
         const discount = Number(detalle.descuentoLinea) || 0;
@@ -377,13 +378,31 @@ export class FacturacionGlobalService {
         subtotal += base;
         impuestos += iva;
 
+        const nombreVisible =
+          detalle.presentacionAlias?.trim() ||
+          detalle.presentacion?.alias?.trim() ||
+          detalle.producto?.nombre ||
+          'Producto';
+        const tipoPresentacion =
+          detalle.tipoPresentacion || detalle.presentacion?.tipo;
+        const esCaja = tipoPresentacion === 'CAJA';
+        const factorUnidades =
+          Number(
+            detalle.factorUnidades || detalle.presentacion?.factorUnidades,
+          ) || 1;
+        const claveUnidad =
+          detalle.claveUnidad ||
+          (esCaja ? 'XBX' : detalle.producto?.claveUnidad || 'ACT');
+
         items.push({
           quantity,
           ...(discount > 0 ? { discount } : {}),
           product: {
-            description: `${detalle.producto?.nombre || 'Producto'} (folio ${venta.folio})`,
+            description: `${nombreVisible}${
+              esCaja ? ` (Caja ${factorUnidades} pzas)` : ''
+            } (folio ${venta.folio})`,
             product_key: detalle.producto?.claveProdServ || '01010101',
-            unit_key: detalle.producto?.claveUnidad || 'ACT',
+            unit_key: claveUnidad,
             price,
             tax_included: false,
             taxes: [{ type: 'IVA', rate: tasa / 100 }],

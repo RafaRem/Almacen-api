@@ -13,9 +13,15 @@ import { PagoVenta } from './entities/pago-venta.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { DetalleVentaLote } from './entities/detalle-venta-lote.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
+import {
+  resolverFactorLinea,
+  validarFactorLotes,
+} from './utils/venta-factor';
 import { UpdatePagosVentaDto } from './dto/update-pagos-venta.dto';
 import { Factura, FacturaStatus } from '../facturas/entities/factura.entity';
 import { ProductosService } from '../productos/productos.service';
+import { PresentacionesService } from '../productos/presentaciones.service';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
 import { LotesService } from '../lotes/lotes.service';
 import { DescuentosService } from '../descuentos/descuentos.service';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
@@ -54,6 +60,8 @@ export class VentasService {
     @InjectRepository(InventarioAlmacen)
     private inventarioAlmacenRepository: Repository<InventarioAlmacen>,
     private productosService: ProductosService,
+    private presentacionesService: PresentacionesService,
+    private preciosLoteService: PreciosLoteService,
     private lotesService: LotesService,
     private descuentosService: DescuentosService,
     private inventarioAlmacenService: InventarioAlmacenService,
@@ -104,7 +112,7 @@ export class VentasService {
 
       let subtotal = 0;
       let descuentoTotal = 0;
-      let baseForIva = 0;
+      let ivaTotal = 0;
       const detalles: Partial<DetalleVenta>[] = [];
       const movimientosLotes: {
         productoId: string;
@@ -115,15 +123,46 @@ export class VentasService {
         detalleIndex: number;
       }[] = [];
       const descuentosInfo: DescuentoInfoEntry[] = [];
+      const lineasInfo: {
+        presentacionId: string | null;
+        presentacionAlias: string | null;
+        tipoPresentacion: string | null;
+        factorUnidades: number;
+        cantidadBase: number;
+      }[] = [];
       const cantidadTotalPorProducto = new Map<string, number>();
       for (const productoVenta of createVentaDto.productos) {
+        const presentacion = productoVenta.presentacionId
+          ? await this.presentacionesService.resolve(
+              productoVenta.productoId,
+              productoVenta.presentacionId,
+            )
+          : await this.presentacionesService.findDefault(
+              productoVenta.productoId,
+            );
+        const tipoPresentacion = presentacion?.tipo || null;
+        const factorUnidades = resolverFactorLinea({
+          tipoPresentacion,
+          factorPresentacion: presentacion?.factorUnidades,
+          factorSolicitado: productoVenta.factorUnidades,
+        });
+        const cantidadBase =
+          Number(productoVenta.cantidad || 0) * factorUnidades;
+        lineasInfo.push({
+          presentacionId: presentacion?.id || null,
+          presentacionAlias: presentacion?.alias?.trim() || null,
+          tipoPresentacion,
+          factorUnidades,
+          cantidadBase,
+        });
         cantidadTotalPorProducto.set(
           productoVenta.productoId,
           (cantidadTotalPorProducto.get(productoVenta.productoId) || 0) +
-            Number(productoVenta.cantidad || 0),
+            cantidadBase,
         );
       }
       const descuentosCalculadosPorProducto = new Map<string, any>();
+      const ivaRate = await this.getIvaRate();
 
       let categoriaClienteId: string | undefined;
       let clienteClase: string | undefined;
@@ -148,6 +187,13 @@ export class VentasService {
             `Cantidad debe ser mayor a 0 para producto ${productoVenta.productoId}`,
           );
         }
+
+        const lineaInfo = lineasInfo[detalleIndex];
+        const factorUnidades = lineaInfo.factorUnidades;
+        const cantidadBase = lineaInfo.cantidadBase;
+        const presentacionId = lineaInfo.presentacionId;
+        const presentacionAlias = lineaInfo.presentacionAlias;
+        const tipoPresentacion = lineaInfo.tipoPresentacion;
 
         const producto = await this.productosService.findOne(
           productoVenta.productoId,
@@ -175,11 +221,6 @@ export class VentasService {
           ? productoVenta.lotes
           : null;
         const tieneLotesSeleccionados = lotesSeleccionados !== null;
-        if (!tieneLotesSeleccionados && !inventarioProducto?.precioVenta) {
-          throw new BadRequestException(
-            `Producto ${producto.nombre} no tiene precio de venta asignado. Configure precioVenta en Inventario.`,
-          );
-        }
 
         let resultadoFEPU;
         if (lotesSeleccionados) {
@@ -187,9 +228,9 @@ export class VentasService {
             (sum, lote) => sum + Number(lote.cantidad || 0),
             0,
           );
-          if (totalLotes !== Number(productoVenta.cantidad)) {
+          if (totalLotes !== cantidadBase) {
             throw new BadRequestException(
-              `La suma de lotes (${totalLotes}) no coincide con la cantidad del producto (${productoVenta.cantidad})`,
+              `La suma de lotes (${totalLotes}) no coincide con la cantidad base del producto (${cantidadBase})`,
             );
           }
           const loteIds = lotesSeleccionados.map((lote) => lote.loteId);
@@ -211,7 +252,7 @@ export class VentasService {
           resultadoFEPU =
             await this.inventarioAlmacenService.reducirStockFIFO(
               productoVenta.productoId,
-              productoVenta.cantidad,
+              cantidadBase,
               AlmacenTipo.VENTAS,
               usuarioId,
               undefined,
@@ -222,6 +263,12 @@ export class VentasService {
         if (!resultadoFEPU.success) {
           throw new BadRequestException(resultadoFEPU.message);
         }
+
+        validarFactorLotes({
+          tipoPresentacion,
+          factorLinea: factorUnidades,
+          lotes: resultadoFEPU.lotsUsed,
+        });
 
         for (const loteInfo of resultadoFEPU.lotsUsed) {
           movimientosLotes.push({
@@ -234,28 +281,60 @@ export class VentasService {
           });
         }
 
-        const totalPrecio = resultadoFEPU.lotsUsed.reduce(
-          (sum, l) => sum + l.precio * l.cantidad,
+        const preciosPorLote = await Promise.all(
+          resultadoFEPU.lotsUsed.map(async (lote) => ({
+            loteId: lote.loteId,
+            cantidad: lote.cantidad,
+            precio:
+              (presentacionId
+                ? await this.preciosLoteService.getPrecio(
+                    lote.loteId,
+                    presentacionId,
+                  )
+                : null) ??
+              (tipoPresentacion === 'CAJA' || factorUnidades > 1
+                ? lote.precioVentaCaja ?? null
+                : lote.precio ?? null),
+          })),
+        );
+        const preciosFaltantes = preciosPorLote.filter(
+          (lote) => lote.precio == null || Number(lote.precio) <= 0,
+        );
+        if (preciosFaltantes.length > 0) {
+          throw new BadRequestException(
+            tipoPresentacion === 'CAJA' || factorUnidades > 1
+              ? `Precio de caja pendiente de asignar para ${producto.nombre}`
+              : `Precio individual pendiente de asignar para ${producto.nombre}`,
+          );
+        }
+        const totalPrecioPresentacion = preciosPorLote.reduce(
+          (sum, lote) =>
+            sum +
+            (tipoPresentacion === 'CAJA' || factorUnidades > 1
+              ? Number(lote.precio) * (lote.cantidad / factorUnidades)
+              : Number(lote.precio) * lote.cantidad),
           0,
         );
         const totalCosto = resultadoFEPU.lotsUsed.reduce(
           (sum, l) => sum + l.costoUnitario * l.cantidad,
           0,
         );
-        const totalCantidad = resultadoFEPU.lotsUsed.reduce(
+        const cantidades = resultadoFEPU.lotsUsed.reduce(
           (sum, l) => sum + l.cantidad,
           0,
         );
+        const cantidadPresentacion = Number(productoVenta.cantidad) || 0;
+        const precioVentaBase =
+          cantidadBase > 0 ? totalPrecioPresentacion / cantidadBase : 0;
         const precioUnitario =
-          totalCantidad > 0 ? totalPrecio / totalCantidad : 0;
+          cantidadPresentacion > 0
+            ? totalPrecioPresentacion / cantidadPresentacion
+            : 0;
         const costoUnitario =
-          totalCantidad > 0 ? totalCosto / totalCantidad : 0;
-
-        const precioVenta = lotesSeleccionados
-          ? totalCantidad > 0
-            ? totalPrecio / totalCantidad
-            : 0
-          : Number(inventarioProducto?.precioVenta || 0);
+          cantidadPresentacion > 0
+            ? totalCosto / cantidadPresentacion
+            : 0;
+        const importeBruto = totalPrecioPresentacion;
 
         const fechaCaducidad = parseDate(
           inventarioProducto?.lote?.fechaCaducidad,
@@ -280,7 +359,7 @@ export class VentasService {
                   producto.laboratorioId,
                   categoriaClienteId,
                   fechaCaducidad,
-                  precioVenta,
+                  precioVentaBase,
                 );
               descuentosCalculadosPorProducto.set(
                 productoVenta.productoId,
@@ -388,14 +467,12 @@ export class VentasService {
             descuentoLinea = Number(
               (
                 Number(calculo.descuentoTotal || 0) *
-                (Number(productoVenta.cantidad) /
-                  Number(cantidadTotalProducto || 1))
+                (cantidadBase / Number(cantidadTotalProducto || 1))
               ).toFixed(2),
             );
           }
         }
 
-        const importeBruto = precioVenta * productoVenta.cantidad;
         const subtotalLinea = importeBruto - descuentoLinea;
 
         subtotal += subtotalLinea;
@@ -406,27 +483,41 @@ export class VentasService {
           inventarioProducto?.ivaPersonalizado ??
           inventarioProducto?.ivaCfdi ??
           0;
-        if (ivaTasaProducto > 0) {
-          baseForIva += subtotalLinea;
-        }
+        const ivaTasa = ivaTasaProducto > 0 ? this.round2(ivaRate * 100) : 0;
+        const ivaImporte =
+          ivaTasa > 0 ? this.round2(subtotalLinea * (ivaTasa / 100)) : 0;
+        ivaTotal += ivaImporte;
 
         const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || '';
+        const tipoSnapshot =
+          tipoPresentacion || (factorUnidades > 1 ? 'CAJA' : 'PIEZA');
+        const esCajaSnapshot = tipoSnapshot === 'CAJA';
 
         detalles.push({
           productoId: productoVenta.productoId,
           loteId: primerLoteId,
+          presentacionId,
+          presentacionAlias,
+          tipoPresentacion: tipoSnapshot,
+          claveUnidad: esCajaSnapshot
+            ? 'XBX'
+            : producto.claveUnidad || 'H87',
+          unidad: esCajaSnapshot ? 'Caja' : 'Pieza',
+          factorUnidades,
+          cantidadBase,
           cantidad: productoVenta.cantidad,
           precioUnitario,
           descuentoLinea,
           subtotal: subtotalLinea,
           importeBruto,
           costoUnitario,
+          ivaTasa,
+          ivaImporte,
         });
       }
 
-      const ivaRate = await this.getIvaRate();
-      const iva = baseForIva * ivaRate;
-      const total = subtotal + iva;
+      const iva = this.round2(ivaTotal);
+      const total = this.round2(subtotal + iva);
 
       let pagosData: {
         formaPago: FormaPago;
@@ -947,7 +1038,7 @@ export class VentasService {
 
     const detalles = await this.detallesRepository.find({
       where: { ventaId: id },
-      relations: ['producto', 'lote'],
+      relations: ['producto', 'lote', 'presentacion'],
     });
 
     const pagos = await this.pagosRepository.find({
@@ -1399,8 +1490,17 @@ export class VentasService {
 
       return {
         productoId: d.productoId,
-        nombre: d.producto?.nombre || 'Producto',
+        nombre:
+          d.presentacionAlias?.trim() ||
+          d.presentacion?.alias?.trim() ||
+          d.producto?.nombre ||
+          'Producto',
         cantidad: Number(d.cantidad) || 0,
+        cantidadBase: Number(d.cantidadBase) || null,
+        factorUnidades: Number(d.factorUnidades) || null,
+        presentacion: d.presentacion?.nombre || null,
+        presentacionTipo:
+          d.tipoPresentacion || d.presentacion?.tipo || null,
         precioUnitario: Number(d.precioUnitario) || 0,
         importeBruto: Number(d.importeBruto) || 0,
         subtotal: Number(d.subtotal) || 0,
@@ -1529,7 +1629,7 @@ export class VentasService {
           : [
               {
                 loteId: detalle.loteId,
-                cantidad: detalle.cantidad,
+                cantidad: detalle.cantidadBase ?? detalle.cantidad,
                 lote: detalle.lote,
               },
             ];

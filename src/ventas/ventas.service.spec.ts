@@ -6,6 +6,8 @@ import { DetalleVenta } from './entities/detalle-venta.entity';
 import { PagoVenta } from './entities/pago-venta.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { ProductosService } from '../productos/productos.service';
+import { PresentacionesService } from '../productos/presentaciones.service';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
 import { LotesService } from '../lotes/lotes.service';
 import { DescuentosService } from '../descuentos/descuentos.service';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
@@ -80,6 +82,16 @@ const mockDescuentosVentaDetalleRepository = {
 
 const mockProductosService = {
   findOne: jest.fn(),
+};
+
+const mockPresentacionesService = {
+  findDefault: jest.fn(),
+  resolve: jest.fn(),
+};
+
+const mockPreciosLoteService = {
+  getPrecio: jest.fn(),
+  findByLotes: jest.fn(),
 };
 
 const mockDescuentosService = {
@@ -169,6 +181,11 @@ describe('VentasService', () => {
           useValue: mockInventarioAlmacenRepository,
         },
         { provide: ProductosService, useValue: mockProductosService },
+        {
+          provide: PresentacionesService,
+          useValue: mockPresentacionesService,
+        },
+        { provide: PreciosLoteService, useValue: mockPreciosLoteService },
         { provide: DescuentosService, useValue: mockDescuentosService },
         {
           provide: InventarioAlmacenService,
@@ -199,6 +216,18 @@ describe('VentasService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockPresentacionesService.findDefault.mockResolvedValue({
+      id: 'presentacion-pieza',
+      factorUnidades: 1,
+      tipo: 'PIEZA',
+    });
+    mockPresentacionesService.resolve.mockResolvedValue({
+      id: 'presentacion-pieza',
+      factorUnidades: 1,
+      tipo: 'PIEZA',
+    });
+    mockPreciosLoteService.getPrecio.mockResolvedValue(61.2);
+    mockPreciosLoteService.findByLotes.mockResolvedValue([]);
     mockQueryBuilder.leftJoinAndSelect.mockReturnThis();
     mockQueryBuilder.orderBy.mockReturnThis();
     mockQueryBuilder.skip.mockReturnThis();
@@ -1337,6 +1366,19 @@ describe('VentasService', () => {
       mockInventarioAlmacenService.findByProductoId.mockResolvedValue({
         ...baseInventario,
         precioVenta: null,
+      });
+      mockPreciosLoteService.getPrecio.mockResolvedValue(null);
+      mockInventarioAlmacenService.reducirStockFIFO.mockResolvedValue({
+        success: true,
+        lotsUsed: [
+          {
+            loteId: 'lote-1',
+            numeroLote: 'L001',
+            cantidad: 1,
+            precio: 0,
+            costoUnitario: 45,
+          },
+        ],
       });
 
       const dto = {

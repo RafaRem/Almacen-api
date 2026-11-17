@@ -246,14 +246,27 @@ export class InventarioAlmacenController {
     @Param('id') id: string,
     @Body() updateDto: UpdateInventarioAlmacenDto,
   ) {
-    if (updateDto.ivaPersonalizado === undefined && updateDto.precioVenta === undefined) {
-      throw new BadRequestException('Al menos un campo (ivaPersonalizado o precioVenta) es requerido');
+    if (
+      updateDto.ivaPersonalizado === undefined &&
+      updateDto.precioVenta === undefined &&
+      updateDto.precioVentaCaja === undefined
+    ) {
+      throw new BadRequestException(
+        'Al menos un campo (ivaPersonalizado, precioVenta o precioVentaCaja) es requerido',
+      );
     }
     if (updateDto.ivaPersonalizado !== undefined) {
       await this.inventarioService.updateIvaPersonalizado(id, updateDto.ivaPersonalizado);
     }
-    if (updateDto.precioVenta !== undefined) {
-      return this.inventarioService.updatePrecioVenta(id, updateDto.precioVenta);
+    if (
+      updateDto.precioVenta !== undefined ||
+      updateDto.precioVentaCaja !== undefined
+    ) {
+      return this.inventarioService.updatePrecioVenta(
+        id,
+        updateDto.precioVenta,
+        updateDto.precioVentaCaja,
+      );
     }
     return { success: true };
   }

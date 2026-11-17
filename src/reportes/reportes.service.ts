@@ -71,6 +71,9 @@ export class ReportesService {
       .leftJoin('detalle.lote', 'lote')
       .select([
         'detalle.cantidad AS cantidad',
+        'COALESCE(detalle.cantidad_base, detalle.cantidad) AS cantidad_base',
+        'detalle.factor_unidades AS factor_unidades',
+        'detalle.tipo_presentacion AS tipo_presentacion',
         'detalle.preciounitario AS precio_unitario',
         'detalle.subtotal AS subtotal',
         'detalle.importebruto AS importe_bruto',
@@ -347,7 +350,7 @@ export class ReportesService {
       .select([
         'producto.id AS producto_id',
         'producto.nombre AS producto_nombre',
-        'SUM(detalle.cantidad) AS total_cantidad_vendida',
+        'SUM(COALESCE(detalle.cantidad_base, detalle.cantidad)) AS total_cantidad_vendida',
         'COUNT(DISTINCT venta.id) AS cantidad_ventas',
       ])
       .where('venta.statusId = :statusId', { statusId: 1 })
@@ -474,19 +477,29 @@ export class ReportesService {
       .getMany();
 
     const vendidosPeriodo = detalles.reduce(
-      (sum, d) => sum + Number(d.cantidad || 0),
+      (sum, d) =>
+        sum +
+        Number(
+          d.cantidadBase != null ? d.cantidadBase : d.cantidad || 0,
+        ),
       0,
     );
     const stockInicial = stockTotal + vendidosPeriodo;
 
     let saldo = stockInicial;
     const trazabilidad = detalles.map((d) => {
-      const cantidad = d.cantidad || 0;
+      const cantidadPresentacion = Number(d.cantidad || 0);
+      const factorUnidades = Number(d.factorUnidades) || 1;
+      const cantidad =
+        d.cantidadBase != null
+          ? Number(d.cantidadBase)
+          : cantidadPresentacion * factorUnidades;
       const precioUnitario = Number(d.precioUnitario) || 0;
       const costoUnitario = Number(d.costoUnitario) || 0;
       const descuentoLinea = Number(d.descuentoLinea) || 0;
 
-      const utilidadBruta = (precioUnitario - costoUnitario) * cantidad;
+      const utilidadBruta =
+        (precioUnitario - costoUnitario) * cantidadPresentacion;
       const utilidadLinea = utilidadBruta - descuentoLinea;
 
       const cantidadInicial = saldo;
@@ -498,6 +511,9 @@ export class ReportesService {
         clienteNombre: d.venta?.cliente?.nombre || 'Cliente General',
         numeroLote: d.lote?.numeroLote,
         cantidad,
+        cantidadPresentacion,
+        factorUnidades,
+        tipoPresentacion: d.tipoPresentacion || null,
         cantidadInicial,
         restante: saldo,
         precioVenta: precioUnitario,

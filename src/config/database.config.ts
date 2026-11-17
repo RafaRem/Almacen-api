@@ -4,6 +4,9 @@ import { User } from '../users/entities/user.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
+import { LotePrecio } from '../precios-lote/entities/lote-precio.entity';
+import { LotePrecioHistorial } from '../precios-lote/entities/lote-precio-historial.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { CategoriaCliente } from '../categorias-cliente/entities/categoria-cliente.entity';
 import { Descuento } from '../descuentos/entities/descuento.entity';
@@ -47,6 +50,9 @@ export const databaseEntities = [
   Laboratorio,
   Lote,
   Producto,
+  ProductoPresentacion,
+  LotePrecio,
+  LotePrecioHistorial,
   MovimientoAlmacen,
   CategoriaCliente,
   Descuento,

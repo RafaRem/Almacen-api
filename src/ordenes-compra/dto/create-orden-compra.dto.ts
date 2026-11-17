@@ -8,6 +8,7 @@ import {
   IsInt,
   Min,
   IsDateString,
+  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -60,6 +61,11 @@ export class RecibirDetalleDto {
 
   @IsDateString()
   fechaCaducidad: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioUnitario?: number;
 }
 
 export class RecibirOrdenCompraDto {

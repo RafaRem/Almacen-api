@@ -1,11 +1,15 @@
-import { IsOptional, IsNumber, ValidateIf } from 'class-validator';
+import { IsOptional, IsNumber } from 'class-validator';
 
 export class UpdateInventarioAlmacenDto {
   @IsOptional()
   @IsNumber()
   ivaPersonalizado?: number;
 
-  @ValidateIf((o) => o.precioVenta !== undefined)
+  @IsOptional()
   @IsNumber()
   precioVenta?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  precioVentaCaja?: number | null;
 }

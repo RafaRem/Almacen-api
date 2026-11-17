@@ -13,6 +13,14 @@ export class LotItemDto {
   @IsOptional()
   loteId?: string | null;
 
+  @IsNumber()
+  @IsOptional()
+  cantidadBase?: number;
+
+  @IsNumber()
+  @IsOptional()
+  factorUnidades?: number;
+
   @IsString()
   @IsOptional()
   numeroLote?: string;
@@ -39,8 +47,8 @@ export class LotItemDto {
 }
 
 export class CartItemDto {
-  @IsNumber()
-  id: number;
+  @IsString()
+  id: string;
 
   @IsString()
   nombre: string;
@@ -51,9 +59,9 @@ export class CartItemDto {
   @IsNumber()
   quantity: number;
 
-  @IsNumber()
+  @IsString()
   @IsOptional()
-  loteId?: number | null;
+  loteId?: string | null;
 
   @IsString()
   @IsOptional()
@@ -100,6 +108,34 @@ export class CartItemDto {
   @IsBoolean()
   @IsOptional()
   ivaDelProducto?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  cantidadBase?: number;
+
+  @IsNumber()
+  @IsOptional()
+  factorUnidades?: number;
+
+  @IsString()
+  @IsOptional()
+  presentacionId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  presentacionNombre?: string | null;
+
+  @IsString()
+  @IsOptional()
+  tipoPresentacion?: string | null;
+
+  @IsString()
+  @IsOptional()
+  presentacionTipo?: string | null;
+
+  @IsString()
+  @IsOptional()
+  lineId?: string;
 }
 
 export class SavedCartDto {

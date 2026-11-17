@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { XMLParser } from 'fast-xml-parser';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { OrdenCompra } from '../ordenes-compra/entities/orden-compra.entity';
@@ -16,7 +17,11 @@ import { InventarioAlmacenService } from '../inventario-almacen/inventario-almac
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
 import { RecepcionesService } from '../recepciones/recepciones.service';
+import { PresentacionesService } from '../productos/presentaciones.service';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { EmpaqueEstado } from '../common/enums/empaque-estado.enum';
 import { TipoMovimiento } from '../common/constants';
 import {
   CfdiPreviewDto,
@@ -41,6 +46,8 @@ export class CfdiService {
     private detalleLoteService: DetalleLoteService,
     private proveedoresService: ProveedoresService,
     private recepcionesService: RecepcionesService,
+    private presentacionesService: PresentacionesService,
+    private preciosLoteService: PreciosLoteService,
     private dataSource: DataSource,
   ) {}
 
@@ -147,7 +154,9 @@ export class CfdiService {
           .map((producto) => ({
             productoId:
               productoIdMap.get(producto.productoId) || producto.productoId,
-            cantidad: producto.cantidad,
+            cantidad:
+              Number(producto.cantidad) *
+              (Number(producto.piezasPorCaja) || 1),
           }));
 
         ordenCompraVinculada = await this.vincularConOrdenCompra(
@@ -182,6 +191,11 @@ export class CfdiService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (error?.code === '23505') {
+        throw new BadRequestException(
+          `El CFDI UUID ${cfdiData.uuidCfdi || ''} ya fue recibido`,
+        );
+      }
       throw error;
     } finally {
       await queryRunner.release();
@@ -248,16 +262,19 @@ export class CfdiService {
         this.getXmlValue(conceptoXml, /ClaveProdServ="([^"]+)"/) || '';
       const claveUnidad =
         this.getXmlValue(conceptoXml, /ClaveUnidad="([^"]+)"/) || '';
+      const unidad =
+        this.getXmlValue(conceptoXml, /(?:^|\s)Unidad="([^"]+)"/) || '';
 
       const tasaMatch = conceptoXml.match(/TasaOCuota="([^"]+)"/);
       const tasaOcuota = tasaMatch ? parseFloat(tasaMatch[1]) : 0;
       const objImp = conceptoXml.match(/ObjetoImp="([^"]+)"/)?.[1] || '00';
       objetoImp = objImp;
 
-      let ivaCfdi: number | null = null;
-      if (objImp === '02' || objImp === '03') {
-        ivaCfdi = tasaOcuota > 0 ? 16 : 0;
-      }
+      const tasaIva =
+        objImp === '02' || objImp === '03'
+          ? Math.round((Number(tasaOcuota) || 0) * 10000) / 100
+          : 0;
+      const ivaCfdi = tasaIva;
 
       return {
         cantidad,
@@ -266,8 +283,10 @@ export class CfdiService {
         valorUnitario,
         claveProdServ,
         claveUnidad,
+        unidad,
         ivaCfdi,
         objetoImp: objImp,
+        tasaIva,
       };
     });
 
@@ -325,7 +344,10 @@ export class CfdiService {
       stockMinimo?: number;
       stockMaximo?: number;
       precioVenta?: number;
+      precioVentaCaja?: number;
+      precioVentaPieza?: number;
       margenRecomendado?: number;
+      piezasPorCaja?: number;
     }[],
     conceptos: ConceptoDto[],
     userId: string,
@@ -349,6 +371,36 @@ export class CfdiService {
       const concepto = conceptos.find(
         (c) => c.noIdentificacion === prodDto.productoId,
       );
+      const unidad = (concepto?.unidad || '').toUpperCase();
+      const claveUnidad = (concepto?.claveUnidad || '').toUpperCase();
+      const esCaja =
+        ['CJA', 'XBX', 'XPK', 'XBG', 'XSA', 'XCA', 'XBA'].includes(unidad) ||
+        ['XBX', 'CJA', 'XPK', 'XBG', 'XSA', 'XCA'].includes(claveUnidad);
+      const factor = esCaja
+        ? Number(prodDto.piezasPorCaja) ||
+          this.presentacionesService.inferFactor(concepto?.descripcion) ||
+          0
+        : 1;
+      if (esCaja && factor < 2) {
+        throw new BadRequestException(
+          `Indica las piezas por caja para ${concepto?.descripcion || prodDto.productoId}`,
+        );
+      }
+      const cantidadBase = Number(prodDto.cantidad) * factor;
+      const costoPieza = Number(concepto?.valorUnitario || 0) / factor;
+      const precioPieza =
+        prodDto.precioVentaPieza != null
+          ? Number(prodDto.precioVentaPieza)
+          : prodDto.precioVenta != null
+            ? Number(prodDto.precioVenta)
+            : null;
+      const precioCaja = esCaja
+        ? prodDto.precioVentaCaja != null
+          ? Number(prodDto.precioVentaCaja)
+          : precioPieza != null
+            ? precioPieza * factor
+            : null
+        : null;
 
       const lote = await this.crearOLocalizarLote(
         prodDto.numeroLote || `LOTE-${serie || 'X'}-${folio || '0'}-${prodDto.productoId}`,
@@ -365,8 +417,8 @@ export class CfdiService {
       });
 
       const margenCalculado = this.calcularMargen(
-        prodDto.precioVenta,
-        concepto?.valorUnitario,
+        precioPieza ?? undefined,
+        costoPieza,
       );
       const margenRecomendado =
         margenCalculado ??
@@ -380,7 +432,7 @@ export class CfdiService {
           prodDto,
           laboratorioId,
           manager,
-          cfdiData.objetoImp || '00',
+          concepto?.objetoImp || cfdiData.objetoImp || '00',
           margenRecomendado,
         );
         productosCreados.push({
@@ -388,9 +440,24 @@ export class CfdiService {
           codigoBarras: producto.codigoBarras,
         });
       } else {
+        if (esCaja) {
+          await this.presentacionesService.validarRecepcionCaja(
+            producto,
+            factor,
+            manager,
+          );
+        }
         // Actualizar impuestoAplicado en producto existente
         await productoRepo.update(producto.id, {
-          impuestoAplicado: cfdiData.objetoImp || '00',
+          impuestoAplicado:
+            concepto?.objetoImp || cfdiData.objetoImp || '00',
+          ...(esCaja
+            ? {
+                piezasPorCajaDefault: factor,
+                empaqueEstado: EmpaqueEstado.CONVERTIDO,
+                claveUnidad: 'H87',
+              }
+            : {}),
           ...(margenRecomendado != null
             ? { margenRecomendado }
             : {}),
@@ -403,25 +470,94 @@ export class CfdiService {
 
       productoIdMap.set(prodDto.productoId, producto.id);
 
+      let presentacionesRecepcion: ProductoPresentacion[] = [];
+      if (esCaja) {
+        lote.piezasPorCaja = factor;
+        lote.empaqueConvertido = true;
+        await manager.save(Lote, lote);
+        producto.piezasPorCajaDefault = factor;
+        producto.empaqueEstado = EmpaqueEstado.CONVERTIDO;
+        producto.claveUnidad = 'H87';
+        await productoRepo.save(producto);
+        presentacionesRecepcion =
+          await this.presentacionesService.ensurePresentations(
+            producto.id,
+            factor,
+            manager,
+          );
+      }
+
       const inventario = await this.inventarioAlmacenService.agregarStock(
         producto.id,
         lote.id,
         AlmacenTipo.RECEPCION,
-        prodDto.cantidad,
+        cantidadBase,
         concepto?.ivaCfdi,
-        concepto?.valorUnitario || 0,
+        costoPieza,
         manager,
         TipoMovimiento.ENTRADA_BODEGA,
         userId,
-        prodDto.precioVenta,
+        precioPieza ?? undefined,
       );
+
+      const presentaciones = presentacionesRecepcion.length
+        ? presentacionesRecepcion
+        : await this.presentacionesService.findByProducto(producto.id);
+      const piezaPresentacion = presentaciones.find(
+        (p) => p.tipo === 'PIEZA',
+      );
+      const cajaPresentacion = presentaciones.find(
+        (p) => p.tipo === 'CAJA',
+      );
+      if (piezaPresentacion) {
+        if (precioPieza != null && precioPieza > 0) {
+          await this.preciosLoteService.setPrecio({
+            productoId: producto.id,
+            loteId: lote.id,
+            presentacionId: piezaPresentacion.id,
+            precio: precioPieza,
+            usuarioId: userId,
+            motivo: 'Precio individual asignado en recepción',
+          }, manager);
+        } else {
+          await this.preciosLoteService.clearPrecio(
+            lote.id,
+            piezaPresentacion.id,
+            userId,
+            'Precio individual pendiente en recepción',
+            manager,
+          );
+        }
+      }
+      if (esCaja && cajaPresentacion) {
+        if (precioCaja != null && precioCaja > 0) {
+          await this.preciosLoteService.setPrecio({
+            productoId: producto.id,
+            loteId: lote.id,
+            presentacionId: cajaPresentacion.id,
+            precio: precioCaja,
+            usuarioId: userId,
+            motivo: 'Precio de caja asignado en recepción',
+          }, manager);
+        } else {
+          await this.preciosLoteService.clearPrecio(
+            lote.id,
+            cajaPresentacion.id,
+            userId,
+            'Precio de caja pendiente en recepción',
+            manager,
+          );
+        }
+        inventario.precioVentaCaja = precioCaja;
+        await manager.getRepository(InventarioAlmacen).save(inventario);
+      }
 
       await this.detalleLoteService.create(
         {
           productoId: producto.id,
           loteId: lote.id,
-          cantidad: prodDto.cantidad,
-          precioUnitario: concepto?.valorUnitario || 0,
+          cantidad: cantidadBase,
+          precioUnitario: costoPieza,
           ivaCfdi: concepto?.ivaCfdi || null,
           movimientoId: inventario.ultimoMovimientoId || undefined,
           almacenTipo: AlmacenTipo.RECEPCION,
@@ -486,7 +622,7 @@ export class CfdiService {
     const repo = manager ? manager.getRepository(Lote) : this.loteRepository;
 
     const loteExistente = await repo.findOne({
-      where: { numeroLote: numeroLote },
+      where: { numeroLote, laboratorioId },
       lock: manager ? { mode: 'pessimistic_write' } : undefined,
     });
 

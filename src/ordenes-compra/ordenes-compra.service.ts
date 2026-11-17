@@ -18,6 +18,8 @@ import { UpdateOrdenCompraDto } from './dto/update-orden-compra.dto';
 import { Lote } from '../lotes/entities/lote.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
+import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
+import { LotePrecio } from '../precios-lote/entities/lote-precio.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Proveedor } from '../proveedores/entities/proveedor.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
@@ -570,34 +572,48 @@ export class OrdenesCompraService {
       throw new BadRequestException('No se puede recibir una orden cancelada');
     }
 
-    const detallesMap = new Map(orden.detalles.map((d) => [d.id, d]));
-
-    for (const detalleRecibido of recibirDto.detalles) {
-      const detalle = detallesMap.get(detalleRecibido.detalleId);
-      if (!detalle) {
-        throw new NotFoundException(
-          `Detalle ${detalleRecibido.detalleId} no encontrado en la orden`,
-        );
-      }
-
-      const nuevaRecibida =
-        detalle.cantidadRecibida + detalleRecibido.cantidadRecibida;
-      if (nuevaRecibida > detalle.cantidad) {
-        throw new BadRequestException(
-          `Cantidad recibida (${nuevaRecibida}) excede la cantidad ordenada (${detalle.cantidad}) para el producto ${detalle.producto?.nombre || detalle.productoId}`,
-        );
-      }
-
-      const producto = await this.productoRepository.findOne({
-        where: { id: detalle.productoId },
+    await this.entityManager.transaction(async (manager) => {
+      const ordenBloqueada = await manager.findOne(OrdenCompra, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
       });
-      if (!producto) {
-        throw new NotFoundException(
-          `Producto ${detalle.productoId} no encontrado`,
-        );
+      if (!ordenBloqueada) {
+        throw new NotFoundException('Orden de compra no encontrada');
       }
 
-      await this.entityManager.transaction(async (manager) => {
+      const detalles = await manager.find(DetalleOrdenCompra, {
+        where: { ordenCompraId: id },
+        relations: ['producto'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      const detallesMap = new Map(detalles.map((detalle) => [detalle.id, detalle]));
+
+      for (const detalleRecibido of recibirDto.detalles) {
+        const detalle = detallesMap.get(detalleRecibido.detalleId);
+        if (!detalle) {
+          throw new NotFoundException(
+            `Detalle ${detalleRecibido.detalleId} no encontrado en la orden`,
+          );
+        }
+
+        const nuevaRecibida =
+          Number(detalle.cantidadRecibida) +
+          Number(detalleRecibido.cantidadRecibida);
+        if (nuevaRecibida > Number(detalle.cantidad)) {
+          throw new BadRequestException(
+            `Cantidad recibida (${nuevaRecibida}) excede la cantidad ordenada (${detalle.cantidad}) para el producto ${detalle.producto?.nombre || detalle.productoId}`,
+          );
+        }
+
+        const producto = await manager.findOne(Producto, {
+          where: { id: detalle.productoId },
+        });
+        if (!producto) {
+          throw new NotFoundException(
+            `Producto ${detalle.productoId} no encontrado`,
+          );
+        }
+
         let lote = await manager.findOne(Lote, {
           where: { numeroLote: detalleRecibido.numeroLote },
         });
@@ -617,9 +633,28 @@ export class OrdenesCompraService {
             numeroLote: detalleRecibido.numeroLote,
             fechaCaducidad: new Date(detalleRecibido.fechaCaducidad),
             laboratorioId: producto.laboratorioId,
+            piezasPorCaja: producto.piezasPorCajaDefault,
+            empaqueConvertido: producto.empaqueEstado === 'CONVERTIDO',
+            statusId: 1,
           });
           lote = await manager.save(Lote, lote);
         }
+
+        const inventarioReferencia = await manager.findOne(InventarioAlmacen, {
+          where: { productoId: detalle.productoId },
+          order: { updatedAt: 'DESC' },
+        });
+        const costoRecibido =
+          detalleRecibido.precioUnitario != null
+            ? Number(detalleRecibido.precioUnitario)
+            : null;
+        const costoUnitario =
+          (costoRecibido != null && costoRecibido > 0
+            ? costoRecibido
+            : Number(detalle.precioEstimado)) ||
+          Number(inventarioReferencia?.precioUnitarioLote) ||
+          0;
+        const cantidadBase = Number(detalleRecibido.cantidadRecibida);
 
         let inventario = await manager.findOne(InventarioAlmacen, {
           where: {
@@ -627,19 +662,34 @@ export class OrdenesCompraService {
             loteId: lote.id,
             almacenTipo: AlmacenTipo.VENTAS,
           },
+          lock: { mode: 'pessimistic_write' },
         });
 
         if (inventario) {
           inventario.cantidadActual =
-            Number(inventario.cantidadActual) +
-            detalleRecibido.cantidadRecibida;
+            Number(inventario.cantidadActual) + cantidadBase;
+          if (costoUnitario > 0) {
+            inventario.precioUnitarioLote = costoUnitario;
+          }
+          if (inventario.precioVenta == null) {
+            inventario.precioVenta = inventarioReferencia?.precioVenta ?? null;
+          }
+          if (inventario.precioVentaCaja == null) {
+            inventario.precioVentaCaja =
+              inventarioReferencia?.precioVentaCaja ?? null;
+          }
         } else {
           inventario = manager.create(InventarioAlmacen, {
             productoId: detalle.productoId,
             loteId: lote.id,
             almacenTipo: AlmacenTipo.VENTAS,
-            cantidadActual: detalleRecibido.cantidadRecibida,
-            precioUnitarioLote: 0,
+            cantidadActual: cantidadBase,
+            precioUnitarioLote: costoUnitario,
+            precioVenta: inventarioReferencia?.precioVenta ?? null,
+            precioVentaCaja: inventarioReferencia?.precioVentaCaja ?? null,
+            ivaCfdi: inventarioReferencia?.ivaCfdi ?? null,
+            ivaPersonalizado:
+              inventarioReferencia?.ivaPersonalizado ?? null,
           });
         }
 
@@ -650,42 +700,92 @@ export class OrdenesCompraService {
           loteId: lote.id,
           almacenOrigen: AlmacenTipo.VENTAS,
           almacenDestino: AlmacenTipo.VENTAS,
-          cantidad: detalleRecibido.cantidadRecibida,
+          cantidad: cantidadBase,
           userId: SYSTEM_USER_ID,
           observaciones: `Recepción OC ${orden.folio}`,
           tipoMovimiento: TipoMovimiento.ENTRADA_BODEGA,
           origenOperacion: OrigenOperacion.API,
         });
-        await manager.save(MovimientoAlmacen, movimiento);
+        const movimientoGuardado = await manager.save(
+          MovimientoAlmacen,
+          movimiento,
+        );
+
+        const detalleLoteRepo = manager.getRepository(DetalleLote);
+        await detalleLoteRepo.save(
+          detalleLoteRepo.create({
+            productoId: detalle.productoId,
+            loteId: lote.id,
+            cantidad: cantidadBase,
+            precioUnitario: costoUnitario,
+            ivaCfdi: inventario.ivaCfdi,
+            movimientoId: movimientoGuardado.id,
+            almacenTipo: AlmacenTipo.VENTAS,
+          }),
+        );
+
+        inventario.ultimoMovimientoId = movimientoGuardado.id;
+        await manager.save(InventarioAlmacen, inventario);
+
+        const preciosOrigen = await manager.getRepository(LotePrecio).find({
+          where: { productoId: detalle.productoId, statusId: 1 },
+          order: { updatedAt: 'DESC' },
+        });
+        const precioRepo = manager.getRepository(LotePrecio);
+        for (const precioOrigen of preciosOrigen) {
+          const existente = await precioRepo.findOne({
+            where: {
+              loteId: lote.id,
+              presentacionId: precioOrigen.presentacionId,
+            },
+          });
+          if (!existente) {
+            await precioRepo.save(
+              precioRepo.create({
+                productoId: detalle.productoId,
+                loteId: lote.id,
+                presentacionId: precioOrigen.presentacionId,
+                precioVenta: precioOrigen.precioVenta,
+                statusId: 1,
+                createdBy: null,
+                updatedBy: null,
+              }),
+            );
+          }
+        }
 
         if (
-          inventario.precioUnitarioLote &&
-          inventario.precioUnitarioLote > 0 &&
-          producto.margenRecomendado
+          costoUnitario > 0 &&
+          Number(producto.margenRecomendado) > 0 &&
+          inventario.precioVenta == null
         ) {
-          const margen = producto.margenRecomendado ?? 20;
           inventario.precioVenta =
-            Math.round(inventario.precioUnitarioLote * (1 + margen / 100) * 100) / 100;
+            Math.round(
+              costoUnitario * (1 + Number(producto.margenRecomendado) / 100) *
+                100,
+            ) / 100;
           await manager.save(InventarioAlmacen, inventario);
         }
 
         detalle.cantidadRecibida = nuevaRecibida;
         await manager.save(DetalleOrdenCompra, detalle);
+      }
+
+      const detallesActualizados = await manager.find(DetalleOrdenCompra, {
+        where: { ordenCompraId: id },
       });
-    }
-
-    const ordenActualizada = await this.findOne(id);
-    const todosCompletados = ordenActualizada.detalles.every(
-      (d) => d.cantidadRecibida >= d.cantidad,
-    );
-
-    if (todosCompletados) {
-      ordenActualizada.status = 'COMPLETADA';
-      await this.ordenesRepository.save(ordenActualizada);
-    } else if (ordenActualizada.status === 'BORRADOR') {
-      ordenActualizada.status = 'PENDIENTE';
-      await this.ordenesRepository.save(ordenActualizada);
-    }
+      const todosCompletados = detallesActualizados.every(
+        (detalle) =>
+          Number(detalle.cantidadRecibida) >= Number(detalle.cantidad),
+      );
+      if (todosCompletados) {
+        ordenBloqueada.status = 'COMPLETADA';
+        await manager.save(OrdenCompra, ordenBloqueada);
+      } else if (ordenBloqueada.status === 'BORRADOR') {
+        ordenBloqueada.status = 'PENDIENTE';
+        await manager.save(OrdenCompra, ordenBloqueada);
+      }
+    });
 
     return this.findOne(id);
   }

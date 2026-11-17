@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { OrdenCompra } from './orden-compra.entity';
 import { Producto } from '../../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../../productos/entities/producto-presentacion.entity';
 
 @Entity('detalle_orden_compra')
 export class DetalleOrdenCompra {
@@ -28,6 +29,16 @@ export class DetalleOrdenCompra {
   @ManyToOne(() => Producto)
   @JoinColumn({ name: 'productoId' })
   producto: Producto;
+
+  @Column({ type: 'uuid', name: 'presentacionid', nullable: true })
+  presentacionId: string | null;
+
+  @ManyToOne(() => ProductoPresentacion, { nullable: true })
+  @JoinColumn({ name: 'presentacionid' })
+  presentacion: ProductoPresentacion | null;
+
+  @Column({ type: 'int', name: 'factor_unidades', nullable: true })
+  factorUnidades: number | null;
 
   @Column({ type: 'int' })
   cantidad: number;

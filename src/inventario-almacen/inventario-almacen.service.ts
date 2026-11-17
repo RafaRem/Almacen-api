@@ -5,13 +5,17 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager, MoreThan } from 'typeorm';
+import { Repository, DataSource, EntityManager, MoreThan, In } from 'typeorm';
 import { InventarioAlmacen } from './entities/inventario-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
+import { PresentacionTipo } from '../common/enums/presentacion-tipo.enum';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
+import { LotePrecio } from '../precios-lote/entities/lote-precio.entity';
 import {
   SYSTEM_USER_ID,
   TipoMovimiento,
@@ -40,6 +44,9 @@ export class InventarioAlmacenService {
     private productoRepository: Repository<Producto>,
     @InjectRepository(Lote)
     private loteRepository: Repository<Lote>,
+    @InjectRepository(ProductoPresentacion)
+    private presentacionRepository: Repository<ProductoPresentacion>,
+    private preciosLoteService: PreciosLoteService,
     @InjectRepository(MovimientoAlmacen)
     private movimientoRepository: Repository<MovimientoAlmacen>,
     private dataSource: DataSource,
@@ -47,7 +54,7 @@ export class InventarioAlmacenService {
 
   async findAll(): Promise<InventarioAlmacen[]> {
     return this.inventarioRepository.find({
-      relations: ['producto', 'lote'],
+      relations: ['producto', 'producto.presentaciones', 'lote'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -99,11 +106,16 @@ export class InventarioAlmacenService {
         if (inv.precioVenta) {
           agrupado.get(key).precioVenta = inv.precioVenta;
         }
+        if (inv.precioVentaCaja) {
+          agrupado.get(key).precioVentaCaja = inv.precioVentaCaja;
+        }
         agrupado.get(key).lotes.push({
           loteId: inv.loteId,
           numeroLote: inv.lote?.numeroLote,
           precio: inv.precioUnitarioLote,
           precioVenta: inv.precioVenta,
+          precioVentaCaja: inv.precioVentaCaja,
+          piezasPorCaja: inv.lote?.piezasPorCaja,
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
           iva_cfdi: inv.ivaCfdi,
@@ -113,6 +125,9 @@ export class InventarioAlmacenService {
         agrupado.set(key, {
           productoId: inv.productoId,
           producto: inv.producto,
+          presentaciones: (inv.producto as any)?.presentaciones || [],
+          piezasPorCajaDefault: (inv.producto as any)?.piezasPorCajaDefault || null,
+          empaqueEstado: (inv.producto as any)?.empaqueEstado || null,
           cantidadActual: Number(inv.cantidadActual),
           lote: inv.lote,
           loteId: inv.loteId,
@@ -120,12 +135,15 @@ export class InventarioAlmacenService {
           ivaCfdi: inv.ivaCfdi,
           precioUnitarioLote: inv.precioUnitarioLote,
           precioVenta: inv.precioVenta,
+          precioVentaCaja: inv.precioVentaCaja,
           lotes: [
             {
               loteId: inv.loteId,
               numeroLote: inv.lote?.numeroLote,
               precio: inv.precioUnitarioLote,
               precioVenta: inv.precioVenta,
+              precioVentaCaja: inv.precioVentaCaja,
+              piezasPorCaja: inv.lote?.piezasPorCaja,
               fechaCaducidad: inv.lote?.fechaCaducidad,
               cantidad: Number(inv.cantidadActual),
               iva_cfdi: inv.ivaCfdi,
@@ -148,7 +166,74 @@ export class InventarioAlmacenService {
       }
     }
 
+    if (resultado.length > 0) {
+      const productoIds = resultado.map((item) => item.productoId);
+      const presentaciones = await this.presentacionRepository.find({
+        where: { productoId: In(productoIds), statusId: 1 },
+        order: { factorUnidades: 'ASC' },
+      });
+      for (const item of resultado) {
+        item.presentaciones = presentaciones.filter(
+          (presentacion) => presentacion.productoId === item.productoId,
+        );
+      }
+      const lotIds = resultado.flatMap((item) =>
+        (item.lotes || []).map((lote) => lote.loteId),
+      );
+      const precios = await this.preciosLoteService.findByLotes(lotIds);
+      const preciosMap = new Map<string, { pieza?: number; caja?: number }>();
+      for (const precio of precios) {
+        const actual = preciosMap.get(precio.loteId) || {};
+        if (precio.presentacion?.tipo === 'PIEZA') {
+          actual.pieza = Number(precio.precioVenta);
+        } else if (precio.presentacion?.tipo === 'CAJA') {
+          actual.caja = Number(precio.precioVenta);
+        }
+        preciosMap.set(precio.loteId, actual);
+      }
+      for (const item of resultado) {
+        for (const lote of item.lotes || []) {
+          const precio = preciosMap.get(lote.loteId);
+          if (precio) {
+            if (precio.pieza !== undefined) lote.precioVenta = precio.pieza;
+            if (precio.caja !== undefined) lote.precioVentaCaja = precio.caja;
+          }
+        }
+        const primerLote = item.lotes?.[0];
+        item.precioVenta =
+          item.lotes?.find((lote) => lote.precioVenta != null)?.precioVenta ??
+          item.precioVenta ??
+          null;
+        item.precioVentaCaja =
+          item.lotes?.find((lote) => lote.precioVentaCaja != null)?.precioVentaCaja ??
+          item.precioVentaCaja ??
+          null;
+        item.precioVentaSugerido =
+          item.precioVentaCaja && item.piezasPorCajaDefault
+            ? Math.round(
+                (Number(item.precioVentaCaja) /
+                  Number(item.piezasPorCajaDefault)) *
+                  100,
+              ) / 100
+            : null;
+      }
+    }
+
     for (const item of resultado) {
+      const esProductoEmpacado =
+        item.empaqueEstado === 'CONVERTIDO' &&
+        Number(item.piezasPorCajaDefault) > 1;
+      if (esProductoEmpacado) {
+        item.precioVentaSugerido =
+          item.precioVentaCaja && item.piezasPorCajaDefault
+            ? Math.round(
+                (Number(item.precioVentaCaja) /
+                  Number(item.piezasPorCajaDefault)) *
+                  100,
+              ) / 100
+            : null;
+        continue;
+      }
       if (item.precioUnitarioLote > 0 && item.precioVenta == null) {
         item.precioVenta = this.calcularPrecioVenta(
           item.precioUnitarioLote,
@@ -273,6 +358,12 @@ export class InventarioAlmacenService {
     if (!producto) {
       return inventario;
     }
+    if (
+      producto.empaqueEstado === 'CONVERTIDO' &&
+      Number(producto.piezasPorCajaDefault) > 1
+    ) {
+      return inventario;
+    }
 
     inventario.precioVenta = this.calcularPrecioVenta(
       inventario.precioUnitarioLote,
@@ -300,6 +391,10 @@ export class InventarioAlmacenService {
       .innerJoinAndSelect('inv.lote', 'lote')
       .where('inv.productoId = :productoId', { productoId })
       .andWhere('inv.almacenTipo = :almacenTipo', { almacenTipo })
+      .andWhere('inv.cantidadActual > 0')
+      .andWhere("CAST(lote.statusId AS text) = :loteActivo", {
+        loteActivo: '1',
+      })
       .orderBy('lote.fechaCaducidad', 'ASC')
       .setLock('pessimistic_write')
       .getMany();
@@ -339,6 +434,8 @@ export class InventarioAlmacenService {
       numeroLote: string;
       cantidad: number;
       precio: number;
+      precioVentaCaja?: number | null;
+      piezasPorCaja?: number | null;
       costoUnitario: number;
     }[];
     movimientoId?: string;
@@ -373,15 +470,12 @@ export class InventarioAlmacenService {
         numeroLote: string;
         cantidad: number;
         precio: number;
+        precioVentaCaja?: number | null;
+        piezasPorCaja?: number | null;
         costoUnitario: number;
       }[] = [];
 
       for (const { inventario, cantidad: cant } of lotsSelected) {
-        if (inventario.precioVenta == null) {
-          throw new Error(
-            `Precio de venta no asignado para producto ${productoId} (lote: ${inventario.lote?.numeroLote || inventario.loteId}). Configure precioVenta en Inventario.`,
-          );
-        }
         inventario.cantidadActual -= cant;
         await manager.save(inventario);
 
@@ -389,7 +483,9 @@ export class InventarioAlmacenService {
           loteId: inventario.loteId,
           numeroLote: inventario.lote?.numeroLote || 'N/A',
           cantidad: cant,
-          precio: inventario.precioVenta,
+          precio: Number(inventario.precioVenta) || 0,
+          precioVentaCaja: inventario.precioVentaCaja,
+          piezasPorCaja: inventario.lote?.piezasPorCaja,
           costoUnitario: Number(inventario.precioUnitarioLote) || 0,
         });
       }
@@ -438,6 +534,8 @@ export class InventarioAlmacenService {
       numeroLote: string;
       cantidad: number;
       precio: number;
+      precioVentaCaja?: number | null;
+      piezasPorCaja?: number | null;
       costoUnitario: number;
     }[];
     movimientoId?: string;
@@ -479,6 +577,8 @@ export class InventarioAlmacenService {
         numeroLote: string;
         cantidad: number;
         precio: number;
+        precioVentaCaja?: number | null;
+        piezasPorCaja?: number | null;
         costoUnitario: number;
       }[] = [];
 
@@ -500,12 +600,6 @@ export class InventarioAlmacenService {
             `Stock insuficiente en el lote ${inventario.lote?.numeroLote || allocation.loteId}`,
           );
         }
-        if (inventario.precioVenta == null) {
-          throw new Error(
-            `Precio de venta no asignado para producto ${productoId} (lote: ${inventario.lote?.numeroLote || inventario.loteId}). Configure precioVenta en Inventario.`,
-          );
-        }
-
         inventario.cantidadActual =
           Number(inventario.cantidadActual) - cantidad;
         await manager.save(inventario);
@@ -514,7 +608,9 @@ export class InventarioAlmacenService {
           loteId: inventario.loteId,
           numeroLote: inventario.lote?.numeroLote || 'N/A',
           cantidad,
-          precio: inventario.precioVenta,
+          precio: Number(inventario.precioVenta) || 0,
+          precioVentaCaja: inventario.precioVentaCaja,
+          piezasPorCaja: inventario.lote?.piezasPorCaja,
           costoUnitario: Number(inventario.precioUnitarioLote) || 0,
         });
       }
@@ -725,6 +821,14 @@ export class InventarioAlmacenService {
         ) {
           inventarioDestino.precioVenta = inventarioOrigen.precioVenta;
         }
+        if (
+          inventarioOrigen.loteId === inventarioDestino.loteId &&
+          inventarioOrigen.precioVentaCaja != null &&
+          inventarioDestino.precioVentaCaja == null
+        ) {
+          inventarioDestino.precioVentaCaja =
+            inventarioOrigen.precioVentaCaja;
+        }
       } else {
         inventarioDestino = manager.create(InventarioAlmacen, {
           productoId,
@@ -733,6 +837,7 @@ export class InventarioAlmacenService {
           cantidadActual: cantidad,
           precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
           precioVenta: inventarioOrigen.precioVenta,
+          precioVentaCaja: inventarioOrigen.precioVentaCaja,
           ivaCfdi: inventarioOrigen.ivaCfdi,
           ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
         });
@@ -865,6 +970,14 @@ export class InventarioAlmacenService {
             ) {
               inventarioDestino.precioVenta = inventarioOrigen.precioVenta;
             }
+            if (
+              inventarioOrigen.loteId === inventarioDestino.loteId &&
+              inventarioOrigen.precioVentaCaja != null &&
+              inventarioDestino.precioVentaCaja == null
+            ) {
+              inventarioDestino.precioVentaCaja =
+                inventarioOrigen.precioVentaCaja;
+            }
           } else {
             inventarioDestino = manager.create(InventarioAlmacen, {
               productoId: item.productoId,
@@ -873,6 +986,7 @@ export class InventarioAlmacenService {
               cantidadActual: item.cantidad,
               precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
               precioVenta: inventarioOrigen.precioVenta,
+              precioVentaCaja: inventarioOrigen.precioVentaCaja,
               ivaCfdi: inventarioOrigen.ivaCfdi,
               ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
             });
@@ -995,36 +1109,126 @@ export class InventarioAlmacenService {
 
   async updatePrecioVenta(
     id: string,
-    precioVenta: number | null,
+    precioVenta?: number | null,
+    precioVentaCaja?: number | null,
   ): Promise<InventarioAlmacen> {
-    const inventario = await this.inventarioRepository.findOne({
-      where: { id },
-      relations: ['lote', 'producto'],
-    });
-    if (!inventario) {
-      throw new NotFoundException('Inventario no encontrado');
-    }
-    const precioAnterior = inventario.precioVenta;
-    inventario.precioVenta = precioVenta;
-    const saved = await this.inventarioRepository.save(inventario);
-
-    const precioNumerico = Number(precioVenta);
-    const costoUnitario = Number(inventario.precioUnitarioLote);
     if (
-      Number.isFinite(precioNumerico) &&
-      Number.isFinite(costoUnitario) &&
-      precioNumerico > 0 &&
-      costoUnitario > 0
+      precioVenta !== undefined &&
+      precioVenta !== null &&
+      (!Number.isFinite(Number(precioVenta)) || Number(precioVenta) < 0)
     ) {
-      const margen = Math.round(
-        (precioNumerico / costoUnitario - 1) * 10000,
-      ) / 100;
-      await this.productoRepository.update(inventario.productoId, {
-        margenRecomendado: margen,
-      });
+      throw new BadRequestException('Precio individual inválido');
+    }
+    if (
+      precioVentaCaja !== undefined &&
+      precioVentaCaja !== null &&
+      (!Number.isFinite(Number(precioVentaCaja)) ||
+        Number(precioVentaCaja) < 0)
+    ) {
+      throw new BadRequestException('Precio de caja inválido');
     }
 
-    console.log(`[DEBUG inventario] PrecioVenta actualizado: id=${id}, anterior=${precioAnterior}, nuevo=${precioVenta}, producto=${inventario.productoId}, lote=${inventario.lote?.numeroLote}`);
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const inventarioRepo = manager.getRepository(InventarioAlmacen);
+      const productoRepo = manager.getRepository(Producto);
+      const presentacionRepo = manager.getRepository(ProductoPresentacion);
+
+      const inventarioBloqueado = await inventarioRepo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!inventarioBloqueado) {
+        throw new NotFoundException('Inventario no encontrado');
+      }
+      const inventario = await inventarioRepo.findOne({
+        where: { id },
+        relations: ['lote', 'producto'],
+      });
+      if (!inventario) {
+        throw new NotFoundException('Inventario no encontrado');
+      }
+
+      const actualizarCanonico = async (
+        tipo: PresentacionTipo,
+        precio: number | null | undefined,
+        motivo: string,
+      ) => {
+        if (precio === undefined) return;
+        const presentacion = await presentacionRepo.findOne({
+          where: {
+            productoId: inventario.productoId,
+            tipo,
+            statusId: 1,
+          },
+        });
+        if (!presentacion) return;
+
+        if (precio === null) {
+          await this.preciosLoteService.clearPrecio(
+            inventario.loteId,
+            presentacion.id,
+            undefined,
+            motivo,
+            manager,
+          );
+          return;
+        }
+
+        await this.preciosLoteService.setPrecio(
+          {
+            productoId: inventario.productoId,
+            loteId: inventario.loteId,
+            presentacionId: presentacion.id,
+            precio: Number(precio),
+            motivo,
+          },
+          manager,
+        );
+      };
+
+      const precioAnterior = inventario.precioVenta;
+      if (precioVenta !== undefined) {
+        inventario.precioVenta = precioVenta;
+      }
+      if (precioVentaCaja !== undefined) {
+        inventario.precioVentaCaja = precioVentaCaja;
+      }
+
+      await actualizarCanonico(
+        PresentacionTipo.PIEZA,
+        precioVenta,
+        'Actualización manual de precio individual',
+      );
+      await actualizarCanonico(
+        PresentacionTipo.CAJA,
+        precioVentaCaja,
+        'Actualización manual de precio caja',
+      );
+
+      const savedInventario = await inventarioRepo.save(inventario);
+
+      const precioNumerico = Number(precioVenta);
+      const costoUnitario = Number(inventario.precioUnitarioLote);
+      if (
+        precioVenta !== undefined &&
+        Number.isFinite(precioNumerico) &&
+        Number.isFinite(costoUnitario) &&
+        precioNumerico > 0 &&
+        costoUnitario > 0
+      ) {
+        const margen =
+          Math.round((precioNumerico / costoUnitario - 1) * 10000) / 100;
+        await productoRepo.update(inventario.productoId, {
+          margenRecomendado: margen,
+        });
+      }
+
+      console.log(
+        `[DEBUG inventario] PrecioVenta actualizado: id=${id}, anterior=${precioAnterior}, nuevo=${precioVenta}, caja=${precioVentaCaja ?? 'sin cambio'}, producto=${inventario.productoId}, lote=${inventario.lote?.numeroLote}`,
+      );
+
+      return savedInventario;
+    });
 
     return saved;
   }
@@ -1289,6 +1493,8 @@ export class InventarioAlmacenService {
             ? new Date(nuevaFechaCaducidad)
             : loteOrigen.fechaCaducidad,
           laboratorioId: loteOrigen.laboratorioId,
+          piezasPorCaja: loteOrigen.piezasPorCaja,
+          empaqueConvertido: loteOrigen.empaqueConvertido,
           statusId: 1,
         });
         const savedLote = await loteRepo.save(nuevoLote);
@@ -1318,6 +1524,19 @@ export class InventarioAlmacenService {
 
       if (inventarioDestino) {
         inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) + cantidad;
+        if (
+          inventarioDestino.precioVenta == null &&
+          inventarioOrigen.precioVenta != null
+        ) {
+          inventarioDestino.precioVenta = inventarioOrigen.precioVenta;
+        }
+        if (
+          inventarioDestino.precioVentaCaja == null &&
+          inventarioOrigen.precioVentaCaja != null
+        ) {
+          inventarioDestino.precioVentaCaja =
+            inventarioOrigen.precioVentaCaja;
+        }
       } else {
         inventarioDestino = manager.create(InventarioAlmacen, {
           productoId,
@@ -1326,12 +1545,37 @@ export class InventarioAlmacenService {
           cantidadActual: cantidad,
           precioUnitarioLote: inventarioOrigen.precioUnitarioLote,
           precioVenta: inventarioOrigen.precioVenta,
+          precioVentaCaja: inventarioOrigen.precioVentaCaja,
           ivaCfdi: inventarioOrigen.ivaCfdi,
           ivaPersonalizado: inventarioOrigen.ivaPersonalizado,
         });
       }
 
       const savedDestino = await manager.save(inventarioDestino);
+
+      if (tipoDestino === 'nuevo') {
+        const preciosOrigen = await manager.getRepository(LotePrecio).find({
+          where: {
+            productoId,
+            loteId: loteOrigenId,
+            statusId: 1,
+          },
+        });
+        if (preciosOrigen.length > 0) {
+          const preciosDestino = preciosOrigen.map((precio) =>
+            manager.getRepository(LotePrecio).create({
+              productoId,
+              loteId: loteDestinoIdResolved,
+              presentacionId: precio.presentacionId,
+              precioVenta: precio.precioVenta,
+              statusId: 1,
+              createdBy: userId,
+              updatedBy: userId,
+            }),
+          );
+          await manager.getRepository(LotePrecio).save(preciosDestino);
+        }
+      }
 
       const observaciones = JSON.stringify({
         loteDestinoId: loteDestinoIdResolved,

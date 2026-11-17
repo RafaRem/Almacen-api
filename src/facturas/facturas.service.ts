@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Raw, Repository } from 'typeorm';
+import { ILike, In, Raw, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
@@ -17,6 +17,9 @@ import { Producto } from '../productos/entities/producto.entity';
 import { Cliente } from '../clientes/entities/cliente.entity';
 import { FacturaStatus } from './entities/factura.entity';
 import { FacturapiService } from '../facturapi/facturapi.service';
+import { PresentacionesService } from '../productos/presentaciones.service';
+import { Venta } from '../ventas/entities/venta.entity';
+import { DetalleVenta } from '../ventas/entities/detalle-venta.entity';
 
 interface ImpuestosLinea {
   base: number;
@@ -44,6 +47,7 @@ export class FacturasService {
     @InjectRepository(Cliente)
     private readonly clienteRepository: Repository<Cliente>,
     private readonly facturapiService: FacturapiService,
+    private readonly presentacionesService: PresentacionesService,
   ) {}
 
   async create(createFacturaDto: CreateFacturaDto): Promise<Factura> {
@@ -79,7 +83,10 @@ export class FacturasService {
 
     if (ventaId) {
       const existing = await this.facturaRepository.findOne({
-        where: { ventaId },
+        where: {
+          ventaId,
+          statusId: In([FacturaStatus.BORRADOR, FacturaStatus.TIMBRADA]),
+        },
       });
       if (existing) {
         throw new BadRequestException(
@@ -117,7 +124,9 @@ export class FacturasService {
       nuevoFolio = Number(result[0].folio);
     }
 
-    const detallesData = await this.calcularDetalles(productos);
+    const detallesData = ventaId
+      ? await this.calcularDetallesDesdeVenta(ventaId)
+      : await this.calcularDetalles(productos);
 
     const subtotal = detallesData.reduce(
       (sum, d) => sum + Number(d.importeBruto),
@@ -182,6 +191,93 @@ export class FacturasService {
     return this.findOne(factura.id);
   }
 
+  private async calcularDetallesDesdeVenta(
+    ventaId: string,
+  ): Promise<Partial<FacturaDetalle>[]> {
+    const manager = this.facturaRepository.manager;
+    const venta = await manager.getRepository(Venta).findOne({
+      where: { id: ventaId },
+    });
+    if (!venta) {
+      throw new NotFoundException(`Venta con ID ${ventaId} no encontrada`);
+    }
+
+    const detallesVenta = await manager.getRepository(DetalleVenta).find({
+      where: { ventaId },
+      relations: ['producto', 'presentacion'],
+      order: { id: 'ASC' },
+    });
+    if (detallesVenta.length === 0) {
+      throw new BadRequestException('La venta no tiene productos para facturar');
+    }
+
+    return detallesVenta.map((detalle) => {
+      const tipoPresentacion =
+        detalle.tipoPresentacion ||
+        detalle.presentacion?.tipo ||
+        (Number(detalle.factorUnidades) > 1 ? 'CAJA' : 'PIEZA');
+      const esCaja = tipoPresentacion === 'CAJA';
+      const factorUnidades =
+        Number(detalle.factorUnidades) ||
+        Number(detalle.presentacion?.factorUnidades) ||
+        1;
+      const alias =
+        detalle.presentacionAlias?.trim() ||
+        detalle.presentacion?.alias?.trim() ||
+        '';
+      const nombreVisible =
+        alias || detalle.producto?.nombre || 'Producto';
+      const descripcion = esCaja
+        ? `${nombreVisible} (Caja ${factorUnidades} pzas)`
+        : nombreVisible;
+      const cantidad = Number(detalle.cantidad) || 0;
+      const precioUnitario = Number(detalle.precioUnitario) || 0;
+      const descuento = Number(detalle.descuentoLinea) || 0;
+      const importeBruto = round2(precioUnitario * cantidad);
+      const importe = round2(importeBruto - descuento);
+      const ivaTasa =
+        detalle.ivaTasa != null ? Number(detalle.ivaTasa) : null;
+
+      const impuestos: ImpuestosLinea[] = [];
+      if (ivaTasa != null && ivaTasa > 0) {
+        const ivaImporte =
+          detalle.ivaImporte != null
+            ? Number(detalle.ivaImporte)
+            : round2(importe * (ivaTasa / 100));
+        impuestos.push({
+          base: importe,
+          impuesto: '002',
+          tipoFactor: 'Tasa',
+          tasaOCuota: ivaTasa / 100,
+          importe: round2(ivaImporte),
+        });
+      }
+
+      return {
+        productoId: detalle.productoId,
+        loteId: detalle.loteId || undefined,
+        presentacionId: detalle.presentacionId || null,
+        factorUnidades,
+        cantidadBase: detalle.cantidadBase || null,
+        tipoPresentacion,
+        presentacionAlias: alias || null,
+        claveProdServ: detalle.producto?.claveProdServ || '01010101',
+        claveUnidad:
+          detalle.claveUnidad ||
+          (esCaja ? 'XBX' : detalle.producto?.claveUnidad || 'H87'),
+        descripcion,
+        cantidad,
+        unidad:
+          detalle.unidad || (esCaja ? 'Caja' : 'Pieza'),
+        valorUnitario: precioUnitario,
+        descuento,
+        importe,
+        importeBruto,
+        impuestos,
+      };
+    });
+  }
+
   private async calcularDetalles(
     productos: CreateFacturaDto['productos'],
   ): Promise<Partial<FacturaDetalle>[]> {
@@ -199,6 +295,16 @@ export class FacturasService {
       }
 
       const precioUnitario = prod.precioUnitario || 0;
+      const presentacion = prod.presentacionId
+        ? await this.presentacionesService.resolve(
+            prod.productoId,
+            prod.presentacionId,
+          )
+        : await this.presentacionesService.findDefault(prod.productoId);
+      const factorUnidades = Number(presentacion?.factorUnidades) || 1;
+      const esCaja = presentacion?.tipo === 'CAJA';
+      const nombreVisible =
+        presentacion?.alias?.trim() || producto.nombre;
 
       const cantidad = prod.cantidad;
       const descuento = prod.descuento || 0;
@@ -223,11 +329,14 @@ export class FacturasService {
       detalles.push({
         productoId: prod.productoId,
         loteId: prod.loteId || undefined,
+        presentacionId: presentacion?.id || null,
         claveProdServ: producto.claveProdServ || '01010101',
-        claveUnidad: producto.claveUnidad || 'ACT',
-        descripcion: producto.nombre,
+        claveUnidad: esCaja ? 'XBX' : (producto.claveUnidad || 'H87'),
+        descripcion: esCaja
+          ? `${nombreVisible} (Caja ${factorUnidades} pzas)`
+          : nombreVisible,
         cantidad,
-        unidad: 'Actividad',
+        unidad: esCaja ? 'Caja' : 'Pieza',
         valorUnitario: precioUnitario,
         descuento,
         importe,
@@ -377,7 +486,9 @@ export class FacturasService {
     if (productos && productos.length > 0) {
       await this.facturaDetalleRepository.delete({ facturaId: id });
 
-      const detallesData = await this.calcularDetallesFromUpdate(productos);
+      const detallesData = factura.ventaId
+        ? await this.calcularDetallesDesdeVenta(factura.ventaId)
+        : await this.calcularDetallesFromUpdate(productos);
 
       for (const det of detallesData) {
         const detalle = this.facturaDetalleRepository.create({
@@ -439,6 +550,16 @@ export class FacturasService {
       }
 
       const precioUnitario = prod.precioUnitario || 0;
+      const presentacion = prod.presentacionId
+        ? await this.presentacionesService.resolve(
+            prod.productoId!,
+            prod.presentacionId,
+          )
+        : await this.presentacionesService.findDefault(prod.productoId!);
+      const factorUnidades = Number(presentacion?.factorUnidades) || 1;
+      const esCaja = presentacion?.tipo === 'CAJA';
+      const nombreVisible =
+        presentacion?.alias?.trim() || producto.nombre;
 
       const cantidad = prod.cantidad!;
       const descuento = prod.descuento || 0;
@@ -462,11 +583,14 @@ export class FacturasService {
       detalles.push({
         productoId: prod.productoId,
         loteId: prod.loteId || undefined,
+        presentacionId: presentacion?.id || null,
         claveProdServ: producto.claveProdServ || '01010101',
-        claveUnidad: producto.claveUnidad || 'ACT',
-        descripcion: producto.nombre,
+        claveUnidad: esCaja ? 'XBX' : (producto.claveUnidad || 'H87'),
+        descripcion: esCaja
+          ? `${nombreVisible} (Caja ${factorUnidades} pzas)`
+          : nombreVisible,
         cantidad,
-        unidad: 'Actividad',
+        unidad: esCaja ? 'Caja' : 'Pieza',
         valorUnitario: precioUnitario,
         descuento,
         importe,

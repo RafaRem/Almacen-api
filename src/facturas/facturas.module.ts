@@ -7,12 +7,14 @@ import { FacturaDetalle } from './entities/factura-detalle.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { Cliente } from '../clientes/entities/cliente.entity';
 import { CommonModule } from '../common/common.module';
+import { ProductosModule } from '../productos/productos.module';
 import { FacturapiModule } from '../facturapi/facturapi.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Factura, FacturaDetalle, Producto, Cliente]),
     CommonModule,
+    ProductosModule,
     FacturapiModule,
   ],
   controllers: [FacturasController],

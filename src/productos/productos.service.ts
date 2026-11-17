@@ -104,7 +104,7 @@ export class ProductosService {
   async findOne(id: string): Promise<Producto> {
     const producto = await this.productosRepository.findOne({
       where: { id },
-      relations: ['laboratorio'],
+      relations: ['laboratorio', 'presentaciones'],
     });
     if (!producto) {
       throw new NotFoundException(`Producto with ID ${id} not found`);
@@ -187,6 +187,7 @@ export class ProductosService {
       existe: boolean;
       nombre?: string;
       margenRecomendado?: number | null;
+      piezasPorCajaDefault?: number | null;
       tieneInventario: boolean;
     }[]
   > {
@@ -199,6 +200,7 @@ export class ProductosService {
         'producto.nombre',
         'producto.id',
         'producto.margenRecomendado',
+        'producto.piezasPorCajaDefault',
       ])
       .getMany();
 
@@ -222,6 +224,7 @@ export class ProductosService {
         existe: !!existente,
         nombre: existente?.nombre,
         margenRecomendado: existente?.margenRecomendado ?? null,
+        piezasPorCajaDefault: existente?.piezasPorCajaDefault ?? null,
         tieneInventario: existente ? inventorySet.has(existente.id) : false,
       };
     });

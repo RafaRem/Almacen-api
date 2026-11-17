@@ -6,10 +6,13 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { StatusId } from '../../common/enums/status-id.enum';
+import { EmpaqueEstado } from '../../common/enums/empaque-estado.enum';
 import { Laboratorio } from '../../laboratorios/entities/laboratorio.entity';
 import { Proveedor } from '../../proveedores/entities/proveedor.entity';
+import { ProductoPresentacion } from './producto-presentacion.entity';
 
 @Entity('productos')
 export class Producto {
@@ -47,6 +50,21 @@ export class Producto {
   })
   margenRecomendado: number | null;
 
+  @Column({
+    name: 'piezas_por_caja_default',
+    type: 'int',
+    nullable: true,
+  })
+  piezasPorCajaDefault: number | null;
+
+  @Column({
+    name: 'empaque_estado',
+    type: 'enum',
+    enum: EmpaqueEstado,
+    default: EmpaqueEstado.PENDIENTE_FACTOR,
+  })
+  empaqueEstado: EmpaqueEstado;
+
   @Column({ name: 'proveedor_preferido_id', nullable: true })
   proveedorPreferidoId: string;
 
@@ -72,6 +90,9 @@ export class Producto {
 
   @Column({ type: 'text', array: true, nullable: true, name: 'clases_permitidas' })
   clasesPermitidas: string[] | null;
+
+  @OneToMany(() => ProductoPresentacion, (presentacion) => presentacion.producto)
+  presentaciones: ProductoPresentacion[];
 
   @CreateDateColumn()
   createdAt: Date;

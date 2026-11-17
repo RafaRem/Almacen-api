@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Factura } from './factura.entity';
 import { Producto } from '../../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../../productos/entities/producto-presentacion.entity';
 import { Lote } from '../../lotes/entities/lote.entity';
 
 @Entity('factura_detalles')
@@ -38,11 +39,30 @@ export class FacturaDetalle {
   @JoinColumn({ name: 'loteid' })
   lote: Lote;
 
+  @Column({ type: 'uuid', name: 'presentacionid', nullable: true })
+  presentacionId: string | null;
+
+  @ManyToOne(() => ProductoPresentacion, { nullable: true })
+  @JoinColumn({ name: 'presentacionid' })
+  presentacion: ProductoPresentacion | null;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   claveProdServ: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   claveUnidad: string;
+
+  @Column({ type: 'int', name: 'factor_unidades', nullable: true })
+  factorUnidades: number | null;
+
+  @Column({ type: 'int', name: 'cantidad_base', nullable: true })
+  cantidadBase: number | null;
+
+  @Column({ type: 'varchar', length: 20, name: 'tipo_presentacion', nullable: true })
+  tipoPresentacion: string | null;
+
+  @Column({ type: 'varchar', length: 80, name: 'presentacion_alias', nullable: true })
+  presentacionAlias: string | null;
 
   @Column({ type: 'varchar', length: 500 })
   descripcion: string;

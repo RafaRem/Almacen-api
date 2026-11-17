@@ -6,15 +6,20 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import * as Papa from 'papaparse';
+import { createHash } from 'crypto';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
 import { Lote } from '../lotes/entities/lote.entity';
 import { Laboratorio } from '../laboratorios/entities/laboratorio.entity';
 import { Recepcion } from '../recepciones/entities/recepcion.entity';
 import { Proveedor } from '../proveedores/entities/proveedor.entity';
 import { InventarioAlmacenService } from '../inventario-almacen/inventario-almacen.service';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
 import { TipoMovimiento } from '../common/constants';
 import { DetalleLoteService } from '../detalle-lote/detalle-lote.service';
+import { PresentacionesService } from '../productos/presentaciones.service';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
 
 export interface CsvFilaValidada {
   productoId: string;
@@ -26,6 +31,7 @@ export interface CsvFilaValidada {
   laboratorioId?: string;
   proveedor?: string;
   impuestoAplicado: string;
+  ivaTasa?: number;
   precioVenta?: number;
   margenCalculado?: number;
 }
@@ -65,6 +71,8 @@ export class CsvService {
     private readonly proveedorRepository: Repository<Proveedor>,
     private readonly inventarioService: InventarioAlmacenService,
     private readonly detalleLoteService: DetalleLoteService,
+    private readonly presentacionesService: PresentacionesService,
+    private readonly preciosLoteService: PreciosLoteService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -139,16 +147,22 @@ export class CsvService {
         continue;
       }
 
-      const impuestoAplicado = this.mapearImpuesto(getVal(fila, 'ObjetoImp'));
+      const objetoImp = getVal(fila, 'ObjetoImp');
+      const tasaRaw = getVal(fila, 'TasaOCuota');
+      let tasaIva = Number(tasaRaw.replace(/[$,]/g, '')) || 0;
+      if (tasaIva > 0 && tasaIva <= 1) tasaIva *= 100;
+      if (!tasaIva && (objetoImp === '16' || objetoImp === '01')) {
+        tasaIva = 16;
+      }
+      tasaIva = Math.round(tasaIva * 100) / 100;
+      const impuestoAplicado =
+        tasaIva > 0 ? '01' : this.mapearImpuesto(objetoImp);
       distribucionImpuestos[impuestoAplicado]++;
 
       const precioVentaStr = getVal(fila, 'P. venta');
       let precioVenta = precioVentaStr ? Number(precioVentaStr.replace(/[$,]/g, '')) : undefined;
-      const objetoImp = getVal(fila, 'ObjetoImp');
-
-      // Si el precio en CSV incluye IVA 16%, dividir para obtener precio sin IVA
-      if (objetoImp === '16' && precioVenta) {
-        precioVenta = precioVenta / 1.16;
+      if (precioVenta && tasaIva > 0) {
+        precioVenta = precioVenta / (1 + tasaIva / 100);
       }
 
       let margenCalculado: number | undefined;
@@ -163,11 +177,14 @@ export class CsvService {
         nombre: descripcion,
         cantidad,
         precio,
-        claveUnidad: this.mapearUnidad(getVal(fila, 'Unidad')),
+        claveUnidad: this.mapearUnidad(
+          getVal(fila, 'ClaveUnidad') || getVal(fila, 'Unidad'),
+        ),
         claveProdServ: getVal(fila, 'ClaveProdServ') || undefined,
         laboratorioId: getVal(fila, 'Departamento') || undefined,
         proveedor: getVal(fila, 'Proveedor') || undefined,
         impuestoAplicado,
+        ivaTasa: tasaIva,
         precioVenta,
         margenCalculado,
       });
@@ -221,6 +238,19 @@ export class CsvService {
       productosExistentes.map((p) => [p.codigoBarras, p]),
     );
 
+    const hashCsv = createHash('sha256')
+      .update(file.buffer || file)
+      .digest('hex');
+    const idempotencyKey = `CSV:${hashCsv}`;
+    const recepcionPrevia = await this.recepcionRepository.findOne({
+      where: { uuidCfdi: idempotencyKey },
+    });
+    if (recepcionPrevia) {
+      throw new BadRequestException(
+        `Este CSV ya fue procesado en la recepción ${recepcionPrevia.folio || recepcionPrevia.id}`,
+      );
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -247,7 +277,7 @@ export class CsvService {
         subtotal: preview.filasValidadas.reduce((s, f) => s + f.precio * f.cantidad, 0),
         total: preview.filasValidadas.reduce((s, f) => s + f.precio * f.cantidad, 0),
         proveedorId: proveedorPrincipal?.id || undefined,
-        uuidCfdi: undefined,
+        uuidCfdi: idempotencyKey,
         xmlContent: '',
       });
       const recepcionGuardada = await recepcionRepo.save(recepcion);
@@ -267,6 +297,37 @@ export class CsvService {
 
       for (const fila of preview.filasValidadas) {
         const frontendData = productosFrontendMap.get(fila.productoId);
+        const factorInput = Number(frontendData?.piezasPorCaja) || 0;
+        const esCaja =
+          factorInput > 1 ||
+          ['XBX', 'CJA', 'XPK', 'XBG', 'XSA', 'XCA', 'XBA'].includes(
+            String(fila.claveUnidad || '').toUpperCase(),
+          );
+        const factor = esCaja
+          ? factorInput ||
+            this.presentacionesService.inferFactor(fila.nombre) ||
+            0
+          : 1;
+        if (esCaja && factor < 2) {
+          throw new BadRequestException(
+            `Indica las piezas por caja para ${fila.nombre}`,
+          );
+        }
+        const cantidadBase = Number(fila.cantidad) * factor;
+        const costoPieza = Number(fila.precio) / factor;
+        const precioPieza =
+          frontendData?.precioVentaPieza != null
+            ? Number(frontendData.precioVentaPieza)
+            : frontendData?.precioVenta != null
+              ? Number(frontendData.precioVenta)
+              : null;
+        const precioCaja = esCaja
+          ? frontendData?.precioVentaCaja != null
+            ? Number(frontendData.precioVentaCaja)
+            : precioPieza != null
+              ? precioPieza * factor
+              : null
+          : null;
 
         // Resolver laboratorio por fila (default "Importación CSV" si no trae Departamento)
         const laboratorioIdFila = await this.resolverLaboratorio(fila.laboratorioId, manager);
@@ -277,11 +338,27 @@ export class CsvService {
         let producto: Producto | null = productosExistentesMap.get(fila.productoId) || null;
 
         if (producto) {
+          if (esCaja) {
+            const productoActual = await productoRepo.findOne({
+              where: { id: producto.id },
+            });
+            await this.presentacionesService.validarRecepcionCaja(
+              productoActual || producto,
+              factor,
+              manager,
+            );
+          }
           const updateData: Partial<Producto> = {
             impuestoAplicado: fila.impuestoAplicado,
             nombre: fila.nombre,
-            claveUnidad: fila.claveUnidad,
+            claveUnidad: esCaja ? 'H87' : fila.claveUnidad,
             claveProdServ: fila.claveProdServ || producto.claveProdServ,
+            ...(esCaja
+              ? {
+                  piezasPorCajaDefault: factor,
+                  empaqueEstado: 'CONVERTIDO' as any,
+                }
+              : {}),
           };
           if (fila.margenCalculado !== undefined) {
             updateData.margenRecomendado = Math.round(fila.margenCalculado * 100) / 100;
@@ -299,9 +376,15 @@ export class CsvService {
             codigoBarras: fila.productoId,
             nombre: fila.nombre,
             descripcion: fila.nombre,
-            claveUnidad: fila.claveUnidad,
+            claveUnidad: esCaja ? 'H87' : fila.claveUnidad,
             claveProdServ: fila.claveProdServ,
             laboratorioId: laboratorioIdFila,
+            ...(esCaja
+              ? {
+                  piezasPorCajaDefault: factor,
+                  empaqueEstado: 'CONVERTIDO' as any,
+                }
+              : {}),
             proveedorPreferidoId: proveedorFila?.id || undefined,
             stockMinimo: frontendData?.stockMinimo ?? 10,
             stockMaximo: frontendData?.stockMaximo ?? 100,
@@ -316,7 +399,9 @@ export class CsvService {
         }
 
         const numeroLote = frontendData?.numeroLote ?? `CSV-${recepcionId}-${fila.productoId}`;
-        let lote: Lote | null = await loteRepo.findOne({ where: { numeroLote } });
+        let lote: Lote | null = await loteRepo.findOne({
+          where: { numeroLote, laboratorioId: laboratorioIdFila },
+        });
 
         if (!lote) {
           const fechaCaducidad = frontendData?.fechaCaducidad
@@ -336,7 +421,33 @@ export class CsvService {
           await loteRepo.save(lote);
         }
 
-        const ivaCfdi = fila.impuestoAplicado === '01' ? 16 : 0;
+        const ivaCfdi =
+          fila.ivaTasa != null
+            ? Number(fila.ivaTasa) || 0
+            : fila.impuestoAplicado === '01'
+              ? 16
+              : 0;
+        let presentacionesRecepcion: ProductoPresentacion[] = [];
+        if (esCaja) {
+          lote.piezasPorCaja = factor;
+          lote.empaqueConvertido = true;
+          await loteRepo.save(lote);
+          presentacionesRecepcion =
+            await this.presentacionesService.ensurePresentations(
+              producto.id,
+              factor,
+              manager,
+            );
+        }
+        const presentaciones = presentacionesRecepcion.length
+          ? presentacionesRecepcion
+          : await this.presentacionesService.findByProducto(producto.id);
+        const piezaPresentacion = presentaciones.find(
+          (p) => p.tipo === 'PIEZA',
+        );
+        const cajaPresentacion = presentaciones.find(
+          (p) => p.tipo === 'CAJA',
+        );
         const almacenTipo = esSoloProducto ? AlmacenTipo.VENTAS : AlmacenTipo.RECEPCION;
         const tipoMovimiento = esSoloProducto ? undefined : TipoMovimiento.ENTRADA_BODEGA;
 
@@ -344,21 +455,64 @@ export class CsvService {
           producto.id,
           lote.id,
           almacenTipo,
-          Math.round(fila.cantidad),
+          Math.round(cantidadBase),
           ivaCfdi,
-          fila.precio,
+          costoPieza,
           manager,
           tipoMovimiento,
           userId,
-          fila.precioVenta,
+          precioPieza ?? undefined,
         );
+
+        if (piezaPresentacion) {
+          if (precioPieza != null && precioPieza > 0) {
+            await this.preciosLoteService.setPrecio({
+              productoId: producto.id,
+              loteId: lote.id,
+              presentacionId: piezaPresentacion.id,
+              precio: precioPieza,
+              usuarioId: userId,
+              motivo: 'Precio individual asignado en recepción CSV',
+            }, manager);
+          } else {
+            await this.preciosLoteService.clearPrecio(
+              lote.id,
+              piezaPresentacion.id,
+              userId,
+              'Precio individual pendiente en recepción CSV',
+              manager,
+            );
+          }
+        }
+        if (esCaja && cajaPresentacion) {
+          if (precioCaja != null && precioCaja > 0) {
+            await this.preciosLoteService.setPrecio({
+              productoId: producto.id,
+              loteId: lote.id,
+              presentacionId: cajaPresentacion.id,
+              precio: precioCaja,
+              usuarioId: userId,
+              motivo: 'Precio de caja asignado en recepción CSV',
+            }, manager);
+          } else {
+            await this.preciosLoteService.clearPrecio(
+              lote.id,
+              cajaPresentacion.id,
+              userId,
+              'Precio de caja pendiente en recepción CSV',
+              manager,
+            );
+          }
+          inventario.precioVentaCaja = precioCaja;
+          await manager.getRepository(InventarioAlmacen).save(inventario);
+        }
 
         await this.detalleLoteService.create(
           {
             productoId: producto.id,
             loteId: lote.id,
-            cantidad: fila.cantidad,
-            precioUnitario: fila.precio,
+            cantidad: cantidadBase,
+            precioUnitario: costoPieza,
             ivaCfdi,
             movimientoId: inventario.ultimoMovimientoId || undefined,
             almacenTipo,
@@ -389,6 +543,9 @@ export class CsvService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (error?.code === '23505') {
+        throw new BadRequestException('Este CSV ya fue procesado');
+      }
       this.logger.error(`Error procesando CSV: ${error.message}`, error.stack);
       throw new BadRequestException(
         `Error al procesar CSV: ${error.message}`,
@@ -455,6 +612,13 @@ export class CsvService {
       LT: 'LTR',
       PZAS: 'PZAS',
       PZA: 'PZAS',
+      XBX: 'XBX',
+      CJA: 'CJA',
+      XPK: 'XPK',
+      XBG: 'XBG',
+      XSA: 'XSA',
+      XCA: 'XCA',
+      XBA: 'XBA',
       GR: 'GR',
       ML: 'ML',
     };

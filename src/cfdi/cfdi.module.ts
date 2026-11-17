@@ -16,6 +16,8 @@ import { InventarioAlmacenModule } from '../inventario-almacen/inventario-almace
 import { DetalleLoteModule } from '../detalle-lote/detalle-lote.module';
 import { RecepcionModule } from '../recepciones/recepcion.module';
 import { ProveedoresModule } from '../proveedores/proveedores.module';
+import { ProductosModule } from '../productos/productos.module';
+import { PreciosLoteModule } from '../precios-lote/precios-lote.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { ProveedoresModule } from '../proveedores/proveedores.module';
     DetalleLoteModule,
     RecepcionModule,
     ProveedoresModule,
+    ProductosModule,
+    PreciosLoteModule,
   ],
   controllers: [CfdiController],
   providers: [CfdiService, CsvService],

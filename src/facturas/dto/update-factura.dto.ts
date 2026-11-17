@@ -33,6 +33,10 @@ export class ProductoFacturaUpdateDto {
   @IsOptional()
   @IsUUID()
   loteId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  presentacionId?: string;
 }
 
 export class UpdateFacturaDto {

@@ -70,11 +70,20 @@ export class InventarioAlmacen {
   @Column({
     name: 'precio_unitario_lote',
     type: 'decimal',
-    precision: 10,
-    scale: 2,
+    precision: 12,
+    scale: 6,
     default: 0,
   })
   precioUnitarioLote: number;
+
+  @Column({
+    name: 'precio_venta_caja',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  precioVentaCaja: number | null;
 
   @Column({
     name: 'precio_venta',

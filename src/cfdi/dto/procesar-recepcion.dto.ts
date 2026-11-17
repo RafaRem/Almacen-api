@@ -29,9 +29,21 @@ export class ConceptoDto {
   @IsOptional()
   claveUnidad?: string;
 
+  @IsString()
+  @IsOptional()
+  unidad?: string;
+
   @IsNumber()
   @IsOptional()
   ivaCfdi?: number | null;
+
+  @IsString()
+  @IsOptional()
+  objetoImp?: string;
+
+  @IsNumber()
+  @IsOptional()
+  tasaIva?: number | null;
 }
 
 export class EmisorDto {
@@ -103,6 +115,14 @@ export class ProductoRecepcionDto {
 
   @IsNumber()
   @IsOptional()
+  precioVentaCaja?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precioVentaPieza?: number;
+
+  @IsNumber()
+  @IsOptional()
   margenRecomendado?: number;
 
   @IsString()
@@ -112,6 +132,10 @@ export class ProductoRecepcionDto {
   @IsString()
   @IsOptional()
   claveUnidad?: string;
+
+  @IsNumber()
+  @IsOptional()
+  piezasPorCaja?: number;
 
   @IsString()
   @IsOptional()

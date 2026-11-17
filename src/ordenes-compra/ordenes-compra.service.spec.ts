@@ -304,6 +304,44 @@ describe('OrdenesCompraService', () => {
   });
 
   describe('recibir()', () => {
+    const buildReceiveManager = (
+      ordenRecibida: OrdenCompra = orden,
+      detalleRecibido: DetalleOrdenCompra = detalle,
+    ) => {
+      const repo = {
+        create: jest.fn((data) => data),
+        save: jest.fn((data) => Promise.resolve(data)),
+        findOne: jest.fn().mockResolvedValue(null),
+        find: jest.fn().mockResolvedValue([]),
+      };
+      const txManager = {
+        findOne: jest.fn((entity: unknown) => {
+          if (entity === OrdenCompra) return Promise.resolve(ordenRecibida);
+          if (entity === Producto) return Promise.resolve(producto);
+          if (entity === DetalleOrdenCompra) {
+            return Promise.resolve(detalleRecibido);
+          }
+          return Promise.resolve(null);
+        }),
+        find: jest.fn((entity: unknown) =>
+          entity === DetalleOrdenCompra
+            ? Promise.resolve([detalleRecibido])
+            : Promise.resolve([]),
+        ),
+        create: jest.fn((_entity: unknown, data: any) => data),
+        save: jest.fn((entity: unknown, data: any) =>
+          Promise.resolve(
+            entity === Lote ? { ...data, id: 'lote-1' } : data,
+          ),
+        ),
+        getRepository: jest.fn().mockReturnValue(repo),
+      };
+      (service as any).entityManager = {
+        transaction: jest.fn((cb) => cb(txManager)),
+      };
+      return { txManager, repo };
+    };
+
     const recibirDto = {
       detalles: [
         {
@@ -319,26 +357,17 @@ describe('OrdenesCompraService', () => {
       ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
       productoRepository.findOne = jest.fn().mockResolvedValue(producto);
 
-      const txManager = {
-        findOne: jest.fn(),
-        create: jest.fn((_entity: any, data: any) => data),
-        save: jest.fn((_entity: any, data: any) => Promise.resolve(data)),
-      };
-
-      const entityManager = {
-        transaction: jest.fn((cb) => cb(txManager)),
-      };
-      // Override entityManager for this test
-      (service as any).entityManager = entityManager;
+      buildReceiveManager();
 
       const result = await service.recibir('oc-1', recibirDto);
 
-      expect(entityManager.transaction).toHaveBeenCalled();
+      expect((service as any).entityManager.transaction).toHaveBeenCalled();
     });
 
     it('throws when receiving more than ordered', async () => {
       ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
       productoRepository.findOne = jest.fn().mockResolvedValue(producto);
+      buildReceiveManager();
 
       await expect(
         service.recibir('oc-1', {
@@ -384,18 +413,10 @@ describe('OrdenesCompraService', () => {
       ordenesRepository.findOne = jest
         .fn()
         .mockResolvedValueOnce(completableOrden) // 1st: load in recibir
-        .mockResolvedValueOnce(updatedOrden) // 2nd: load after transaction
-        .mockResolvedValueOnce(completedOrden); // 3rd: final return
+        .mockResolvedValueOnce(completedOrden); // 2nd: final return
       ordenesRepository.save = jest.fn().mockResolvedValue(completedOrden);
 
-      const txMgr = {
-        findOne: jest.fn(),
-        create: jest.fn((_e: any, d: any) => d),
-        save: jest.fn((_e: any, d: any) => Promise.resolve(d)),
-      };
-      (service as any).entityManager = {
-        transaction: jest.fn((cb) => cb(txMgr)),
-      };
+      buildReceiveManager(completableOrden, completableDetalle);
 
       const result = await service.recibir('oc-1', {
         detalles: [

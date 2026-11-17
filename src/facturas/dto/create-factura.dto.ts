@@ -33,6 +33,10 @@ export class ProductoFacturaDto {
   loteId?: string;
 
   @IsOptional()
+  @IsUUID()
+  presentacionId?: string;
+
+  @IsOptional()
   @IsNumber()
   tasaImpuesto?: number;
 }

@@ -38,6 +38,12 @@ export class Lote {
   @JoinColumn({ name: 'recepcionId' })
   recepcion: Recepcion;
 
+  @Column({ name: 'piezas_por_caja', type: 'int', nullable: true })
+  piezasPorCaja: number | null;
+
+  @Column({ name: 'empaque_convertido', default: false })
+  empaqueConvertido: boolean;
+
   @Column({
     type: 'enum',
     enum: StatusId,

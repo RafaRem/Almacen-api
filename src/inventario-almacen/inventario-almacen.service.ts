@@ -93,7 +93,7 @@ export class InventarioAlmacenService {
     }
     const inventarios = await this.inventarioRepository.find({
       where,
-      relations: ['producto', 'lote'],
+      relations: ['producto', 'producto.laboratorio', 'lote'],
       order: { lote: { fechaCaducidad: 'ASC' } },
     });
 
@@ -119,6 +119,7 @@ export class InventarioAlmacenService {
           fechaCaducidad: inv.lote?.fechaCaducidad,
           cantidad: Number(inv.cantidadActual),
           iva_cfdi: inv.ivaCfdi,
+          ivaPersonalizado: inv.ivaPersonalizado,
           statusId: inv.lote?.statusId,
         });
       } else {
@@ -147,6 +148,7 @@ export class InventarioAlmacenService {
               fechaCaducidad: inv.lote?.fechaCaducidad,
               cantidad: Number(inv.cantidadActual),
               iva_cfdi: inv.ivaCfdi,
+              ivaPersonalizado: inv.ivaPersonalizado,
               statusId: inv.lote?.statusId,
             },
           ],

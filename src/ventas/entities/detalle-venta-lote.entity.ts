@@ -31,6 +31,36 @@ export class DetalleVentaLote {
   @Column({ type: 'int', name: 'cantidad' })
   cantidad: number;
 
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 6,
+    name: 'precio_unitario',
+    nullable: true,
+  })
+  precioUnitario: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 6,
+    name: 'costo_unitario',
+    nullable: true,
+  })
+  costoUnitario: number | null;
+
+  @Column({ type: 'int', name: 'factor_unidades', nullable: true })
+  factorUnidades: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    name: 'iva_tasa',
+    nullable: true,
+  })
+  ivaTasa: number | null;
+
   @Column({ type: 'uuid', name: 'movimientoid', nullable: true })
   movimientoId: string;
 

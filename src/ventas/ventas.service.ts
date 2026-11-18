@@ -121,6 +121,10 @@ export class VentasService {
         cantidad: number;
         movimientoId: string;
         detalleIndex: number;
+        precioUnitario?: number | null;
+        costoUnitario?: number | null;
+        factorUnidades?: number | null;
+        ivaTasa?: number | null;
       }[] = [];
       const descuentosInfo: DescuentoInfoEntry[] = [];
       const lineasInfo: {
@@ -278,6 +282,7 @@ export class VentasService {
             cantidad: loteInfo.cantidad,
             movimientoId: resultadoFEPU.movimientoId!,
             detalleIndex,
+            costoUnitario: Number(loteInfo.costoUnitario) || 0,
           });
         }
 
@@ -488,6 +493,24 @@ export class VentasService {
           ivaTasa > 0 ? this.round2(subtotalLinea * (ivaTasa / 100)) : 0;
         ivaTotal += ivaImporte;
 
+        const preciosPorLoteMap = new Map(
+          preciosPorLote.map((lote) => [lote.loteId, lote.precio]),
+        );
+        for (const movimientoLote of movimientosLotes) {
+          if (movimientoLote.detalleIndex !== detalleIndex) continue;
+          const precioPresentacion = preciosPorLoteMap.get(
+            movimientoLote.loteId,
+          );
+          movimientoLote.precioUnitario =
+            precioPresentacion != null
+              ? Math.round(
+                  (Number(precioPresentacion) / factorUnidades) * 1000000,
+                ) / 1000000
+              : null;
+          movimientoLote.factorUnidades = factorUnidades;
+          movimientoLote.ivaTasa = ivaTasa;
+        }
+
         const primerLoteId = resultadoFEPU.lotsUsed[0]?.loteId || '';
         const tipoSnapshot =
           tipoPresentacion || (factorUnidades > 1 ? 'CAJA' : 'PIEZA');
@@ -645,6 +668,10 @@ export class VentasService {
               detalleVentaId: detalle.id,
               loteId: loteInfo.loteId,
               cantidad: loteInfo.cantidad,
+              precioUnitario: loteInfo.precioUnitario ?? null,
+              costoUnitario: loteInfo.costoUnitario ?? null,
+              factorUnidades: loteInfo.factorUnidades ?? null,
+              ivaTasa: loteInfo.ivaTasa ?? null,
               movimientoId: loteInfo.movimientoId,
             },
           );
@@ -1434,6 +1461,20 @@ export class VentasService {
   async getTicketData(id: string): Promise<any> {
     const venta = await this.findOne(id);
     const ivaGlobal = await this.configuracionesService.getIvaGlobal();
+    const managerLotes = this.ventasRepository.manager;
+    const detalleIds = venta.detalles.map((detalle) => detalle.id);
+    const lotesDetalle = detalleIds.length
+      ? await managerLotes.getRepository(DetalleVentaLote).find({
+          where: { detalleVentaId: In(detalleIds) },
+          relations: ['lote'],
+        })
+      : [];
+    const lotesPorDetalle = new Map<string, DetalleVentaLote[]>();
+    for (const loteDetalle of lotesDetalle) {
+      const actuales = lotesPorDetalle.get(loteDetalle.detalleVentaId) || [];
+      actuales.push(loteDetalle);
+      lotesPorDetalle.set(loteDetalle.detalleVentaId, actuales);
+    }
     const ticketConfig =
       await this.configuracionService.getConfiguracion('ticket-mensaje');
     const mensaje =
@@ -1486,7 +1527,12 @@ export class VentasService {
       const tasaProducto = d.loteId
         ? (tasaPorLote.get(d.loteId) ?? 0)
         : (tasaPorProducto.get(d.productoId) ?? 0);
-      const ivaTasa = tasaProducto > 0 ? ivaGlobal : 0;
+      const ivaTasa =
+        d.ivaTasa != null
+          ? Number(d.ivaTasa)
+          : tasaProducto > 0
+            ? ivaGlobal
+            : 0;
 
       return {
         productoId: d.productoId,
@@ -1507,6 +1553,22 @@ export class VentasService {
         ivaTasa,
         numeroLote: d.lote?.numeroLote || 'N/A',
         fechaCaducidad: d.lote?.fechaCaducidad || null,
+        lotes: (lotesPorDetalle.get(d.id) || []).map((loteDetalle) => ({
+          loteId: loteDetalle.loteId,
+          numeroLote: loteDetalle.lote?.numeroLote || 'N/A',
+          cantidad: Number(loteDetalle.cantidad) || 0,
+          precioUnitario:
+            loteDetalle.precioUnitario != null
+              ? Number(loteDetalle.precioUnitario)
+              : null,
+          costoUnitario:
+            loteDetalle.costoUnitario != null
+              ? Number(loteDetalle.costoUnitario)
+              : null,
+          factorUnidades: loteDetalle.factorUnidades ?? null,
+          ivaTasa: loteDetalle.ivaTasa != null ? Number(loteDetalle.ivaTasa) : null,
+          fechaCaducidad: loteDetalle.lote?.fechaCaducidad || null,
+        })),
         descuentos: venta.descuentos
           .filter((dd: any) => dd.detalleVentaId === d.id)
           .map((dd: any) => ({

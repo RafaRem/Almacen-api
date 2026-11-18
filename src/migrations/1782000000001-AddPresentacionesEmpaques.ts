@@ -34,6 +34,12 @@ export class AddPresentacionesEmpaques1782000000001
       `ALTER TABLE "inventario_almacen" ADD COLUMN "precio_venta_caja" numeric(10,2) NULL`,
     );
     await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "trg_inventario_precio_change" ON "inventario_almacen"`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "trg_inventario_precio_insert" ON "inventario_almacen"`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "inventario_almacen" ALTER COLUMN "precio_unitario_lote" TYPE numeric(12,6) USING "precio_unitario_lote"::numeric(12,6)`,
     );
 

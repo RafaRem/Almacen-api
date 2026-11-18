@@ -34,6 +34,9 @@ ALTER TABLE lotes
 ALTER TABLE inventario_almacen
   ADD COLUMN IF NOT EXISTS precio_venta_caja numeric(10,2) NULL;
 
+DROP TRIGGER IF EXISTS trg_inventario_precio_change ON inventario_almacen;
+DROP TRIGGER IF EXISTS trg_inventario_precio_insert ON inventario_almacen;
+
 ALTER TABLE inventario_almacen
   ALTER COLUMN precio_unitario_lote TYPE numeric(12,6)
   USING precio_unitario_lote::numeric(12,6);

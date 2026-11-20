@@ -52,6 +52,13 @@ export class DetalleLote {
   })
   ivaCfdi: number | null;
 
+  @Column({
+    name: 'piezas_por_caja_snapshot',
+    type: 'int',
+    nullable: true,
+  })
+  piezasPorCajaSnapshot: number | null;
+
   @Column({ type: 'uuid', name: 'movimientoid', nullable: true })
   movimientoId: string;
 

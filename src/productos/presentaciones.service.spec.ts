@@ -123,6 +123,52 @@ describe('PresentacionesService aliases', () => {
       ).resolves.toBeUndefined();
     });
 
+    it('permite recibir caja si el producto es solo pieza y conserva stock', async () => {
+      const inventarioRepo = {
+        count: jest.fn().mockResolvedValue(5),
+        find: jest.fn().mockResolvedValue([{ loteId: 'lote-1' }]),
+      };
+      const loteRepo = {
+        find: jest.fn().mockResolvedValue([
+          {
+            id: 'lote-1',
+            piezasPorCaja: null,
+            empaqueConvertido: false,
+          },
+        ]),
+      };
+      const manager = {
+        getRepository: jest.fn((entity: unknown) => {
+          if (entity === InventarioAlmacen) return inventarioRepo;
+          if (entity === Lote) return loteRepo;
+          return null;
+        }),
+        save: jest.fn((_entity: unknown, data: any) => Promise.resolve(data)),
+      } as any;
+
+      await expect(
+        service.validarRecepcionCaja(
+          {
+            id: 'producto-1',
+            nombre: 'Producto solo pieza',
+            empaqueEstado: EmpaqueEstado.PENDIENTE_FACTOR,
+            piezasPorCajaDefault: 1,
+            claveUnidad: 'H87',
+          } as any,
+          12,
+          manager,
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(manager.save).toHaveBeenCalledWith(
+        Lote,
+        expect.objectContaining({
+          piezasPorCaja: 1,
+          empaqueConvertido: true,
+        }),
+      );
+    });
+
     it('rechaza un factor distinto en producto ya convertido', async () => {
       const manager = { getRepository: jest.fn() } as any;
 

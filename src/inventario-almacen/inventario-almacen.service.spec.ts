@@ -169,7 +169,7 @@ describe('InventarioAlmacenService', () => {
           1,
           AlmacenTipo.VENTAS,
           'test-user',
-          undefined,
+          { factorRequerido: 12 },
           manager,
         );
       } catch (_e) {
@@ -192,6 +192,10 @@ describe('InventarioAlmacenService', () => {
       expect(mockAndWhere).toHaveBeenCalledWith(
         'CAST(lote.statusId AS text) = :loteActivo',
         { loteActivo: '1' },
+      );
+      expect(mockAndWhere).toHaveBeenCalledWith(
+        'lote.piezasPorCaja = :factorRequerido',
+        { factorRequerido: 12 },
       );
       expect(mockOrderBy).toHaveBeenCalledWith('lote.fechaCaducidad', 'ASC');
       expect(mockSetLock).toHaveBeenCalledWith('pessimistic_write');

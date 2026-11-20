@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import * as Papa from 'papaparse';
@@ -98,12 +94,17 @@ export class CsvService {
 
     const errores: { fila: number; mensaje: string }[] = [];
     const filasValidadas: CsvFilaValidada[] = [];
-    const distribucionImpuestos: { '00': number; '01': number } = { '00': 0, '01': 0 };
+    const distribucionImpuestos: { '00': number; '01': number } = {
+      '00': 0,
+      '01': 0,
+    };
     const seenCodigos = new Set<string>();
 
     // Helper para acceso case-insensitive a headers CSV
     const getVal = (row: any, key: string): string => {
-      const k = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
+      const k = Object.keys(row).find(
+        (k) => k.toLowerCase() === key.toLowerCase(),
+      );
       return k ? (row[k] || '').toString().trim() : '';
     };
 
@@ -117,7 +118,10 @@ export class CsvService {
       const valorUnitarioStr = getVal(fila, 'ValorUnitario');
 
       if (!noIdentificacion) {
-        errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: NoIdentificacion obligatorio` });
+        errores.push({
+          fila: filaNum,
+          mensaje: `Fila ${filaNum}: NoIdentificacion obligatorio`,
+        });
         continue;
       }
 
@@ -130,20 +134,29 @@ export class CsvService {
       }
 
       if (!descripcion) {
-        errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: Descripcion obligatorio` });
+        errores.push({
+          fila: filaNum,
+          mensaje: `Fila ${filaNum}: Descripcion obligatorio`,
+        });
         continue;
       }
 
       const cantidad = Number(cantidadStr.replace(/[,$]/g, ''));
       if (!cantidadStr || isNaN(cantidad) || cantidad < 0) {
-        errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: Cantidad inválida (debe ser >= 0)` });
+        errores.push({
+          fila: filaNum,
+          mensaje: `Fila ${filaNum}: Cantidad inválida (debe ser >= 0)`,
+        });
         continue;
       }
 
       let precio = Number(valorUnitarioStr.replace(/[$,]/g, ''));
       if (isNaN(precio)) precio = 0;
       if (!valorUnitarioStr || isNaN(precio)) {
-        errores.push({ fila: filaNum, mensaje: `Fila ${filaNum}: ValorUnitario inválido` });
+        errores.push({
+          fila: filaNum,
+          mensaje: `Fila ${filaNum}: ValorUnitario inválido`,
+        });
         continue;
       }
 
@@ -160,7 +173,9 @@ export class CsvService {
       distribucionImpuestos[impuestoAplicado]++;
 
       const precioVentaStr = getVal(fila, 'P. venta');
-      let precioVenta = precioVentaStr ? Number(precioVentaStr.replace(/[$,]/g, '')) : undefined;
+      let precioVenta = precioVentaStr
+        ? Number(precioVentaStr.replace(/[$,]/g, ''))
+        : undefined;
       if (precioVenta && tasaIva > 0) {
         precioVenta = precioVenta / (1 + tasaIva / 100);
       }
@@ -204,7 +219,7 @@ export class CsvService {
   async procesarCsv(
     file: any,
     userId: string,
-    productosFrontend: any[] = []  // Opcional: datos del frontend (lote, caducidad, stock, etc.)
+    productosFrontend: any[] = [], // Opcional: datos del frontend (lote, caducidad, stock, etc.)
   ): Promise<CsvProcesamientoResultado> {
     const preview = await this.parseCsv(file);
 
@@ -265,8 +280,13 @@ export class CsvService {
       const recepcionRepo = manager.getRepository(Recepcion);
 
       // Resolver el proveedor principal del CSV (primer fila con proveedor)
-      const primerProveedorNombre = preview.filasValidadas.find((f) => f.proveedor?.trim())?.proveedor;
-      const proveedorPrincipal = await this.resolverProveedor(primerProveedorNombre, manager);
+      const primerProveedorNombre = preview.filasValidadas.find((f) =>
+        f.proveedor?.trim(),
+      )?.proveedor;
+      const proveedorPrincipal = await this.resolverProveedor(
+        primerProveedorNombre,
+        manager,
+      );
 
       const recepcion = recepcionRepo.create({
         serie: 'CSV',
@@ -274,8 +294,14 @@ export class CsvService {
         fecha: new Date(),
         emisorRfc: 'CSV-IMPORT',
         emisorNombre: 'Importación CSV',
-        subtotal: preview.filasValidadas.reduce((s, f) => s + f.precio * f.cantidad, 0),
-        total: preview.filasValidadas.reduce((s, f) => s + f.precio * f.cantidad, 0),
+        subtotal: preview.filasValidadas.reduce(
+          (s, f) => s + f.precio * f.cantidad,
+          0,
+        ),
+        total: preview.filasValidadas.reduce(
+          (s, f) => s + f.precio * f.cantidad,
+          0,
+        ),
         proveedorId: proveedorPrincipal?.id || undefined,
         uuidCfdi: idempotencyKey,
         xmlContent: '',
@@ -285,7 +311,7 @@ export class CsvService {
 
       // Crear mapa de productos del frontend para acceso rápido
       const productosFrontendMap = new Map(
-        productosFrontend.map((p) => [p.productoId, p])
+        productosFrontend.map((p) => [p.productoId, p]),
       );
 
       // Fecha de caducidad default: misma para todos los productos del CSV (día de carga + 1 año)
@@ -298,11 +324,15 @@ export class CsvService {
       for (const fila of preview.filasValidadas) {
         const frontendData = productosFrontendMap.get(fila.productoId);
         const factorInput = Number(frontendData?.piezasPorCaja) || 0;
-        const esCaja =
-          factorInput > 1 ||
-          ['XBX', 'CJA', 'XPK', 'XBG', 'XSA', 'XCA', 'XBA'].includes(
-            String(fila.claveUnidad || '').toUpperCase(),
-          );
+        const esCaja = [
+          'XBX',
+          'CJA',
+          'XPK',
+          'XBG',
+          'XSA',
+          'XCA',
+          'XBA',
+        ].includes(String(fila.claveUnidad || '').toUpperCase());
         const factor = esCaja
           ? factorInput ||
             this.presentacionesService.inferFactor(fila.nombre) ||
@@ -330,12 +360,19 @@ export class CsvService {
           : null;
 
         // Resolver laboratorio por fila (default "Importación CSV" si no trae Departamento)
-        const laboratorioIdFila = await this.resolverLaboratorio(fila.laboratorioId, manager);
+        const laboratorioIdFila = await this.resolverLaboratorio(
+          fila.laboratorioId,
+          manager,
+        );
         // Resolver proveedor por fila (null si no trae Proveedor)
-        const proveedorFila = await this.resolverProveedor(fila.proveedor, manager);
-        
+        const proveedorFila = await this.resolverProveedor(
+          fila.proveedor,
+          manager,
+        );
+
         const esSoloProducto = fila.cantidad <= 0;
-        let producto: Producto | null = productosExistentesMap.get(fila.productoId) || null;
+        let producto: Producto | null =
+          productosExistentesMap.get(fila.productoId) || null;
 
         if (producto) {
           if (esCaja) {
@@ -361,14 +398,18 @@ export class CsvService {
               : {}),
           };
           if (fila.margenCalculado !== undefined) {
-            updateData.margenRecomendado = Math.round(fila.margenCalculado * 100) / 100;
+            updateData.margenRecomendado =
+              Math.round(fila.margenCalculado * 100) / 100;
           }
           if (!producto.proveedorPreferidoId && proveedorFila) {
             updateData.proveedorPreferidoId = proveedorFila.id;
           }
           await productoRepo.update(producto.id, updateData);
-          const actualizado = await productoRepo.findOne({ where: { id: producto.id } });
-          if (!actualizado) throw new Error('Producto desapareció durante update');
+          const actualizado = await productoRepo.findOne({
+            where: { id: producto.id },
+          });
+          if (!actualizado)
+            throw new Error('Producto desapareció durante update');
           producto = actualizado;
           estadisticas.productosActualizados++;
         } else {
@@ -398,7 +439,8 @@ export class CsvService {
           estadisticas.productosCreados++;
         }
 
-        const numeroLote = frontendData?.numeroLote ?? `CSV-${recepcionId}-${fila.productoId}`;
+        const numeroLote =
+          frontendData?.numeroLote ?? `CSV-${recepcionId}-${fila.productoId}`;
         let lote: Lote | null = await loteRepo.findOne({
           where: { numeroLote, laboratorioId: laboratorioIdFila },
         });
@@ -416,7 +458,10 @@ export class CsvService {
           });
           lote = await loteRepo.save(nuevoLote);
           estadisticas.lotesCreados++;
-        } else if (frontendData?.fechaCaducidad && lote.fechaCaducidad !== new Date(frontendData.fechaCaducidad)) {
+        } else if (
+          frontendData?.fechaCaducidad &&
+          lote.fechaCaducidad !== new Date(frontendData.fechaCaducidad)
+        ) {
           lote.fechaCaducidad = new Date(frontendData.fechaCaducidad);
           await loteRepo.save(lote);
         }
@@ -445,11 +490,25 @@ export class CsvService {
         const piezaPresentacion = presentaciones.find(
           (p) => p.tipo === 'PIEZA',
         );
-        const cajaPresentacion = presentaciones.find(
-          (p) => p.tipo === 'CAJA',
-        );
-        const almacenTipo = esSoloProducto ? AlmacenTipo.VENTAS : AlmacenTipo.RECEPCION;
-        const tipoMovimiento = esSoloProducto ? undefined : TipoMovimiento.ENTRADA_BODEGA;
+        const cajaPresentacion = presentaciones.find((p) => p.tipo === 'CAJA');
+        const almacenTipo = esSoloProducto
+          ? AlmacenTipo.VENTAS
+          : AlmacenTipo.RECEPCION;
+        const tipoMovimiento = esSoloProducto
+          ? undefined
+          : TipoMovimiento.ENTRADA_BODEGA;
+
+        if (!esCaja) {
+          const factorLote = Number(lote.piezasPorCaja) || 0;
+          if (factorLote > 1) {
+            throw new BadRequestException(
+              `El lote ${lote.numeroLote} ya está configurado como caja; usa otro lote para recibir piezas`,
+            );
+          }
+          lote.piezasPorCaja = 1;
+          lote.empaqueConvertido = true;
+          await loteRepo.save(lote);
+        }
 
         const inventario = await this.inventarioService.agregarStock(
           producto.id,
@@ -462,18 +521,24 @@ export class CsvService {
           tipoMovimiento,
           userId,
           precioPieza ?? undefined,
+          esCaja
+            ? `Recepción caja CSV: ${fila.cantidad} × ${factor} = ${cantidadBase} piezas`
+            : `Recepción pieza CSV: ${cantidadBase} piezas`,
         );
 
         if (piezaPresentacion) {
           if (precioPieza != null && precioPieza > 0) {
-            await this.preciosLoteService.setPrecio({
-              productoId: producto.id,
-              loteId: lote.id,
-              presentacionId: piezaPresentacion.id,
-              precio: precioPieza,
-              usuarioId: userId,
-              motivo: 'Precio individual asignado en recepción CSV',
-            }, manager);
+            await this.preciosLoteService.setPrecio(
+              {
+                productoId: producto.id,
+                loteId: lote.id,
+                presentacionId: piezaPresentacion.id,
+                precio: precioPieza,
+                usuarioId: userId,
+                motivo: 'Precio individual asignado en recepción CSV',
+              },
+              manager,
+            );
           } else {
             await this.preciosLoteService.clearPrecio(
               lote.id,
@@ -486,14 +551,17 @@ export class CsvService {
         }
         if (esCaja && cajaPresentacion) {
           if (precioCaja != null && precioCaja > 0) {
-            await this.preciosLoteService.setPrecio({
-              productoId: producto.id,
-              loteId: lote.id,
-              presentacionId: cajaPresentacion.id,
-              precio: precioCaja,
-              usuarioId: userId,
-              motivo: 'Precio de caja asignado en recepción CSV',
-            }, manager);
+            await this.preciosLoteService.setPrecio(
+              {
+                productoId: producto.id,
+                loteId: lote.id,
+                presentacionId: cajaPresentacion.id,
+                precio: precioCaja,
+                usuarioId: userId,
+                motivo: 'Precio de caja asignado en recepción CSV',
+              },
+              manager,
+            );
           } else {
             await this.preciosLoteService.clearPrecio(
               lote.id,
@@ -547,9 +615,7 @@ export class CsvService {
         throw new BadRequestException('Este CSV ya fue procesado');
       }
       this.logger.error(`Error procesando CSV: ${error.message}`, error.stack);
-      throw new BadRequestException(
-        `Error al procesar CSV: ${error.message}`,
-      );
+      throw new BadRequestException(`Error al procesar CSV: ${error.message}`);
     } finally {
       await queryRunner.release();
     }

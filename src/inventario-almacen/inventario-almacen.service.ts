@@ -31,6 +31,7 @@ export interface MovimientoMetadata {
   origenOperacion?: OrigenOperacion;
   referenciaExterna?: string;
   observaciones?: string;
+  factorRequerido?: number | null;
 }
 
 @Injectable()
@@ -127,7 +128,8 @@ export class InventarioAlmacenService {
           productoId: inv.productoId,
           producto: inv.producto,
           presentaciones: (inv.producto as any)?.presentaciones || [],
-          piezasPorCajaDefault: (inv.producto as any)?.piezasPorCajaDefault || null,
+          piezasPorCajaDefault:
+            (inv.producto as any)?.piezasPorCajaDefault || null,
           empaqueEstado: (inv.producto as any)?.empaqueEstado || null,
           cantidadActual: Number(inv.cantidadActual),
           lote: inv.lote,
@@ -207,7 +209,8 @@ export class InventarioAlmacenService {
           item.precioVenta ??
           null;
         item.precioVentaCaja =
-          item.lotes?.find((lote) => lote.precioVentaCaja != null)?.precioVentaCaja ??
+          item.lotes?.find((lote) => lote.precioVentaCaja != null)
+            ?.precioVentaCaja ??
           item.precioVentaCaja ??
           null;
         item.precioVentaSugerido =
@@ -258,6 +261,7 @@ export class InventarioAlmacenService {
     tipoMovimiento?: string,
     userId?: string,
     precioVentaFijo?: number | null,
+    observacionMovimiento?: string,
   ): Promise<InventarioAlmacen> {
     const repo = managerArg
       ? managerArg.getRepository(InventarioAlmacen)
@@ -278,7 +282,11 @@ export class InventarioAlmacenService {
       if (precioUnitarioLote !== undefined && precioUnitarioLote !== null) {
         inventario.precioUnitarioLote = precioUnitarioLote;
       }
-      if (precioVentaFijo !== undefined && precioVentaFijo !== null && precioVentaFijo > 0) {
+      if (
+        precioVentaFijo !== undefined &&
+        precioVentaFijo !== null &&
+        precioVentaFijo > 0
+      ) {
         inventario.precioVenta = precioVentaFijo;
       }
       const saved = await repo.save(inventario);
@@ -290,7 +298,8 @@ export class InventarioAlmacenService {
           almacenDestino: almacenTipo,
           cantidad,
           userId: userId || SYSTEM_USER_ID,
-          observaciones: `Entrada por ${tipoMovimiento}`,
+          observaciones:
+            observacionMovimiento || `Entrada por ${tipoMovimiento}`,
           tipoMovimiento,
           origenOperacion: OrigenOperacion.API,
         });
@@ -311,7 +320,12 @@ export class InventarioAlmacenService {
         cantidadActual: cantidad,
         ivaCfdi: ivaCfdi ?? null,
         precioUnitarioLote: precioLote,
-        precioVenta: (precioVentaFijo !== undefined && precioVentaFijo !== null && precioVentaFijo > 0) ? precioVentaFijo : null,
+        precioVenta:
+          precioVentaFijo !== undefined &&
+          precioVentaFijo !== null &&
+          precioVentaFijo > 0
+            ? precioVentaFijo
+            : null,
       });
     }
 
@@ -325,7 +339,7 @@ export class InventarioAlmacenService {
         almacenDestino: almacenTipo,
         cantidad,
         userId: userId || SYSTEM_USER_ID,
-        observaciones: `Entrada por ${tipoMovimiento}`,
+        observaciones: observacionMovimiento || `Entrada por ${tipoMovimiento}`,
         tipoMovimiento,
         origenOperacion: OrigenOperacion.API,
       });
@@ -380,6 +394,7 @@ export class InventarioAlmacenService {
     productoId: string,
     cantidad: number,
     almacenTipo: AlmacenTipo,
+    factorRequerido?: number | null,
   ): Promise<{
     inventarios: InventarioAlmacen[];
     totalDisponible: number;
@@ -388,15 +403,21 @@ export class InventarioAlmacenService {
       cantidad: number;
     }[];
   }> {
-    const inventarios = await manager
+    const query = manager
       .createQueryBuilder(InventarioAlmacen, 'inv')
       .innerJoinAndSelect('inv.lote', 'lote')
       .where('inv.productoId = :productoId', { productoId })
       .andWhere('inv.almacenTipo = :almacenTipo', { almacenTipo })
       .andWhere('inv.cantidadActual > 0')
-      .andWhere("CAST(lote.statusId AS text) = :loteActivo", {
+      .andWhere('CAST(lote.statusId AS text) = :loteActivo', {
         loteActivo: '1',
-      })
+      });
+    if (Number(factorRequerido) > 1) {
+      query.andWhere('lote.piezasPorCaja = :factorRequerido', {
+        factorRequerido: Number(factorRequerido),
+      });
+    }
+    const inventarios = await query
       .orderBy('lote.fechaCaducidad', 'ASC')
       .setLock('pessimistic_write')
       .getMany();
@@ -457,6 +478,7 @@ export class InventarioAlmacenService {
           productoId,
           cantidad,
           almacenTipoOrigen,
+          metadata?.factorRequerido,
         );
 
       if (totalDisponible < cantidad) {
@@ -573,6 +595,17 @@ export class InventarioAlmacenService {
       const inventarioPorLote = new Map(
         inventarios.map((inventario) => [inventario.loteId, inventario]),
       );
+      const factorRequerido = Number(metadata?.factorRequerido);
+      if (factorRequerido > 1) {
+        for (const inventario of inventarios) {
+          const factorLote = Number(inventario.lote?.piezasPorCaja) || 0;
+          if (factorLote !== factorRequerido) {
+            throw new BadRequestException(
+              `El lote ${inventario.lote?.numeroLote || inventario.loteId} tiene ${factorLote} piezas por caja y la línea usa ${factorRequerido}`,
+            );
+          }
+        }
+      }
 
       const lotsUsed: {
         loteId: string;
@@ -828,8 +861,7 @@ export class InventarioAlmacenService {
           inventarioOrigen.precioVentaCaja != null &&
           inventarioDestino.precioVentaCaja == null
         ) {
-          inventarioDestino.precioVentaCaja =
-            inventarioOrigen.precioVentaCaja;
+          inventarioDestino.precioVentaCaja = inventarioOrigen.precioVentaCaja;
         }
       } else {
         inventarioDestino = manager.create(InventarioAlmacen, {
@@ -1124,8 +1156,7 @@ export class InventarioAlmacenService {
     if (
       precioVentaCaja !== undefined &&
       precioVentaCaja !== null &&
-      (!Number.isFinite(Number(precioVentaCaja)) ||
-        Number(precioVentaCaja) < 0)
+      (!Number.isFinite(Number(precioVentaCaja)) || Number(precioVentaCaja) < 0)
     ) {
       throw new BadRequestException('Precio de caja inválido');
     }
@@ -1387,12 +1418,10 @@ export class InventarioAlmacenService {
       throw new BadRequestException('El lote destino no está activo');
     }
 
-    const inventarios = await manager
-      .getRepository(InventarioAlmacen)
-      .find({
-        where: { loteId: loteDestinoId },
-        select: ['productoId'],
-      });
+    const inventarios = await manager.getRepository(InventarioAlmacen).find({
+      where: { loteId: loteDestinoId },
+      select: ['productoId'],
+    });
 
     if (inventarios.length > 0) {
       if (!inventarios.some((inv) => inv.productoId === productoId)) {
@@ -1403,12 +1432,10 @@ export class InventarioAlmacenService {
       return;
     }
 
-    const detalles = await manager
-      .getRepository(DetalleLote)
-      .find({
-        where: { loteId: loteDestinoId },
-        select: ['productoId'],
-      });
+    const detalles = await manager.getRepository(DetalleLote).find({
+      where: { loteId: loteDestinoId },
+      select: ['productoId'],
+    });
 
     if (detalles.length > 0) {
       if (!detalles.some((det) => det.productoId === productoId)) {
@@ -1442,7 +1469,9 @@ export class InventarioAlmacenService {
       });
 
       if (!inventarioOrigen) {
-        throw new BadRequestException('No se encontró inventario en el lote de origen');
+        throw new BadRequestException(
+          'No se encontró inventario en el lote de origen',
+        );
       }
 
       const stockActual = Number(inventarioOrigen.cantidadActual);
@@ -1504,7 +1533,9 @@ export class InventarioAlmacenService {
       }
 
       if (!loteDestinoIdResolved) {
-        throw new BadRequestException('No se pudo determinar el lote de destino');
+        throw new BadRequestException(
+          'No se pudo determinar el lote de destino',
+        );
       }
 
       if (tipoDestino === 'existente') {
@@ -1525,7 +1556,8 @@ export class InventarioAlmacenService {
       });
 
       if (inventarioDestino) {
-        inventarioDestino.cantidadActual = Number(inventarioDestino.cantidadActual) + cantidad;
+        inventarioDestino.cantidadActual =
+          Number(inventarioDestino.cantidadActual) + cantidad;
         if (
           inventarioDestino.precioVenta == null &&
           inventarioOrigen.precioVenta != null
@@ -1536,8 +1568,7 @@ export class InventarioAlmacenService {
           inventarioDestino.precioVentaCaja == null &&
           inventarioOrigen.precioVentaCaja != null
         ) {
-          inventarioDestino.precioVentaCaja =
-            inventarioOrigen.precioVentaCaja;
+          inventarioDestino.precioVentaCaja = inventarioOrigen.precioVentaCaja;
         }
       } else {
         inventarioDestino = manager.create(InventarioAlmacen, {
@@ -1633,7 +1664,11 @@ export class InventarioAlmacenService {
         )?.numeroLote ||
         'desconocido';
 
-      return { origen: inventarioOrigen, destino: savedDestino, loteDestinoNumero };
+      return {
+        origen: inventarioOrigen,
+        destino: savedDestino,
+        loteDestinoNumero,
+      };
     });
   }
 }

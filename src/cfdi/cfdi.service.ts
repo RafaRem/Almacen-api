@@ -155,8 +155,7 @@ export class CfdiService {
             productoId:
               productoIdMap.get(producto.productoId) || producto.productoId,
             cantidad:
-              Number(producto.cantidad) *
-              (Number(producto.piezasPorCaja) || 1),
+              Number(producto.cantidad) * (Number(producto.piezasPorCaja) || 1),
           }));
 
         ordenCompraVinculada = await this.vincularConOrdenCompra(
@@ -210,7 +209,7 @@ export class CfdiService {
     // Normalizar formato SAT:
     // 1. Eliminar BOM si está presente
     let normalized = xml;
-    if (normalized.charCodeAt(0) === 0xFEFF) {
+    if (normalized.charCodeAt(0) === 0xfeff) {
       normalized = normalized.slice(1);
     }
     // 2. Eliminar todos los newlines (pueden romper el parsing)
@@ -375,7 +374,7 @@ export class CfdiService {
       const claveUnidad = (concepto?.claveUnidad || '').toUpperCase();
       const esCaja =
         ['CJA', 'XBX', 'XPK', 'XBG', 'XSA', 'XCA', 'XBA'].includes(unidad) ||
-        ['XBX', 'CJA', 'XPK', 'XBG', 'XSA', 'XCA'].includes(claveUnidad);
+        ['XBX', 'CJA', 'XPK', 'XBG', 'XSA', 'XCA', 'XBA'].includes(claveUnidad);
       const factor = esCaja
         ? Number(prodDto.piezasPorCaja) ||
           this.presentacionesService.inferFactor(concepto?.descripcion) ||
@@ -403,7 +402,8 @@ export class CfdiService {
         : null;
 
       const lote = await this.crearOLocalizarLote(
-        prodDto.numeroLote || `LOTE-${serie || 'X'}-${folio || '0'}-${prodDto.productoId}`,
+        prodDto.numeroLote ||
+          `LOTE-${serie || 'X'}-${folio || '0'}-${prodDto.productoId}`,
         prodDto.fechaCaducidad,
         laboratorioId,
         recepcionId,
@@ -449,8 +449,7 @@ export class CfdiService {
         }
         // Actualizar impuestoAplicado en producto existente
         await productoRepo.update(producto.id, {
-          impuestoAplicado:
-            concepto?.objetoImp || cfdiData.objetoImp || '00',
+          impuestoAplicado: concepto?.objetoImp || cfdiData.objetoImp || '00',
           ...(esCaja
             ? {
                 piezasPorCajaDefault: factor,
@@ -458,9 +457,7 @@ export class CfdiService {
                 claveUnidad: 'H87',
               }
             : {}),
-          ...(margenRecomendado != null
-            ? { margenRecomendado }
-            : {}),
+          ...(margenRecomendado != null ? { margenRecomendado } : {}),
         });
         productosExistentes.push({
           nombre: producto.nombre,
@@ -487,6 +484,18 @@ export class CfdiService {
           );
       }
 
+      if (!esCaja) {
+        const factorLote = Number(lote.piezasPorCaja) || 0;
+        if (factorLote > 1) {
+          throw new BadRequestException(
+            `El lote ${lote.numeroLote} ya está configurado como caja; usa otro lote para recibir piezas`,
+          );
+        }
+        lote.piezasPorCaja = 1;
+        lote.empaqueConvertido = true;
+        await manager.save(Lote, lote);
+      }
+
       const inventario = await this.inventarioAlmacenService.agregarStock(
         producto.id,
         lote.id,
@@ -498,27 +507,29 @@ export class CfdiService {
         TipoMovimiento.ENTRADA_BODEGA,
         userId,
         precioPieza ?? undefined,
+        esCaja
+          ? `Recepción caja: ${prodDto.cantidad} × ${factor} = ${cantidadBase} piezas`
+          : `Recepción pieza: ${cantidadBase} piezas`,
       );
 
       const presentaciones = presentacionesRecepcion.length
         ? presentacionesRecepcion
         : await this.presentacionesService.findByProducto(producto.id);
-      const piezaPresentacion = presentaciones.find(
-        (p) => p.tipo === 'PIEZA',
-      );
-      const cajaPresentacion = presentaciones.find(
-        (p) => p.tipo === 'CAJA',
-      );
+      const piezaPresentacion = presentaciones.find((p) => p.tipo === 'PIEZA');
+      const cajaPresentacion = presentaciones.find((p) => p.tipo === 'CAJA');
       if (piezaPresentacion) {
         if (precioPieza != null && precioPieza > 0) {
-          await this.preciosLoteService.setPrecio({
-            productoId: producto.id,
-            loteId: lote.id,
-            presentacionId: piezaPresentacion.id,
-            precio: precioPieza,
-            usuarioId: userId,
-            motivo: 'Precio individual asignado en recepción',
-          }, manager);
+          await this.preciosLoteService.setPrecio(
+            {
+              productoId: producto.id,
+              loteId: lote.id,
+              presentacionId: piezaPresentacion.id,
+              precio: precioPieza,
+              usuarioId: userId,
+              motivo: 'Precio individual asignado en recepción',
+            },
+            manager,
+          );
         } else {
           await this.preciosLoteService.clearPrecio(
             lote.id,
@@ -531,14 +542,17 @@ export class CfdiService {
       }
       if (esCaja && cajaPresentacion) {
         if (precioCaja != null && precioCaja > 0) {
-          await this.preciosLoteService.setPrecio({
-            productoId: producto.id,
-            loteId: lote.id,
-            presentacionId: cajaPresentacion.id,
-            precio: precioCaja,
-            usuarioId: userId,
-            motivo: 'Precio de caja asignado en recepción',
-          }, manager);
+          await this.preciosLoteService.setPrecio(
+            {
+              productoId: producto.id,
+              loteId: lote.id,
+              presentacionId: cajaPresentacion.id,
+              precio: precioCaja,
+              usuarioId: userId,
+              motivo: 'Precio de caja asignado en recepción',
+            },
+            manager,
+          );
         } else {
           await this.preciosLoteService.clearPrecio(
             lote.id,
@@ -569,10 +583,7 @@ export class CfdiService {
     return { productosCreados, productosExistentes, productoIdMap };
   }
 
-  private calcularMargen(
-    precioVenta?: number,
-    costo?: number,
-  ): number | null {
+  private calcularMargen(precioVenta?: number, costo?: number): number | null {
     const precio = Number(precioVenta);
     const costoUnitario = Number(costo);
     if (

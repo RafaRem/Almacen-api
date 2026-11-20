@@ -78,10 +78,61 @@ export class PresentacionesService {
           cantidadActual: MoreThan(0),
         },
       });
-    if (stockExistente > 0) {
+    const soloPieza = await this.esProductoSoloPieza(producto, manager);
+    if (stockExistente > 0 && !soloPieza) {
       throw new BadRequestException(
         `El producto "${producto.nombre}" tiene stock existente en cajas. Convierte el empaque desde Inventario antes de recibir cajas.`,
       );
+    }
+    if (soloPieza) {
+      await this.marcarLotesExistentesComoPieza(producto.id, manager);
+    }
+  }
+
+  private async esProductoSoloPieza(
+    producto: Producto,
+    manager: EntityManager,
+  ): Promise<boolean> {
+    if (Number(producto.piezasPorCajaDefault) === 1) return true;
+    if (!this.esUnidadPieza(producto.claveUnidad)) return false;
+    if (Number(producto.piezasPorCajaDefault) > 1) return false;
+
+    const inventarios = await manager.getRepository(InventarioAlmacen).find({
+      where: { productoId: producto.id },
+      relations: ['lote'],
+    });
+    const lotes = inventarios
+      .map((inventario) => inventario.lote)
+      .filter(Boolean) as Lote[];
+    const cajas = await manager.getRepository(ProductoPresentacion).count({
+      where: {
+        productoId: producto.id,
+        tipo: PresentacionTipo.CAJA,
+        statusId: StatusId.ACTIVE,
+      },
+    });
+    return this.esStockSoloPieza(producto, lotes, cajas > 0);
+  }
+
+  private async marcarLotesExistentesComoPieza(
+    productoId: string,
+    manager: EntityManager,
+  ): Promise<void> {
+    const inventarios = await manager.getRepository(InventarioAlmacen).find({
+      where: { productoId },
+    });
+    const loteIds = Array.from(
+      new Set(inventarios.map((inventario) => inventario.loteId)),
+    );
+    if (!loteIds.length) return;
+    const lotes = await manager.getRepository(Lote).find({
+      where: { id: In(loteIds) },
+    });
+    for (const lote of lotes) {
+      if (Number(lote.piezasPorCaja) > 1) continue;
+      lote.piezasPorCaja = 1;
+      lote.empaqueConvertido = true;
+      await manager.save(Lote, lote);
     }
   }
 

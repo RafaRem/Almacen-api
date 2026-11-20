@@ -312,6 +312,7 @@ describe('CfdiService', () => {
         'ENTRADA_BODEGA',
         'user-1',
         expect.any(Number),
+        expect.stringContaining('Recepción'),
       );
     });
 

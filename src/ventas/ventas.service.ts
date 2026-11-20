@@ -272,7 +272,9 @@ export class VentasService {
               lotesSeleccionados,
               AlmacenTipo.VENTAS,
               usuarioId,
-              undefined,
+              tipoPresentacion === 'CAJA' || factorUnidades > 1
+                ? { factorRequerido: factorUnidades }
+                : undefined,
               manager,
             );
         } else {
@@ -281,7 +283,9 @@ export class VentasService {
             cantidadBase,
             AlmacenTipo.VENTAS,
             usuarioId,
-            undefined,
+            tipoPresentacion === 'CAJA' || factorUnidades > 1
+              ? { factorRequerido: factorUnidades }
+              : undefined,
             manager,
           );
         }

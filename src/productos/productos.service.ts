@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -7,6 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Producto } from './entities/producto.entity';
 import { Lote } from '../lotes/entities/lote.entity';
+import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
+import { PresentacionesService } from './presentaciones.service';
+import { PreciosLoteService } from '../precios-lote/precios-lote.service';
+import { EmpaqueEstado } from '../common/enums/empaque-estado.enum';
+import { PresentacionTipo } from '../common/enums/presentacion-tipo.enum';
 import { CreateProductoDto } from './dto/create-producto.dto';
 import { CreateProductoConStockDto } from './dto/create-producto-con-stock.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
@@ -21,6 +27,8 @@ export class ProductosService {
     @InjectRepository(Lote)
     private lotesRepository: Repository<Lote>,
     private inventarioService: InventarioAlmacenService,
+    private presentacionesService: PresentacionesService,
+    private preciosLoteService: PreciosLoteService,
   ) {}
 
   async create(createProductoDto: CreateProductoDto): Promise<Producto> {
@@ -56,6 +64,46 @@ export class ProductosService {
       ? new Date(dto.fechaCaducidad)
       : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
+    const factorNumero =
+      dto.piezasPorCaja == null ? 1 : Number(dto.piezasPorCaja);
+    if (!Number.isInteger(factorNumero) || factorNumero < 1) {
+      throw new BadRequestException(
+        'Las piezas por caja deben ser un entero mayor o igual a 1',
+      );
+    }
+    const tieneCaja = factorNumero > 1;
+    if (!tieneCaja && dto.precioVentaCaja != null) {
+      throw new BadRequestException(
+        'Define un factor mayor a 1 para asignar precio de caja',
+      );
+    }
+
+    const round2 = (value: number) =>
+      Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+    const precioPiezaBase =
+      dto.precioVentaPieza == null ? null : Number(dto.precioVentaPieza);
+    const precioCajaBase =
+      dto.precioVentaCaja == null ? null : Number(dto.precioVentaCaja);
+    if (
+      (precioPiezaBase != null &&
+        (!Number.isFinite(precioPiezaBase) || precioPiezaBase < 0)) ||
+      (precioCajaBase != null &&
+        (!Number.isFinite(precioCajaBase) || precioCajaBase < 0))
+    ) {
+      throw new BadRequestException('Precio de venta inválido');
+    }
+    const precioVentaPieza =
+      precioPiezaBase ??
+      (tieneCaja && precioCajaBase != null
+        ? round2(precioCajaBase / factorNumero)
+        : null);
+    const precioVentaCaja = tieneCaja
+      ? (precioCajaBase ??
+        (precioPiezaBase != null
+          ? round2(precioPiezaBase * factorNumero)
+          : null))
+      : null;
+
     return this.productosRepository.manager.transaction(async (manager) => {
       const productoRepo = manager.getRepository(Producto);
       const loteRepo = manager.getRepository(Lote);
@@ -68,6 +116,13 @@ export class ProductosService {
         stockMinimo: dto.stockMinimo ?? 10,
         stockMaximo: dto.stockMaximo ?? 100,
         margenRecomendado: dto.margenRecomendado ?? null,
+        piezasPorCajaDefault: factorNumero,
+        empaqueEstado: tieneCaja
+          ? EmpaqueEstado.CONVERTIDO
+          : EmpaqueEstado.FACTOR_ASIGNADO,
+        claveProdServ: dto.claveProdServ?.trim() || '',
+        claveUnidad: dto.claveUnidad?.trim().toUpperCase() || 'H87',
+        impuestoAplicado: Number(dto.ivaCfdi) > 0 ? '01' : '00',
         statusId: dto.statusId ?? 1,
       });
       const savedProducto = await productoRepo.save(producto);
@@ -76,10 +131,12 @@ export class ProductosService {
         numeroLote: dto.numeroLote,
         fechaCaducidad,
         laboratorioId: dto.laboratorioId,
+        piezasPorCaja: tieneCaja ? factorNumero : null,
+        empaqueConvertido: tieneCaja,
       });
       const savedLote = await loteRepo.save(lote);
 
-      await this.inventarioService.agregarStock(
+      const inventario = await this.inventarioService.agregarStock(
         savedProducto.id,
         savedLote.id,
         AlmacenTipo.VENTAS,
@@ -89,7 +146,51 @@ export class ProductosService {
         manager,
         'ENTRADA_INICIAL',
         userId,
+        precioVentaPieza ?? undefined,
       );
+
+      if (precioVentaCaja != null) {
+        inventario.precioVentaCaja = precioVentaCaja;
+        await manager.getRepository(InventarioAlmacen).save(inventario);
+      }
+
+      const presentaciones =
+        await this.presentacionesService.ensurePresentations(
+          savedProducto.id,
+          factorNumero,
+          manager,
+        );
+      const piezaPresentacion = presentaciones.find(
+        (presentacion) => presentacion.tipo === PresentacionTipo.PIEZA,
+      );
+      const cajaPresentacion = presentaciones.find(
+        (presentacion) => presentacion.tipo === PresentacionTipo.CAJA,
+      );
+
+      if (piezaPresentacion && precioVentaPieza != null) {
+        await this.preciosLoteService.setPrecio(
+          {
+            productoId: savedProducto.id,
+            loteId: savedLote.id,
+            presentacionId: piezaPresentacion.id,
+            precio: precioVentaPieza,
+            motivo: 'Precio inicial de venta por pieza',
+          },
+          manager,
+        );
+      }
+      if (cajaPresentacion && precioVentaCaja != null) {
+        await this.preciosLoteService.setPrecio(
+          {
+            productoId: savedProducto.id,
+            loteId: savedLote.id,
+            presentacionId: cajaPresentacion.id,
+            precio: precioVentaCaja,
+            motivo: 'Precio inicial de venta por caja',
+          },
+          manager,
+        );
+      }
 
       return savedProducto;
     });
@@ -155,6 +256,13 @@ export class ProductosService {
     const margenAnterior = producto.margenRecomendado;
 
     Object.assign(producto, updateProductoDto);
+    if (updateProductoDto.claveProdServ !== undefined) {
+      producto.claveProdServ = updateProductoDto.claveProdServ?.trim() || '';
+    }
+    if (updateProductoDto.claveUnidad !== undefined) {
+      producto.claveUnidad =
+        updateProductoDto.claveUnidad?.trim().toUpperCase() || '';
+    }
     const savedProducto = await this.productosRepository.save(producto);
 
     if (

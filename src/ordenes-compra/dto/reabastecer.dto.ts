@@ -5,6 +5,7 @@ import {
   IsInt,
   Min,
   IsBoolean,
+  IsIn,
 } from 'class-validator';
 
 export class ReabastecerDto {
@@ -20,6 +21,10 @@ export class ReabastecerDto {
   @IsInt()
   @Min(1)
   cantidad?: number;
+
+  @IsOptional()
+  @IsIn(['PIEZA', 'CAJA'])
+  presentacionTipo?: 'PIEZA' | 'CAJA';
 
   @IsOptional()
   @IsBoolean()

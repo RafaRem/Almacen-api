@@ -9,6 +9,7 @@ import {
   Min,
   IsDateString,
   IsNumber,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -20,6 +21,10 @@ export class CreateDetalleDto {
   @IsInt()
   @Min(1)
   cantidad: number;
+
+  @IsOptional()
+  @IsIn(['PIEZA', 'CAJA'])
+  presentacionTipo?: 'PIEZA' | 'CAJA';
 }
 
 export class CreateOrdenCompraDto {

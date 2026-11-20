@@ -8,6 +8,7 @@ import {
   IsArray,
   Min,
   IsDateString,
+  Matches,
 } from 'class-validator';
 
 export class CreateProductoConStockDto {
@@ -42,6 +43,29 @@ export class CreateProductoConStockDto {
   @IsOptional()
   @IsNumber()
   ivaCfdi?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  piezasPorCaja?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioVentaPieza?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioVentaCaja?: number;
+
+  @IsOptional()
+  @Matches(/^\d{8}$/)
+  claveProdServ?: string;
+
+  @IsOptional()
+  @Matches(/^[A-Z0-9]{3}$/)
+  claveUnidad?: string;
 
   @IsNumber()
   @Min(1)

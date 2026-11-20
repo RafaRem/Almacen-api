@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 
 export class CreateProductoDto {
   @IsString()
@@ -32,6 +39,14 @@ export class CreateProductoDto {
   @IsOptional()
   @IsString()
   proveedorPreferidoId?: string;
+
+  @IsOptional()
+  @Matches(/^\d{8}$/)
+  claveProdServ?: string;
+
+  @IsOptional()
+  @Matches(/^[A-Z0-9]{3}$/)
+  claveUnidad?: string;
 
   @IsOptional()
   @IsNumber()

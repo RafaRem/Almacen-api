@@ -187,4 +187,109 @@ describe('PresentacionesService aliases', () => {
       ]),
     ).rejects.toThrow(NotFoundException);
   });
+
+  describe('clasificación de solo pieza', () => {
+    const evaluar = (producto: any, lotes: any[] = [], caja = false) =>
+      (service as any).esStockSoloPieza(producto, lotes, caja);
+
+    it('clasifica H87 sin evidencia de caja como solo pieza', () => {
+      expect(
+        evaluar({
+          claveUnidad: 'H87',
+          piezasPorCajaDefault: null,
+        }),
+      ).toBe(true);
+    });
+
+    it('no clasifica H87 con factor de caja como solo pieza', () => {
+      expect(
+        evaluar({
+          claveUnidad: 'H87',
+          piezasPorCajaDefault: 12,
+        }),
+      ).toBe(false);
+    });
+
+    it('no clasifica como solo pieza si un lote tiene factor de caja', () => {
+      expect(
+        evaluar(
+          {
+            claveUnidad: 'H87',
+            piezasPorCajaDefault: null,
+          },
+          [{ piezasPorCaja: 24, empaqueConvertido: false }],
+        ),
+      ).toBe(false);
+    });
+
+    it('no clasifica unidades ajenas como solo pieza', () => {
+      expect(
+        evaluar({
+          claveUnidad: 'AB',
+          piezasPorCajaDefault: null,
+        }),
+      ).toBe(false);
+    });
+
+    it('detecta lotes ya convertidos', () => {
+      expect(
+        (service as any).lotesYaConvertidos([{ empaqueConvertido: true }]),
+      ).toBe(true);
+    });
+  });
+
+  describe('saveFactor()', () => {
+    it('guarda factor 1 para producto solo pieza', async () => {
+      const producto = {
+        id: 'producto-1',
+        nombre: 'Producto solo pieza',
+        empaqueEstado: EmpaqueEstado.PENDIENTE_FACTOR,
+        piezasPorCajaDefault: null,
+      } as Producto;
+      productoRepository.findOne?.mockResolvedValue(producto);
+      productoRepository.save?.mockImplementation((item) =>
+        Promise.resolve(item),
+      );
+
+      const result = await service.saveFactor('producto-1', 1);
+
+      expect(result.piezasPorCajaDefault).toBe(1);
+      expect(result.empaqueEstado).toBe(EmpaqueEstado.FACTOR_ASIGNADO);
+    });
+
+    it('rechaza factor 0', async () => {
+      await expect(service.saveFactor('producto-1', 0)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rechaza convertir a solo pieza un producto ya convertido', async () => {
+      productoRepository.findOne?.mockResolvedValue({
+        id: 'producto-1',
+        empaqueEstado: EmpaqueEstado.CONVERTIDO,
+        piezasPorCajaDefault: 12,
+      } as Producto);
+
+      await expect(service.saveFactor('producto-1', 1)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  it('excluye productos solo pieza de empaques pendientes', async () => {
+    const queryBuilder = {
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
+    productoRepository.createQueryBuilder = jest.fn(() => queryBuilder);
+
+    await service.findPendientes('', 'PENDIENTES');
+
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      '(producto.piezasPorCajaDefault IS NULL OR producto.piezasPorCajaDefault > 1)',
+    );
+  });
 });

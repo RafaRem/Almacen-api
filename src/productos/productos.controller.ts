@@ -17,6 +17,7 @@ import { UpdateProductoDto } from './dto/update-producto.dto';
 import {
   EmpaqueConvertirDto,
   EmpaqueFactorDto,
+  EmpaqueLoteFactorDto,
   EmpaquePreviewDto,
 } from './dto/empaque.dto';
 import { UpdatePresentacionAliasDto } from './dto/update-presentacion-alias.dto';
@@ -65,10 +66,7 @@ export class ProductosController {
 
   @Patch(':id/empaque/factor')
   @UseGuards(JwtAuthGuard)
-  saveEmpaqueFactor(
-    @Param('id') id: string,
-    @Body() dto: EmpaqueFactorDto,
-  ) {
+  saveEmpaqueFactor(@Param('id') id: string, @Body() dto: EmpaqueFactorDto) {
     return this.presentacionesService.saveFactor(id, dto.piezasPorCaja);
   }
 
@@ -77,7 +75,7 @@ export class ProductosController {
   saveLoteFactor(
     @Param('id') id: string,
     @Param('loteId') loteId: string,
-    @Body() dto: EmpaqueFactorDto,
+    @Body() dto: EmpaqueLoteFactorDto,
   ) {
     return this.presentacionesService.updateLoteFactor(
       id,
@@ -90,10 +88,7 @@ export class ProductosController {
 
   @Post(':id/empaque/preview')
   @UseGuards(JwtAuthGuard)
-  previewEmpaque(
-    @Param('id') id: string,
-    @Body() dto: EmpaquePreviewDto,
-  ) {
+  previewEmpaque(@Param('id') id: string, @Body() dto: EmpaquePreviewDto) {
     return this.presentacionesService.preview(id, dto);
   }
 

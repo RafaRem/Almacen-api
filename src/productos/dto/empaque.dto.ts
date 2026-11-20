@@ -11,6 +11,22 @@ import { Type } from 'class-transformer';
 
 export class EmpaqueFactorDto {
   @IsInt()
+  @Min(1)
+  piezasPorCaja: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioVentaCaja?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioVentaPieza?: number | null;
+}
+
+export class EmpaqueLoteFactorDto {
+  @IsInt()
   @Min(2)
   piezasPorCaja: number;
 

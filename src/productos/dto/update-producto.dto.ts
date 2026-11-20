@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsNumber, IsEnum, IsArray } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 import { StatusId } from '../../common/enums/status-id.enum';
 
 export class UpdateProductoDto {
@@ -33,6 +40,14 @@ export class UpdateProductoDto {
   @IsOptional()
   @IsString()
   proveedorPreferidoId?: string;
+
+  @IsOptional()
+  @Matches(/^\d{8}$/)
+  claveProdServ?: string;
+
+  @IsOptional()
+  @Matches(/^[A-Z0-9]{3}$/)
+  claveUnidad?: string;
 
   @IsOptional()
   @IsEnum(StatusId)

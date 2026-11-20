@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, EntityManager, In } from 'typeorm';
+import { Repository, EntityManager, In, IsNull } from 'typeorm';
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { OrdenCompra } from './entities/orden-compra.entity';
 import { DetalleOrdenCompra } from './entities/detalle-orden-compra.entity';
@@ -21,13 +21,11 @@ import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-al
 import { DetalleLote } from '../detalle-lote/entities/detalle-lote.entity';
 import { LotePrecio } from '../precios-lote/entities/lote-precio.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
+import { PresentacionTipo } from '../common/enums/presentacion-tipo.enum';
 import { Proveedor } from '../proveedores/entities/proveedor.entity';
 import { AlmacenTipo } from '../common/enums/almacen-tipo.enum';
-import {
-  TipoMovimiento,
-  OrigenOperacion,
-  SYSTEM_USER_ID,
-} from '../common/constants';
+import { TipoMovimiento, OrigenOperacion } from '../common/constants';
 
 @Injectable()
 export class OrdenesCompraService {
@@ -46,6 +44,8 @@ export class OrdenesCompraService {
     private movimientoRepository: Repository<MovimientoAlmacen>,
     @InjectRepository(Producto)
     private productoRepository: Repository<Producto>,
+    @InjectRepository(ProductoPresentacion)
+    private presentacionRepository: Repository<ProductoPresentacion>,
     @InjectEntityManager()
     private entityManager: EntityManager,
   ) {}
@@ -73,6 +73,56 @@ export class OrdenesCompraService {
     return `${prefix}${String(next).padStart(3, '0')}`;
   }
 
+  private async resolverPresentacionCompra(
+    producto: Producto,
+    tipoSolicitado?: string,
+  ): Promise<{
+    tipo: 'PIEZA' | 'CAJA';
+    presentacionId: string | null;
+    factorUnidades: number;
+  }> {
+    const tipo =
+      String(tipoSolicitado || 'PIEZA').toUpperCase() === 'CAJA'
+        ? 'CAJA'
+        : 'PIEZA';
+
+    if (tipo === 'CAJA') {
+      const presentacion = await this.presentacionRepository.findOne({
+        where: {
+          productoId: producto.id,
+          tipo: PresentacionTipo.CAJA,
+          statusId: 1,
+        },
+      });
+      const factor = Number(
+        presentacion?.factorUnidades || producto.piezasPorCajaDefault || 0,
+      );
+      if (!presentacion || factor < 2) {
+        throw new BadRequestException(
+          `El producto ${producto.nombre} no tiene caja configurada`,
+        );
+      }
+      return {
+        tipo: 'CAJA',
+        presentacionId: presentacion.id,
+        factorUnidades: factor,
+      };
+    }
+
+    const presentacion = await this.presentacionRepository.findOne({
+      where: {
+        productoId: producto.id,
+        tipo: PresentacionTipo.PIEZA,
+        statusId: 1,
+      },
+    });
+    return {
+      tipo: 'PIEZA',
+      presentacionId: presentacion?.id || null,
+      factorUnidades: 1,
+    };
+  }
+
   async create(createDto: CreateOrdenCompraDto): Promise<OrdenCompra> {
     const folio = await this.generarFolio();
     const orden = this.ordenesRepository.create({
@@ -87,13 +137,30 @@ export class OrdenesCompraService {
     const saved = await this.ordenesRepository.save(orden);
 
     if (createDto.detalles?.length) {
-      const detalles = createDto.detalles.map((d) =>
-        this.detallesRepository.create({
-          ordenCompraId: saved.id,
-          productoId: d.productoId,
-          cantidad: d.cantidad,
-        }),
-      );
+      const detalles: DetalleOrdenCompra[] = [];
+      for (const detalleDto of createDto.detalles) {
+        const producto = await this.productoRepository.findOne({
+          where: { id: detalleDto.productoId },
+        });
+        if (!producto) {
+          throw new NotFoundException(
+            `Producto ${detalleDto.productoId} no encontrado`,
+          );
+        }
+        const presentacion = await this.resolverPresentacionCompra(
+          producto,
+          detalleDto.presentacionTipo,
+        );
+        detalles.push(
+          this.detallesRepository.create({
+            ordenCompraId: saved.id,
+            productoId: detalleDto.productoId,
+            cantidad: detalleDto.cantidad * presentacion.factorUnidades,
+            presentacionId: presentacion.presentacionId,
+            factorUnidades: presentacion.factorUnidades,
+          }),
+        );
+      }
       await this.detallesRepository.save(detalles);
     }
 
@@ -203,14 +270,52 @@ export class OrdenesCompraService {
 
       for (const d of updateDto.detalles) {
         if (d.id) {
+          const existente = await this.detallesRepository.findOne({
+            where: { id: d.id },
+          });
+          if (!existente) continue;
+          const productoId = d.productoId || existente.productoId;
+          const producto = await this.productoRepository.findOne({
+            where: { id: productoId },
+          });
+          if (!producto) {
+            throw new NotFoundException(`Producto ${productoId} no encontrado`);
+          }
+          const tipo =
+            d.presentacionTipo ||
+            (Number(existente.factorUnidades) > 1 ? 'CAJA' : 'PIEZA');
+          const presentacion = await this.resolverPresentacionCompra(
+            producto,
+            tipo,
+          );
+          const factorAnterior = Number(existente.factorUnidades) || 1;
+          const cantidadPresentacion =
+            d.cantidad ?? (Number(existente.cantidad) || 1) / factorAnterior;
           await this.detallesRepository.update(d.id, {
-            cantidad: d.cantidad,
+            productoId,
+            cantidad: cantidadPresentacion * presentacion.factorUnidades,
+            presentacionId: presentacion.presentacionId,
+            factorUnidades: presentacion.factorUnidades,
           });
         } else if (d.productoId) {
+          const producto = await this.productoRepository.findOne({
+            where: { id: d.productoId },
+          });
+          if (!producto) {
+            throw new NotFoundException(
+              `Producto ${d.productoId} no encontrado`,
+            );
+          }
+          const presentacion = await this.resolverPresentacionCompra(
+            producto,
+            d.presentacionTipo,
+          );
           const detalle = this.detallesRepository.create({
             ordenCompraId: id,
             productoId: d.productoId,
-            cantidad: d.cantidad ?? 1,
+            cantidad: (d.cantidad ?? 1) * presentacion.factorUnidades,
+            presentacionId: presentacion.presentacionId,
+            factorUnidades: presentacion.factorUnidades,
           });
           await this.detallesRepository.save(detalle);
         }
@@ -225,6 +330,7 @@ export class OrdenesCompraService {
     detalleData: {
       productoId: string;
       cantidad: number;
+      presentacionTipo?: 'PIEZA' | 'CAJA';
     },
   ): Promise<OrdenCompra> {
     const orden = await this.findOne(ordenId);
@@ -235,10 +341,24 @@ export class OrdenesCompraService {
       );
     }
 
+    const producto = await this.productoRepository.findOne({
+      where: { id: detalleData.productoId },
+    });
+    if (!producto) {
+      throw new NotFoundException(
+        `Producto ${detalleData.productoId} no encontrado`,
+      );
+    }
+    const presentacion = await this.resolverPresentacionCompra(
+      producto,
+      detalleData.presentacionTipo,
+    );
     const detalle = this.detallesRepository.create({
       ordenCompraId: ordenId,
       productoId: detalleData.productoId,
-      cantidad: detalleData.cantidad,
+      cantidad: detalleData.cantidad * presentacion.factorUnidades,
+      presentacionId: presentacion.presentacionId,
+      factorUnidades: presentacion.factorUnidades,
     });
     await this.detallesRepository.save(detalle);
 
@@ -285,27 +405,37 @@ export class OrdenesCompraService {
             (d) => Number(d.cantidadRecibida) > 0,
           ),
       )
-      .map((detalle) => ({
-        id: detalle.ordenCompra.id,
-        folio: detalle.ordenCompra.folio,
-        proveedorId: detalle.ordenCompra.proveedorId,
-        proveedorNombre: detalle.ordenCompra.proveedor?.nombre || null,
-        fechaOrden: detalle.ordenCompra.fechaOrden,
-        fechaEsperada: detalle.ordenCompra.fechaEsperada,
-        cantidad: Number(detalle.cantidad) || 0,
-        cantidadRecibida: Number(detalle.cantidadRecibida) || 0,
-        cantidadPendiente: Math.max(
-          0,
-          (Number(detalle.cantidad) || 0) -
-            (Number(detalle.cantidadRecibida) || 0),
-        ),
-      }));
+      .map((detalle) => {
+        const factor = Number(detalle.factorUnidades) || 1;
+        const cantidadPiezas = Number(detalle.cantidad) || 0;
+        const recibidaPiezas = Number(detalle.cantidadRecibida) || 0;
+        const pendientePiezas = Math.max(0, cantidadPiezas - recibidaPiezas);
+        return {
+          id: detalle.ordenCompra.id,
+          detalleId: detalle.id,
+          folio: detalle.ordenCompra.folio,
+          proveedorId: detalle.ordenCompra.proveedorId,
+          proveedorNombre: detalle.ordenCompra.proveedor?.nombre || null,
+          fechaOrden: detalle.ordenCompra.fechaOrden,
+          fechaEsperada: detalle.ordenCompra.fechaEsperada,
+          tipoPresentacion: factor > 1 ? 'CAJA' : 'PIEZA',
+          presentacionId: detalle.presentacionId,
+          factorUnidades: factor,
+          cantidad: cantidadPiezas / factor,
+          cantidadPiezas,
+          cantidadRecibida: recibidaPiezas / factor,
+          cantidadRecibidaPiezas: recibidaPiezas,
+          cantidadPendiente: pendientePiezas / factor,
+          cantidadPendientePiezas: pendientePiezas,
+        };
+      });
   }
 
   async reabastecer(dto: {
     productoId: string;
     proveedorId?: string;
     cantidad?: number;
+    presentacionTipo?: 'PIEZA' | 'CAJA';
     preview?: boolean;
     confirmarPendiente?: boolean;
   }): Promise<any> {
@@ -321,6 +451,20 @@ export class OrdenesCompraService {
       this.logger.warn(`Producto ${dto.productoId} no encontrado`);
       throw new NotFoundException('Producto no encontrado');
     }
+    const presentacionCompra = await this.resolverPresentacionCompra(
+      producto,
+      dto.presentacionTipo,
+    );
+    const presentacionCaja = await this.presentacionRepository.findOne({
+      where: {
+        productoId: producto.id,
+        tipo: PresentacionTipo.CAJA,
+        statusId: 1,
+      },
+    });
+    const factorCaja = Number(
+      presentacionCaja?.factorUnidades || producto.piezasPorCajaDefault || 0,
+    );
     this.logger.log(
       `Producto encontrado: ${producto.nombre}, proveedorPreferido: ${producto.proveedorPreferido?.id || 'NINGUNO'}`,
     );
@@ -413,15 +557,24 @@ export class OrdenesCompraService {
       `Stock actual: ${stockActual}, stockMaximo: ${producto.stockMaximo}`,
     );
 
-    const suggestedQuantity = Math.max(
+    const suggestedPiezas = Math.max(
       0,
       (producto.stockMaximo || 10) - stockActual,
     );
+    const suggestedQuantity =
+      presentacionCompra.factorUnidades > 1
+        ? Math.ceil(suggestedPiezas / presentacionCompra.factorUnidades)
+        : suggestedPiezas;
 
     // Preview mode — solo retornar información sin crear/modificar OC
     if (dto.preview) {
       return {
         suggestedQuantity,
+        suggestedPiezas,
+        factorCaja: factorCaja >= 2 ? factorCaja : null,
+        tipoPresentacion: presentacionCompra.tipo,
+        factorUnidades: presentacionCompra.factorUnidades,
+        presentacionId: presentacionCompra.presentacionId,
         stockActual,
         stockMaximo: producto.stockMaximo || 10,
         stockMinimo: producto.stockMinimo,
@@ -432,13 +585,16 @@ export class OrdenesCompraService {
     }
 
     const cantidad = dto.cantidad ?? suggestedQuantity;
+    const cantidadPiezas = cantidad * presentacionCompra.factorUnidades;
     if (cantidad <= 0) {
       this.logger.warn(
         `Stock suficiente: actual=${stockActual}, maximo=${producto.stockMaximo}, sugerida=${suggestedQuantity}`,
       );
       throw new BadRequestException('El producto tiene suficiente stock');
     }
-    this.logger.log(`Cantidad a reabastecer: ${cantidad}`);
+    this.logger.log(
+      `Cantidad a reabastecer: ${cantidad} ${presentacionCompra.tipo} (${cantidadPiezas} piezas)`,
+    );
 
     if (ordenesPendientes.length > 0 && !dto.confirmarPendiente) {
       return {
@@ -462,29 +618,61 @@ export class OrdenesCompraService {
         where: {
           ordenCompraId: ocExistente.id,
           productoId: dto.productoId,
+          presentacionId: presentacionCompra.presentacionId ?? IsNull(),
         },
       });
 
       if (detalleExistente) {
-        detalleExistente.cantidad += cantidad;
+        detalleExistente.cantidad += cantidadPiezas;
         await this.detallesRepository.save(detalleExistente);
         const orden = await this.findOne(ocExistente.id);
-        return { orden, esNueva: false, cantidad, yaExistia: true };
+        return {
+          orden,
+          esNueva: false,
+          cantidad,
+          cantidadPiezas,
+          tipoPresentacion: presentacionCompra.tipo,
+          factorUnidades: presentacionCompra.factorUnidades,
+          yaExistia: true,
+        };
       }
 
       await this.addDetalle(ocExistente.id, {
         productoId: dto.productoId,
         cantidad,
+        presentacionTipo: presentacionCompra.tipo,
       });
       const orden = await this.findOne(ocExistente.id);
-      return { orden, esNueva: false, cantidad, yaExistia: false };
+      return {
+        orden,
+        esNueva: false,
+        cantidad,
+        cantidadPiezas,
+        tipoPresentacion: presentacionCompra.tipo,
+        factorUnidades: presentacionCompra.factorUnidades,
+        yaExistia: false,
+      };
     }
 
     const orden = await this.create({
       proveedorId: proveedor.id,
-      detalles: [{ productoId: dto.productoId, cantidad }],
+      detalles: [
+        {
+          productoId: dto.productoId,
+          cantidad,
+          presentacionTipo: presentacionCompra.tipo,
+        },
+      ],
     });
-    return { orden, esNueva: true, cantidad, yaExistia: false };
+    return {
+      orden,
+      esNueva: true,
+      cantidad,
+      cantidadPiezas,
+      tipoPresentacion: presentacionCompra.tipo,
+      factorUnidades: presentacionCompra.factorUnidades,
+      yaExistia: false,
+    };
   }
 
   async cambiarStatus(id: string, status: string): Promise<OrdenCompra> {
@@ -535,8 +723,7 @@ export class OrdenesCompraService {
     }
 
     const todosCompletos = detalles.every(
-      (detalle) =>
-        Number(detalle.cantidadRecibida) >= Number(detalle.cantidad),
+      (detalle) => Number(detalle.cantidadRecibida) >= Number(detalle.cantidad),
     );
     if (todosCompletos) {
       throw new BadRequestException('La orden ya está completamente recibida');
@@ -557,6 +744,7 @@ export class OrdenesCompraService {
   async recibir(
     id: string,
     recibirDto: RecibirOrdenCompraDto,
+    userId: string,
   ): Promise<OrdenCompra> {
     const orden = await this.findOne(id);
 
@@ -583,10 +771,11 @@ export class OrdenesCompraService {
 
       const detalles = await manager.find(DetalleOrdenCompra, {
         where: { ordenCompraId: id },
-        relations: ['producto'],
         lock: { mode: 'pessimistic_write' },
       });
-      const detallesMap = new Map(detalles.map((detalle) => [detalle.id, detalle]));
+      const detallesMap = new Map(
+        detalles.map((detalle) => [detalle.id, detalle]),
+      );
 
       for (const detalleRecibido of recibirDto.detalles) {
         const detalle = detallesMap.get(detalleRecibido.detalleId);
@@ -596,21 +785,23 @@ export class OrdenesCompraService {
           );
         }
 
-        const nuevaRecibida =
-          Number(detalle.cantidadRecibida) +
-          Number(detalleRecibido.cantidadRecibida);
-        if (nuevaRecibida > Number(detalle.cantidad)) {
-          throw new BadRequestException(
-            `Cantidad recibida (${nuevaRecibida}) excede la cantidad ordenada (${detalle.cantidad}) para el producto ${detalle.producto?.nombre || detalle.productoId}`,
-          );
-        }
-
         const producto = await manager.findOne(Producto, {
           where: { id: detalle.productoId },
         });
         if (!producto) {
           throw new NotFoundException(
             `Producto ${detalle.productoId} no encontrado`,
+          );
+        }
+
+        const factorUnidades = Number(detalle.factorUnidades) || 1;
+        const cantidadRecibidaBase =
+          Number(detalleRecibido.cantidadRecibida) * factorUnidades;
+        const nuevaRecibida =
+          Number(detalle.cantidadRecibida) + cantidadRecibidaBase;
+        if (nuevaRecibida > Number(detalle.cantidad)) {
+          throw new BadRequestException(
+            `Cantidad recibida (${nuevaRecibida}) excede la cantidad ordenada (${detalle.cantidad}) para el producto ${producto.nombre}`,
           );
         }
 
@@ -633,8 +824,12 @@ export class OrdenesCompraService {
             numeroLote: detalleRecibido.numeroLote,
             fechaCaducidad: new Date(detalleRecibido.fechaCaducidad),
             laboratorioId: producto.laboratorioId,
-            piezasPorCaja: producto.piezasPorCajaDefault,
-            empaqueConvertido: producto.empaqueEstado === 'CONVERTIDO',
+            piezasPorCaja:
+              factorUnidades > 1
+                ? factorUnidades
+                : producto.piezasPorCajaDefault,
+            empaqueConvertido:
+              factorUnidades > 1 || producto.empaqueEstado === 'CONVERTIDO',
             statusId: 1,
           });
           lote = await manager.save(Lote, lote);
@@ -648,13 +843,15 @@ export class OrdenesCompraService {
           detalleRecibido.precioUnitario != null
             ? Number(detalleRecibido.precioUnitario)
             : null;
-        const costoUnitario =
+        const costoPresentacion =
           (costoRecibido != null && costoRecibido > 0
             ? costoRecibido
-            : Number(detalle.precioEstimado)) ||
+            : Number(detalle.precioEstimado)) || 0;
+        const costoUnitario =
+          (costoPresentacion > 0 ? costoPresentacion / factorUnidades : 0) ||
           Number(inventarioReferencia?.precioUnitarioLote) ||
           0;
-        const cantidadBase = Number(detalleRecibido.cantidadRecibida);
+        const cantidadBase = cantidadRecibidaBase;
 
         let inventario = await manager.findOne(InventarioAlmacen, {
           where: {
@@ -688,8 +885,7 @@ export class OrdenesCompraService {
             precioVenta: inventarioReferencia?.precioVenta ?? null,
             precioVentaCaja: inventarioReferencia?.precioVentaCaja ?? null,
             ivaCfdi: inventarioReferencia?.ivaCfdi ?? null,
-            ivaPersonalizado:
-              inventarioReferencia?.ivaPersonalizado ?? null,
+            ivaPersonalizado: inventarioReferencia?.ivaPersonalizado ?? null,
           });
         }
 
@@ -701,7 +897,7 @@ export class OrdenesCompraService {
           almacenOrigen: AlmacenTipo.VENTAS,
           almacenDestino: AlmacenTipo.VENTAS,
           cantidad: cantidadBase,
-          userId: SYSTEM_USER_ID,
+          userId,
           observaciones: `Recepción OC ${orden.folio}`,
           tipoMovimiento: TipoMovimiento.ENTRADA_BODEGA,
           origenOperacion: OrigenOperacion.API,
@@ -761,7 +957,8 @@ export class OrdenesCompraService {
         ) {
           inventario.precioVenta =
             Math.round(
-              costoUnitario * (1 + Number(producto.margenRecomendado) / 100) *
+              costoUnitario *
+                (1 + Number(producto.margenRecomendado) / 100) *
                 100,
             ) / 100;
           await manager.save(InventarioAlmacen, inventario);

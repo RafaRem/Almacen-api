@@ -20,7 +20,11 @@ import { CorteCajaService } from '../corte-caja/corte-caja.service';
 import { CreditosService } from '../creditos/creditos.service';
 import { MetodoPago } from '../common/enums/metodo-pago.enum';
 import { DescuentoTipo } from '../common/enums/descuento-tipo.enum';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Factura, FacturaStatus } from '../facturas/entities/factura.entity';
 
 const mockQueryBuilder = {
@@ -147,8 +151,6 @@ const mockInventarioAlmacenQueryBuilder = {
   getMany: jest.fn().mockResolvedValue([]),
 };
 
-
-
 const mockInventarioAlmacenRepository = {
   createQueryBuilder: jest
     .fn()
@@ -207,7 +209,12 @@ describe('VentasService', () => {
         { provide: LotesService, useValue: mockLotesService },
         { provide: CuentasCobrarService, useValue: mockCuentasCobrarService },
         { provide: CreditosService, useValue: mockCreditosService },
-        { provide: CorteCajaService, useValue: { vincularVentaACorte: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: CorteCajaService,
+          useValue: {
+            vincularVentaACorte: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
@@ -374,19 +381,17 @@ describe('VentasService', () => {
           cb(mockManager),
       );
       mockManager.update.mockResolvedValue({ affected: 1 });
-      const findOneSpy = jest.spyOn(service, 'findOne').mockResolvedValue(
-        { ...venta, pagos: [] } as unknown as Awaited<
+      const findOneSpy = jest
+        .spyOn(service, 'findOne')
+        .mockResolvedValue({ ...venta, pagos: [] } as unknown as Awaited<
           ReturnType<VentasService['findOne']>
-        >,
-      );
+        >);
 
       try {
         const result = (await service.updatePagosVenta(
           'venta-1',
           {
-            pagos: [
-              { id: 'pago-1', formaPago: '04' as any, monto: 100 },
-            ],
+            pagos: [{ id: 'pago-1', formaPago: '04' as any, monto: 100 }],
           },
           { id: 'u1', tipo: 'admin', name: 'Admin' },
         )) as { facturaBorradorActualizada: boolean };
@@ -433,19 +438,17 @@ describe('VentasService', () => {
       );
       mockManager.update.mockResolvedValue({ affected: 1 });
       mockManager.delete.mockResolvedValue({ affected: 1 });
-      const findOneSpy = jest.spyOn(service, 'findOne').mockResolvedValue(
-        { ...venta, pagos: [] } as unknown as Awaited<
+      const findOneSpy = jest
+        .spyOn(service, 'findOne')
+        .mockResolvedValue({ ...venta, pagos: [] } as unknown as Awaited<
           ReturnType<VentasService['findOne']>
-        >,
-      );
+        >);
 
       try {
         await service.updatePagosVenta(
           'venta-1',
           {
-            pagos: [
-              { id: 'pago-1', formaPago: '01' as any, monto: 100 },
-            ],
+            pagos: [{ id: 'pago-1', formaPago: '01' as any, monto: 100 }],
           },
           { id: 'u1', tipo: 'admin', name: 'Admin' },
         );
@@ -455,9 +458,7 @@ describe('VentasService', () => {
           'pago-1',
           expect.objectContaining({ formaPago: '01', monto: 100 }),
         );
-        expect(mockManager.delete).toHaveBeenCalledWith(PagoVenta, [
-          'pago-2',
-        ]);
+        expect(mockManager.delete).toHaveBeenCalledWith(PagoVenta, ['pago-2']);
         expect(mockManager.update).toHaveBeenCalledWith(
           Venta,
           'venta-1',
@@ -488,9 +489,7 @@ describe('VentasService', () => {
         service.updatePagosVenta(
           'venta-1',
           {
-            pagos: [
-              { id: 'pago-1', formaPago: '01' as any, monto: 50 },
-            ],
+            pagos: [{ id: 'pago-1', formaPago: '01' as any, monto: 50 }],
           },
           { id: 'u1', tipo: 'admin', name: 'Admin' },
         ),
@@ -761,7 +760,6 @@ describe('VentasService', () => {
       expect(data[0].utilidad).toBe(10);
       expect(data[0].utilidadBruta).toBe(20);
     });
-
   });
 
   describe('findOne()', () => {
@@ -1078,6 +1076,30 @@ describe('VentasService', () => {
       expect(mockClientesService.findOne).toHaveBeenCalledWith('cliente-1');
     });
 
+    it('usa la tasa de IVA del inventario en la vista previa', async () => {
+      mockDescuentosService.calcularDescuentosAcumulables.mockResolvedValue({
+        descuentoProducto: null,
+        descuentoCategoria: null,
+        descuentoTotal: 0,
+        precioOriginal: 61.2,
+        precioFinal: 61.2,
+        excedeLimite: false,
+      });
+      mockInventarioAlmacenService.findByProductoId.mockResolvedValue({
+        precioUnitarioLote: 45,
+        precioVenta: 61.2,
+        ivaCfdi: 8,
+        almacenTipo: 2,
+      });
+
+      const result = await service.previewDescuento([
+        { productoId: 'prod-1', cantidad: 1 },
+      ]);
+
+      expect(result.iva).toBe(4.9);
+      expect(result.total).toBe(66.1);
+    });
+
     it('should generate descuentoPorProducto entries', async () => {
       const result = await service.previewDescuento(
         [productos[0]],
@@ -1223,6 +1245,22 @@ describe('VentasService', () => {
       expect(
         mockInventarioAlmacenService.reducirStockFIFO,
       ).toHaveBeenCalledWith('prod-1', 5, 2, usuarioId, undefined, mockManager);
+    });
+
+    it('aplica la tasa de IVA configurada en el producto', async () => {
+      mockInventarioAlmacenService.findByProductoId.mockResolvedValue({
+        ...baseInventario,
+        ivaCfdi: 8,
+      });
+
+      const dto = {
+        productos: [{ productoId: 'prod-1', cantidad: 5 }],
+        metodoPago: MetodoPago.EFECTIVO,
+      };
+      const result = await service.create(dto as any, usuarioId);
+
+      expect(Number(result.iva)).toBe(24.48);
+      expect(Number(result.total)).toBe(330.48);
     });
 
     it('should create a sale with multiple products', async () => {

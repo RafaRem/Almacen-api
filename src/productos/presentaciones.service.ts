@@ -15,12 +15,8 @@ import { PresentacionTipo } from '../common/enums/presentacion-tipo.enum';
 import { EmpaqueEstado } from '../common/enums/empaque-estado.enum';
 import { PreciosLoteService } from '../precios-lote/precios-lote.service';
 import { StatusId } from '../common/enums/status-id.enum';
-import {
-  EmpaqueConvertirDto,
-  EmpaquePreviewDto,
-} from './dto/empaque.dto';
+import { EmpaqueConvertirDto, EmpaquePreviewDto } from './dto/empaque.dto';
 
-const BOX_UNITS = ['XBX', 'CJA', 'XPK', 'XBG', 'XSA', 'XCA', 'XBA'];
 const SYSTEM_USER_ID = 'SYSTEM';
 
 export interface EmpaqueLotePreview {
@@ -159,7 +155,9 @@ export class PresentacionesService {
     const presentaciones = await this.findByProducto(productoId);
     return (
       presentaciones.find((presentacion) => presentacion.esDefault) ||
-      presentaciones.find((presentacion) => presentacion.tipo === PresentacionTipo.PIEZA) ||
+      presentaciones.find(
+        (presentacion) => presentacion.tipo === PresentacionTipo.PIEZA,
+      ) ||
       presentaciones[0] ||
       null
     );
@@ -174,7 +172,9 @@ export class PresentacionesService {
         where: { id: presentacionId, productoId, statusId: StatusId.ACTIVE },
       });
       if (!presentacion) {
-        throw new NotFoundException('Presentación no encontrada para el producto');
+        throw new NotFoundException(
+          'Presentación no encontrada para el producto',
+        );
       }
       return presentacion;
     }
@@ -200,11 +200,7 @@ export class PresentacionesService {
           convertido: EmpaqueEstado.CONVERTIDO,
         })
         .andWhere(
-          `(producto.claveUnidad IN (:...boxUnits)
-            OR producto.piezasPorCajaDefault IS NOT NULL
-            OR LOWER(COALESCE(producto.nombre, '')) LIKE :caja
-            OR LOWER(COALESCE(producto.descripcion, '')) LIKE :caja)`,
-          { boxUnits: BOX_UNITS, caja: '%caja%' },
+          '(producto.piezasPorCajaDefault IS NULL OR producto.piezasPorCajaDefault > 1)',
         );
     } else if (filtro === 'CONFIGURADOS') {
       query.where(
@@ -280,6 +276,40 @@ export class PresentacionesService {
         byLote.set(key, actual);
       }
 
+      const lotesProducto = inventarios
+        .map((inventario) => inventario.lote)
+        .filter(Boolean) as Lote[];
+      const factorCaja = Number(producto.piezasPorCajaDefault) > 1;
+      const loteConCaja = lotesProducto.some(
+        (lote) => Number(lote.piezasPorCaja) > 1,
+      );
+      let tieneCajaPresentacion = false;
+      if (
+        this.esUnidadPieza(producto.claveUnidad) &&
+        !factorCaja &&
+        !loteConCaja
+      ) {
+        const cajas = await this.presentacionRepository.count({
+          where: {
+            productoId: producto.id,
+            tipo: PresentacionTipo.CAJA,
+            statusId: StatusId.ACTIVE,
+          },
+        });
+        tieneCajaPresentacion = cajas > 0;
+      }
+      const soloPieza = this.esStockSoloPieza(
+        producto,
+        lotesProducto,
+        tieneCajaPresentacion,
+      );
+      if (
+        filtro === 'PENDIENTES' &&
+        (soloPieza || this.lotesYaConvertidos(lotesProducto))
+      ) {
+        continue;
+      }
+
       result.push({
         id: producto.id,
         nombre: producto.nombre,
@@ -287,8 +317,10 @@ export class PresentacionesService {
         claveUnidad: producto.claveUnidad,
         laboratorio: producto.laboratorio?.nombre || 'N/A',
         empaqueEstado: producto.empaqueEstado,
-        factorSugerido:
-          producto.piezasPorCajaDefault || this.inferFactor(producto.nombre),
+        soloPieza,
+        factorSugerido: soloPieza
+          ? 1
+          : producto.piezasPorCajaDefault || this.inferFactor(producto.nombre),
         stockCajas: inventarios.reduce(
           (sum, inv) => sum + Number(inv.cantidadActual || 0),
           0,
@@ -315,13 +347,26 @@ export class PresentacionesService {
   }
 
   async saveFactor(productoId: string, factor: number): Promise<Producto> {
-    this.validateFactor(factor);
+    const factorNumero = Number(factor);
+    if (!Number.isInteger(factorNumero) || factorNumero < 1) {
+      throw new BadRequestException(
+        'El factor debe ser un entero mayor o igual a 1',
+      );
+    }
     const producto = await this.productoRepository.findOne({
       where: { id: productoId },
     });
     if (!producto) throw new NotFoundException('Producto no encontrado');
+    if (
+      factorNumero === 1 &&
+      producto.empaqueEstado === EmpaqueEstado.CONVERTIDO
+    ) {
+      throw new BadRequestException(
+        'Un producto convertido no puede cambiarse a solo pieza',
+      );
+    }
 
-    producto.piezasPorCajaDefault = factor;
+    producto.piezasPorCajaDefault = factorNumero;
     if (producto.empaqueEstado !== EmpaqueEstado.CONVERTIDO) {
       producto.empaqueEstado = EmpaqueEstado.FACTOR_ASIGNADO;
     }
@@ -457,6 +502,21 @@ export class PresentacionesService {
     const cajaPresentacion = presentaciones.find(
       (p) => p.tipo === PresentacionTipo.CAJA,
     );
+    const lotesProducto = inventarios
+      .map((inventario) => inventario.lote)
+      .filter(Boolean) as Lote[];
+    if (this.lotesYaConvertidos(lotesProducto)) {
+      throw new BadRequestException(
+        'Uno o más lotes de este producto ya están en piezas; no se puede convertir nuevamente',
+      );
+    }
+    if (
+      this.esStockSoloPieza(producto, lotesProducto, Boolean(cajaPresentacion))
+    ) {
+      throw new BadRequestException(
+        'El stock de este producto ya está en piezas. No requiere conversión; configúralo como SOLO PIEZA.',
+      );
+    }
 
     const lotesMap = new Map<string, EmpaqueLotePreview>();
     for (const inv of inventarios) {
@@ -491,8 +551,8 @@ export class PresentacionesService {
       const precioPieza =
         override?.precioVentaPieza != null
           ? Number(override.precioVentaPieza)
-          : precioPiezaCanonico ??
-            (inv.precioVenta != null ? Number(inv.precioVenta) : null);
+          : (precioPiezaCanonico ??
+            (inv.precioVenta != null ? Number(inv.precioVenta) : null));
       if (!current) {
         lotesMap.set(inv.loteId, {
           loteId: inv.loteId,
@@ -561,10 +621,14 @@ export class PresentacionesService {
       });
       if (!producto) throw new NotFoundException('Producto no encontrado');
       if (producto.empaqueEstado === EmpaqueEstado.CONVERTIDO) {
-        throw new BadRequestException('Este producto ya fue convertido a piezas');
+        throw new BadRequestException(
+          'Este producto ya fue convertido a piezas',
+        );
       }
       if (producto.empaqueEstado === EmpaqueEstado.CONVIRTIENDO) {
-        throw new BadRequestException('El producto ya tiene una conversión en curso');
+        throw new BadRequestException(
+          'El producto ya tiene una conversión en curso',
+        );
       }
 
       producto.empaqueEstado = EmpaqueEstado.CONVIRTIENDO;
@@ -581,6 +645,34 @@ export class PresentacionesService {
         const lotesInventario = new Set(
           inventarios.map((inventario) => inventario.loteId),
         );
+        const lotesInfo = lotesInventario.size
+          ? await manager.find(Lote, {
+              where: { id: In(Array.from(lotesInventario)) },
+            })
+          : [];
+        const presentacionesExistentes = await manager
+          .getRepository(ProductoPresentacion)
+          .find({
+            where: { productoId, statusId: StatusId.ACTIVE },
+          });
+        if (this.lotesYaConvertidos(lotesInfo)) {
+          throw new BadRequestException(
+            'Uno o más lotes de este producto ya están en piezas; no se puede convertir nuevamente',
+          );
+        }
+        if (
+          this.esStockSoloPieza(
+            producto,
+            lotesInfo,
+            presentacionesExistentes.some(
+              (presentacion) => presentacion.tipo === PresentacionTipo.CAJA,
+            ),
+          )
+        ) {
+          throw new BadRequestException(
+            'El stock de este producto ya está en piezas. No requiere conversión; configúralo como SOLO PIEZA.',
+          );
+        }
         const lotesAjenos = dto.lotes.filter(
           (lote) => !lotesInventario.has(lote.loteId),
         );
@@ -591,9 +683,7 @@ export class PresentacionesService {
               .join(', ')} no pertenecen al producto`,
           );
         }
-        const overrides = new Map(
-          dto.lotes.map((lote) => [lote.loteId, lote]),
-        );
+        const overrides = new Map(dto.lotes.map((lote) => [lote.loteId, lote]));
         const factorDefault = Number(dto.lotes[0].piezasPorCaja);
         const lotesActualizados = new Map<
           string,
@@ -686,23 +776,30 @@ export class PresentacionesService {
         for (const override of dto.lotes) {
           const precioCaja = Number(override.precioVentaCaja);
           if (precioCaja > 0 && cajaPresentacion) {
-            await this.preciosLoteService.setPrecio({
-              productoId,
-              loteId: override.loteId,
-              presentacionId: cajaPresentacion.id,
-              precio: precioCaja,
-              motivo: 'Precio asignado durante conversión de empaque',
-            }, manager);
+            await this.preciosLoteService.setPrecio(
+              {
+                productoId,
+                loteId: override.loteId,
+                presentacionId: cajaPresentacion.id,
+                precio: precioCaja,
+                motivo: 'Precio asignado durante conversión de empaque',
+              },
+              manager,
+            );
           }
           if (piezaPresentacion) {
             if (override.precioVentaPieza != null) {
-              await this.preciosLoteService.setPrecio({
-                productoId,
-                loteId: override.loteId,
-                presentacionId: piezaPresentacion.id,
-                precio: Number(override.precioVentaPieza),
-                motivo: 'Precio sugerido/ajustado durante conversión de empaque',
-              }, manager);
+              await this.preciosLoteService.setPrecio(
+                {
+                  productoId,
+                  loteId: override.loteId,
+                  presentacionId: piezaPresentacion.id,
+                  precio: Number(override.precioVentaPieza),
+                  motivo:
+                    'Precio sugerido/ajustado durante conversión de empaque',
+                },
+                manager,
+              );
             } else {
               await this.preciosLoteService.clearPrecio(
                 override.loteId,
@@ -752,12 +849,16 @@ export class PresentacionesService {
         factor: 1,
         esDefault: true,
       },
-      {
-        tipo: PresentacionTipo.CAJA,
-        nombre: 'Caja',
-        factor: factorDefault,
-        esDefault: false,
-      },
+      ...(Number(factorDefault) > 1
+        ? [
+            {
+              tipo: PresentacionTipo.CAJA,
+              nombre: 'Caja',
+              factor: factorDefault,
+              esDefault: false,
+            },
+          ]
+        : []),
     ];
 
     for (const definition of definitions) {
@@ -796,6 +897,29 @@ export class PresentacionesService {
       if (Number.isInteger(value) && value > 1) return value;
     }
     return 0;
+  }
+
+  private esUnidadPieza(claveUnidad?: string | null): boolean {
+    const unidad = String(claveUnidad || '')
+      .trim()
+      .toUpperCase();
+    return unidad === 'H87' || unidad === 'PZA';
+  }
+
+  private lotesYaConvertidos(lotes: Lote[]): boolean {
+    return lotes.some((lote) => lote.empaqueConvertido === true);
+  }
+
+  private esStockSoloPieza(
+    producto: Producto,
+    lotes: Lote[],
+    tieneCajaPresentacion: boolean,
+  ): boolean {
+    if (Number(producto.piezasPorCajaDefault) === 1) return true;
+    if (!this.esUnidadPieza(producto.claveUnidad)) return false;
+    const factorCaja = Number(producto.piezasPorCajaDefault) > 1;
+    const loteCaja = lotes.some((lote) => Number(lote.piezasPorCaja) > 1);
+    return !(factorCaja || loteCaja || tieneCajaPresentacion);
   }
 
   private validateFactor(factor: number): void {

@@ -13,10 +13,7 @@ import { PagoVenta } from './entities/pago-venta.entity';
 import { DescuentoVentaDetalle } from '../descuentos/entities/descuento-venta-detalle.entity';
 import { DetalleVentaLote } from './entities/detalle-venta-lote.entity';
 import { CreateVentaDto } from './dto/create-venta.dto';
-import {
-  resolverFactorLinea,
-  validarFactorLotes,
-} from './utils/venta-factor';
+import { resolverFactorLinea, validarFactorLotes } from './utils/venta-factor';
 import { UpdatePagosVentaDto } from './dto/update-pagos-venta.dto';
 import { Factura, FacturaStatus } from '../facturas/entities/factura.entity';
 import { ProductosService } from '../productos/productos.service';
@@ -36,7 +33,10 @@ import { ConfiguracionesService } from '../configuraciones/configuraciones.servi
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { ClientesService } from '../clientes/clientes.service';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
-import { CuentaPorCobrar, StatusCuentaCobrar } from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
+import {
+  CuentaPorCobrar,
+  StatusCuentaCobrar,
+} from '../cuentas-cobrar/entities/cuenta-cobrar.entity';
 import { TipoMovimiento, OrigenOperacion } from '../common/constants';
 import { parseDate } from '../common/utils/date-utils';
 import { CorteCajaService } from '../corte-caja/corte-caja.service';
@@ -81,6 +81,25 @@ export class VentasService {
 
   private async getIvaRate(): Promise<number> {
     return (await this.configuracionesService.getIvaGlobal()) / 100;
+  }
+
+  private resolverIvaTasa(
+    inventario:
+      | {
+          ivaPersonalizado?: number | string | null;
+          ivaCfdi?: number | string | null;
+        }
+      | null
+      | undefined,
+    ivaGlobalRate: number,
+  ): number {
+    const tasaConfigurada =
+      inventario?.ivaPersonalizado ?? inventario?.ivaCfdi ?? null;
+    if (tasaConfigurada === null || tasaConfigurada === undefined) {
+      return this.round2(ivaGlobalRate * 100);
+    }
+    const tasa = Number(tasaConfigurada);
+    return Number.isFinite(tasa) ? this.round2(tasa) : 0;
   }
 
   private async getNextFolio(): Promise<number> {
@@ -209,7 +228,11 @@ export class VentasService {
           );
         }
 
-        if (clienteClase === 'B' && producto.clasesPermitidas && producto.clasesPermitidas.length > 0) {
+        if (
+          clienteClase === 'B' &&
+          producto.clasesPermitidas &&
+          producto.clasesPermitidas.length > 0
+        ) {
           if (!producto.clasesPermitidas.includes('B')) {
             throw new BadRequestException(
               `Producto "${producto.nombre}" no disponible para clientes clase B`,
@@ -253,15 +276,14 @@ export class VentasService {
               manager,
             );
         } else {
-          resultadoFEPU =
-            await this.inventarioAlmacenService.reducirStockFIFO(
-              productoVenta.productoId,
-              cantidadBase,
-              AlmacenTipo.VENTAS,
-              usuarioId,
-              undefined,
-              manager,
-            );
+          resultadoFEPU = await this.inventarioAlmacenService.reducirStockFIFO(
+            productoVenta.productoId,
+            cantidadBase,
+            AlmacenTipo.VENTAS,
+            usuarioId,
+            undefined,
+            manager,
+          );
         }
 
         if (!resultadoFEPU.success) {
@@ -298,8 +320,8 @@ export class VentasService {
                   )
                 : null) ??
               (tipoPresentacion === 'CAJA' || factorUnidades > 1
-                ? lote.precioVentaCaja ?? null
-                : lote.precio ?? null),
+                ? (lote.precioVentaCaja ?? null)
+                : (lote.precio ?? null)),
           })),
         );
         const preciosFaltantes = preciosPorLote.filter(
@@ -336,9 +358,7 @@ export class VentasService {
             ? totalPrecioPresentacion / cantidadPresentacion
             : 0;
         const costoUnitario =
-          cantidadPresentacion > 0
-            ? totalCosto / cantidadPresentacion
-            : 0;
+          cantidadPresentacion > 0 ? totalCosto / cantidadPresentacion : 0;
         const importeBruto = totalPrecioPresentacion;
 
         const fechaCaducidad = parseDate(
@@ -412,10 +432,9 @@ export class VentasService {
                 );
 
               if (dp) {
-                const calculado =
-                  descuentosCalculadosPorProducto.get(
-                    productoVenta.productoId,
-                  ) || { descuentoTotal: 0 };
+                const calculado = descuentosCalculadosPorProducto.get(
+                  productoVenta.productoId,
+                ) || { descuentoTotal: 0 };
                 const tolerancia = 0.01;
                 const diferencia = Math.abs(
                   dp.descuento - Number(calculado.descuentoTotal || 0),
@@ -428,8 +447,7 @@ export class VentasService {
                 } else {
                   for (let i = descuentosInfo.length - 1; i >= 0; i--) {
                     if (
-                      descuentosInfo[i].productoId ===
-                      productoVenta.productoId
+                      descuentosInfo[i].productoId === productoVenta.productoId
                     ) {
                       descuentosInfo.splice(i, 1);
                     }
@@ -483,12 +501,7 @@ export class VentasService {
         subtotal += subtotalLinea;
         descuentoTotal += descuentoLinea;
 
-        // Solo aplicar IVA si el producto tiene tasa > 0
-        const ivaTasaProducto =
-          inventarioProducto?.ivaPersonalizado ??
-          inventarioProducto?.ivaCfdi ??
-          0;
-        const ivaTasa = ivaTasaProducto > 0 ? this.round2(ivaRate * 100) : 0;
+        const ivaTasa = this.resolverIvaTasa(inventarioProducto, ivaRate);
         const ivaImporte =
           ivaTasa > 0 ? this.round2(subtotalLinea * (ivaTasa / 100)) : 0;
         ivaTotal += ivaImporte;
@@ -522,9 +535,7 @@ export class VentasService {
           presentacionId,
           presentacionAlias,
           tipoPresentacion: tipoSnapshot,
-          claveUnidad: esCajaSnapshot
-            ? 'XBX'
-            : producto.claveUnidad || 'H87',
+          claveUnidad: esCajaSnapshot ? 'XBX' : producto.claveUnidad || 'H87',
           unidad: esCajaSnapshot ? 'Caja' : 'Pieza',
           factorUnidades,
           cantidadBase,
@@ -599,9 +610,15 @@ export class VentasService {
 
       // Vincular venta al corte de caja activo (dentro de la misma transacción)
       try {
-        await this.corteCajaService.vincularVentaACorte(savedVenta.id, usuarioId, manager);
+        await this.corteCajaService.vincularVentaACorte(
+          savedVenta.id,
+          usuarioId,
+          manager,
+        );
       } catch (e) {
-        this.logger.warn(`Error vinculando venta a corte de caja: ${e.message}`);
+        this.logger.warn(
+          `Error vinculando venta a corte de caja: ${e.message}`,
+        );
       }
 
       let cuentaPorCobrarId: string | null = null;
@@ -609,8 +626,12 @@ export class VentasService {
       // Crear cuenta por cobrar si es venta a crédito
       if (metodoPagoFinal === MetodoPago.CREDITO && createVentaDto.clienteId) {
         try {
-          const disponible = await this.creditosService.getDisponible(createVentaDto.clienteId);
-          this.logger.log(`[VentaCredito] Cliente: ${createVentaDto.clienteId}, Disponible: ${disponible}, Total: ${total}`);
+          const disponible = await this.creditosService.getDisponible(
+            createVentaDto.clienteId,
+          );
+          this.logger.log(
+            `[VentaCredito] Cliente: ${createVentaDto.clienteId}, Disponible: ${disponible}, Total: ${total}`,
+          );
           const sobregiro = total - disponible;
           if (sobregiro > 500) {
             throw new BadRequestException(
@@ -624,7 +645,9 @@ export class VentasService {
           }
           const fechaVencimiento = new Date();
           fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
-          this.logger.log(`[VentaCredito] Creando cuenta por cobrar para venta ${savedVenta.id}`);
+          this.logger.log(
+            `[VentaCredito] Creando cuenta por cobrar para venta ${savedVenta.id}`,
+          );
           const cuenta = manager.create(CuentaPorCobrar, {
             clienteId: createVentaDto.clienteId,
             ventaId: savedVenta.id,
@@ -635,7 +658,9 @@ export class VentasService {
             fechaVencimiento,
           });
           const savedCuenta = await manager.save(CuentaPorCobrar, cuenta);
-          this.logger.log(`[VentaCredito] Cuenta por cobrar creada: ${savedCuenta.id}`);
+          this.logger.log(
+            `[VentaCredito] Cuenta por cobrar creada: ${savedCuenta.id}`,
+          );
           cuentaPorCobrarId = savedCuenta.id;
           await this.creditosService.usarCredito(
             createVentaDto.clienteId,
@@ -643,12 +668,19 @@ export class VentasService {
             usuarioId,
             manager,
           );
-          this.logger.log(`Cuenta por cobrar creada para venta ${savedVenta.id}: $${total.toFixed(2)}`);
+          this.logger.log(
+            `Cuenta por cobrar creada para venta ${savedVenta.id}: $${total.toFixed(2)}`,
+          );
         } catch (error) {
-          this.logger.error(`[VentaCredito] Error en venta a crédito: ${error.message}`, error.stack);
+          this.logger.error(
+            `[VentaCredito] Error en venta a crédito: ${error.message}`,
+            error.stack,
+          );
           const errorMsg = error.message || 'Error desconocido';
           const errorStack = error.stack || '';
-          throw new BadRequestException(`Error en venta a crédito: ${errorMsg}\nStack: ${errorStack}`);
+          throw new BadRequestException(
+            `Error en venta a crédito: ${errorMsg}\nStack: ${errorStack}`,
+          );
         }
       }
 
@@ -818,7 +850,9 @@ export class VentasService {
         const placeholders = metodos.map(() => `$${p++}`).join(', ');
         sql += ` AND v.metodopago IN (${placeholders})`;
         const countOffset = params.length + 1;
-        const countPlaceholders = metodos.map((_, i) => `$${countOffset + i}`).join(', ');
+        const countPlaceholders = metodos
+          .map((_, i) => `$${countOffset + i}`)
+          .join(', ');
         countSql += ` AND v.metodopago IN (${countPlaceholders})`;
         params.push(...metodos);
       }
@@ -864,7 +898,8 @@ export class VentasService {
     const total = parseInt(countResult[0]?.total || '0', 10);
 
     const ventaIds = rows.map((r: any) => r.id);
-    let utilidadMap: Map<string, { utilidad: number; utilidadBruta: number }> = new Map();
+    let utilidadMap: Map<string, { utilidad: number; utilidadBruta: number }> =
+      new Map();
     if (ventaIds.length > 0) {
       const ventas = await this.ventasRepository
         .createQueryBuilder('venta')
@@ -872,10 +907,15 @@ export class VentasService {
         .where('venta.id IN (:...ids)', { ids: ventaIds })
         .getMany();
       await this.computeUtilidadVentas(ventas);
-      utilidadMap = new Map(ventas.map(v => [v.id, {
-        utilidad: (v as any).utilidad ?? 0,
-        utilidadBruta: (v as any).utilidadBruta ?? 0,
-      }]));
+      utilidadMap = new Map(
+        ventas.map((v) => [
+          v.id,
+          {
+            utilidad: (v as any).utilidad ?? 0,
+            utilidadBruta: (v as any).utilidadBruta ?? 0,
+          },
+        ]),
+      );
     }
 
     const data = rows.map((r: any) => ({
@@ -891,27 +931,33 @@ export class VentasService {
       updatedAt: r.updatedat,
       clienteId: r.clienteid,
       usuarioId: r.usuarioid,
-      cliente: r.cl_id ? {
-        id: r.cl_id,
-        nombre: r.cl_nombre,
-        apellidoPaterno: r.cl_ap,
-        apellidoMaterno: r.cl_am,
-        empresa: r.cl_empresa,
-      } : null,
-      usuario: r.u_id ? {
-        id: r.u_id,
-        name: r.u_name,
-      } : null,
+      cliente: r.cl_id
+        ? {
+            id: r.cl_id,
+            nombre: r.cl_nombre,
+            apellidoPaterno: r.cl_ap,
+            apellidoMaterno: r.cl_am,
+            empresa: r.cl_empresa,
+          }
+        : null,
+      usuario: r.u_id
+        ? {
+            id: r.u_id,
+            name: r.u_name,
+          }
+        : null,
       facturaGlobalId: r.fg_id || null,
       facturaGlobalEstado: r.fg_estado || null,
       facturaGlobalSerie: r.fg_serie || null,
       facturaGlobalFolio: r.fg_folio ? parseInt(r.fg_folio, 10) : null,
       cuentaPorCobrarId: r.cuenta_id || null,
       montoPendiente: r.monto_pendiente ? parseFloat(r.monto_pendiente) : null,
-      cuentaPorCobrarStatus: r.cuenta_status ? parseInt(r.cuenta_status, 10) : null,
+      cuentaPorCobrarStatus: r.cuenta_status
+        ? parseInt(r.cuenta_status, 10)
+        : null,
       isLiquidated: r.cuenta_id
         ? parseInt(r.cuenta_status, 10) === StatusCuentaCobrar.PAGADA
-        : (r.metodopago !== MetodoPago.CREDITO),
+        : r.metodopago !== MetodoPago.CREDITO,
       utilidad: utilidadMap.get(r.id)?.utilidad ?? null,
       utilidadBruta: utilidadMap.get(r.id)?.utilidadBruta ?? null,
     }));
@@ -919,16 +965,19 @@ export class VentasService {
     return { data, total };
   }
 
-  async findResumen(
-    filters?: {
-      fechaFrom?: string;
-      fechaTo?: string;
-      clienteId?: string;
-      statusId?: string;
-      usuarioId?: string;
-      metodoPago?: string;
-    },
-  ): Promise<{ montoTotal: number; utilidadTotal: number; count: number; totalPendiente: number }> {
+  async findResumen(filters?: {
+    fechaFrom?: string;
+    fechaTo?: string;
+    clienteId?: string;
+    statusId?: string;
+    usuarioId?: string;
+    metodoPago?: string;
+  }): Promise<{
+    montoTotal: number;
+    utilidadTotal: number;
+    count: number;
+    totalPendiente: number;
+  }> {
     let sql = `
       SELECT v.id, v.total, c.monto_pendiente, c.id_status as cuenta_status
       FROM ventas v
@@ -970,15 +1019,25 @@ export class VentasService {
 
     const rows = await this.dataSource.query(sql, params);
 
-    const montoTotal = rows.reduce((sum: number, r: any) => sum + parseFloat(r.total || 0), 0);
+    const montoTotal = rows.reduce(
+      (sum: number, r: any) => sum + parseFloat(r.total || 0),
+      0,
+    );
     const totalPendiente = rows.reduce((sum: number, r: any) => {
-      if (r.cuenta_status && [StatusCuentaCobrar.PENDIENTE, StatusCuentaCobrar.VENCIDA].includes(parseInt(r.cuenta_status, 10))) {
+      if (
+        r.cuenta_status &&
+        [StatusCuentaCobrar.PENDIENTE, StatusCuentaCobrar.VENCIDA].includes(
+          parseInt(r.cuenta_status, 10),
+        )
+      ) {
         return sum + parseFloat(r.monto_pendiente || 0);
       }
       return sum;
     }, 0);
 
-    const utilidadVentas = await this.getUtilidadVentas(rows.map((r: any) => r.id));
+    const utilidadVentas = await this.getUtilidadVentas(
+      rows.map((r: any) => r.id),
+    );
 
     return {
       montoTotal: Math.round(montoTotal * 100) / 100,
@@ -1035,7 +1094,10 @@ export class VentasService {
       const utilidadBrutaLinea = (precioUnitario - costoUnitario) * cantidad;
       const utilidadLinea = utilidadBrutaLinea - descuentoLinea;
 
-      const prev = profitMap.get(det.ventaId) || { utilidad: 0, utilidadBruta: 0 };
+      const prev = profitMap.get(det.ventaId) || {
+        utilidad: 0,
+        utilidadBruta: 0,
+      };
       profitMap.set(det.ventaId, {
         utilidad: prev.utilidad + utilidadLinea,
         utilidadBruta: prev.utilidadBruta + utilidadBrutaLinea,
@@ -1043,9 +1105,13 @@ export class VentasService {
     }
 
     for (const venta of data) {
-      const profit = profitMap.get(venta.id) || { utilidad: 0, utilidadBruta: 0 };
+      const profit = profitMap.get(venta.id) || {
+        utilidad: 0,
+        utilidadBruta: 0,
+      };
       (venta as any).utilidad = Number(profit.utilidad.toFixed(2)) || 0;
-      (venta as any).utilidadBruta = Number(profit.utilidadBruta.toFixed(2)) || 0;
+      (venta as any).utilidadBruta =
+        Number(profit.utilidadBruta.toFixed(2)) || 0;
     }
   }
 
@@ -1328,35 +1394,35 @@ export class VentasService {
       corteRows,
       cuentaRows,
     ] = (await Promise.all([
-        this.pagosRepository.find({ where: { ventaId: venta.id } }),
-        this.dataSource.query(
-          `SELECT "statusId" FROM facturas WHERE ventaid = $1 ORDER BY fecha DESC LIMIT 1`,
-          [venta.id],
-        ),
-        this.dataSource.query(
-          `SELECT 1 FROM facturas WHERE ventaid = $1 AND "statusId" = 2 LIMIT 1`,
-          [venta.id],
-        ),
-        this.dataSource.query(
-          `SELECT 1 FROM factura_global_detalle d
+      this.pagosRepository.find({ where: { ventaId: venta.id } }),
+      this.dataSource.query(
+        `SELECT "statusId" FROM facturas WHERE ventaid = $1 ORDER BY fecha DESC LIMIT 1`,
+        [venta.id],
+      ),
+      this.dataSource.query(
+        `SELECT 1 FROM facturas WHERE ventaid = $1 AND "statusId" = 2 LIMIT 1`,
+        [venta.id],
+      ),
+      this.dataSource.query(
+        `SELECT 1 FROM factura_global_detalle d
            JOIN factura_global g ON g.id = d.factura_global_id
            WHERE d.venta_id = $1 AND d.activo = true AND g.estado = 'TIMBRADA'
            LIMIT 1`,
-          [venta.id],
-        ),
-        this.dataSource.query(
-          `SELECT cc.status FROM corte_caja_venta ccv
+        [venta.id],
+      ),
+      this.dataSource.query(
+        `SELECT cc.status FROM corte_caja_venta ccv
            JOIN corte_caja cc ON cc.id = ccv.corte_caja_id
            WHERE ccv.venta_id = $1
            ORDER BY cc.fecha_apertura DESC
            LIMIT 1`,
-          [venta.id],
-        ),
-        this.dataSource.query(
-          `SELECT 1 FROM cuenta_por_cobrar WHERE venta_id = $1 LIMIT 1`,
-          [venta.id],
-        ),
-      ])) as [
+        [venta.id],
+      ),
+      this.dataSource.query(
+        `SELECT 1 FROM cuenta_por_cobrar WHERE venta_id = $1 LIMIT 1`,
+        [venta.id],
+      ),
+    ])) as [
       PagoVenta[],
       Array<{ statusId: number }>,
       unknown[],
@@ -1423,8 +1489,7 @@ export class VentasService {
 
       const montoExistente = Number(existente.monto);
       const montoNuevo = Number(pago.monto);
-      const mayor =
-        mayorReferencia.get(pago.formaPago) ?? montoExistente;
+      const mayor = mayorReferencia.get(pago.formaPago) ?? montoExistente;
       if (montoNuevo > mayor && pago.referencia) {
         existente.referencia = pago.referencia;
         mayorReferencia.set(pago.formaPago, montoNuevo);
@@ -1545,8 +1610,7 @@ export class VentasService {
         cantidadBase: Number(d.cantidadBase) || null,
         factorUnidades: Number(d.factorUnidades) || null,
         presentacion: d.presentacion?.nombre || null,
-        presentacionTipo:
-          d.tipoPresentacion || d.presentacion?.tipo || null,
+        presentacionTipo: d.tipoPresentacion || d.presentacion?.tipo || null,
         precioUnitario: Number(d.precioUnitario) || 0,
         importeBruto: Number(d.importeBruto) || 0,
         subtotal: Number(d.subtotal) || 0,
@@ -1566,7 +1630,8 @@ export class VentasService {
               ? Number(loteDetalle.costoUnitario)
               : null,
           factorUnidades: loteDetalle.factorUnidades ?? null,
-          ivaTasa: loteDetalle.ivaTasa != null ? Number(loteDetalle.ivaTasa) : null,
+          ivaTasa:
+            loteDetalle.ivaTasa != null ? Number(loteDetalle.ivaTasa) : null,
           fechaCaducidad: loteDetalle.lote?.fechaCaducidad || null,
         })),
         descuentos: venta.descuentos
@@ -1580,16 +1645,13 @@ export class VentasService {
       };
     });
 
-    const ivaLineas = [
-      { tasa: ivaGlobal, importe: Number(venta.iva) || 0 },
-    ];
+    const ivaLineas = [{ tasa: ivaGlobal, importe: Number(venta.iva) || 0 }];
 
     const cuenta = await manager.getRepository(CuentaPorCobrar).findOne({
       where: { ventaId: id },
     });
 
-    const esCredito =
-      venta.metodoPago === MetodoPago.CREDITO || !!cuenta;
+    const esCredito = venta.metodoPago === MetodoPago.CREDITO || !!cuenta;
 
     return {
       venta: {
@@ -1754,7 +1816,8 @@ export class VentasService {
   ): Promise<PreviewDescuentoResult> {
     let subtotal = 0;
     let descuentoTotal = 0;
-    let baseForIva = 0;
+    let ivaTotal = 0;
+    const ivaGlobalRate = await this.getIvaRate();
     const descuentoPorProducto: PreviewProductoDescuento[] = [];
 
     let categoriaClienteId: string | undefined;
@@ -1900,10 +1963,9 @@ export class VentasService {
       subtotal += subtotalLinea;
       descuentoTotal += descuentoLinea;
 
-      const ivaTasaProducto = inventarioProducto?.ivaPersonalizado ?? inventarioProducto?.ivaCfdi ?? 0;
-      if (ivaTasaProducto > 0) {
-        baseForIva += subtotalLinea;
-      }
+      const ivaTasa = this.resolverIvaTasa(inventarioProducto, ivaGlobalRate);
+      const baseIvaLinea = Math.max(0, subtotalLinea - descuentoLinea);
+      ivaTotal += this.round2(baseIvaLinea * (ivaTasa / 100));
 
       const motivos: string[] = [];
       if (mejorDescuentoInfo.tipo !== 'NINGUNO') {
@@ -1925,9 +1987,8 @@ export class VentasService {
       });
     }
 
-    const ivaRate = await this.getIvaRate();
-    const iva = baseForIva * ivaRate;
-    const total = subtotal + iva;
+    const iva = this.round2(ivaTotal);
+    const total = this.round2(subtotal - descuentoTotal + iva);
 
     return {
       subtotal,

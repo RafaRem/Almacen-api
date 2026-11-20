@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { OrdenesCompraService } from './ordenes-compra.service';
@@ -82,6 +83,7 @@ export class OrdenesCompraController {
     detalleData: {
       productoId: string;
       cantidad: number;
+      presentacionTipo?: 'PIEZA' | 'CAJA';
     },
   ) {
     return this.ordenesCompraService.addDetalle(id, detalleData);
@@ -98,8 +100,16 @@ export class OrdenesCompraController {
 
   @Post(':id/recibir')
   @UseGuards(JwtAuthGuard)
-  recibir(@Param('id') id: string, @Body() recibirDto: RecibirOrdenCompraDto) {
-    return this.ordenesCompraService.recibir(id, recibirDto);
+  recibir(
+    @Param('id') id: string,
+    @Body() recibirDto: RecibirOrdenCompraDto,
+    @Req() req: any,
+  ) {
+    return this.ordenesCompraService.recibir(
+      id,
+      recibirDto,
+      req.user?.id || req.user?.sub,
+    );
   }
 
   @Post(':id/cerrar-parcial')

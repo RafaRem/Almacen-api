@@ -7,6 +7,7 @@ import {
   ValidateNested,
   IsInt,
   Min,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -23,6 +24,10 @@ export class UpdateDetalleDto {
   @IsInt()
   @Min(1)
   cantidad?: number;
+
+  @IsOptional()
+  @IsIn(['PIEZA', 'CAJA'])
+  presentacionTipo?: 'PIEZA' | 'CAJA';
 }
 
 export class UpdateOrdenCompraDto {

@@ -13,6 +13,7 @@ import { Lote } from '../lotes/entities/lote.entity';
 import { InventarioAlmacen } from '../inventario-almacen/entities/inventario-almacen.entity';
 import { MovimientoAlmacen } from '../movimientos-almacen/entities/movimiento-almacen.entity';
 import { Producto } from '../productos/entities/producto.entity';
+import { ProductoPresentacion } from '../productos/entities/producto-presentacion.entity';
 import { Proveedor } from '../proveedores/entities/proveedor.entity';
 
 describe('OrdenesCompraService', () => {
@@ -23,6 +24,7 @@ describe('OrdenesCompraService', () => {
   let inventarioRepository: MockRepository<InventarioAlmacen>;
   let movimientoRepository: MockRepository<MovimientoAlmacen>;
   let productoRepository: MockRepository<Producto>;
+  let presentacionRepository: MockRepository<ProductoPresentacion>;
   let mockEntityManager: any;
 
   const producto: Producto = {
@@ -107,6 +109,10 @@ describe('OrdenesCompraService', () => {
           useValue: createMockRepository<Producto>(),
         },
         {
+          provide: getRepositoryToken(ProductoPresentacion),
+          useValue: createMockRepository<ProductoPresentacion>(),
+        },
+        {
           provide: getEntityManagerToken(),
           useValue: {
             transaction: jest.fn((cb) =>
@@ -130,6 +136,11 @@ describe('OrdenesCompraService', () => {
     inventarioRepository = module.get(getRepositoryToken(InventarioAlmacen));
     movimientoRepository = module.get(getRepositoryToken(MovimientoAlmacen));
     productoRepository = module.get(getRepositoryToken(Producto));
+    presentacionRepository = module.get(
+      getRepositoryToken(ProductoPresentacion),
+    );
+    productoRepository.findOne = jest.fn().mockResolvedValue(producto);
+    presentacionRepository.findOne = jest.fn().mockResolvedValue(null);
   });
 
   describe('create()', () => {
@@ -163,6 +174,74 @@ describe('OrdenesCompraService', () => {
 
       expect(detallesRepository.create).toHaveBeenCalled();
       expect(detallesRepository.save).toHaveBeenCalled();
+    });
+
+    it('crea detalles en piezas por defecto', async () => {
+      ordenesRepository.createQueryBuilder = mockQueryBuilder(null);
+      ordenesRepository.create = jest.fn().mockReturnValue(orden);
+      ordenesRepository.save = jest.fn().mockResolvedValue(orden);
+      ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
+      detallesRepository.create = jest.fn((d) => d);
+      detallesRepository.save = jest.fn().mockResolvedValue([]);
+
+      await service.create({
+        proveedorId: 'prov-1',
+        detalles: [{ productoId: 'prod-1', cantidad: 5 }],
+      });
+
+      expect(detallesRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cantidad: 5,
+          presentacionId: null,
+          factorUnidades: 1,
+        }),
+      );
+    });
+
+    it('convierte cajas a piezas al crear detalles', async () => {
+      ordenesRepository.createQueryBuilder = mockQueryBuilder(null);
+      ordenesRepository.create = jest.fn().mockReturnValue(orden);
+      ordenesRepository.save = jest.fn().mockResolvedValue(orden);
+      ordenesRepository.findOne = jest.fn().mockResolvedValue(orden);
+      detallesRepository.create = jest.fn((d) => d);
+      detallesRepository.save = jest.fn().mockResolvedValue([]);
+      presentacionRepository.findOne = jest.fn().mockResolvedValue({
+        id: 'pres-caja',
+        productoId: 'prod-1',
+        tipo: 'CAJA',
+        factorUnidades: 12,
+        statusId: 1,
+      });
+
+      await service.create({
+        proveedorId: 'prov-1',
+        detalles: [
+          { productoId: 'prod-1', cantidad: 5, presentacionTipo: 'CAJA' },
+        ],
+      });
+
+      expect(detallesRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cantidad: 60,
+          presentacionId: 'pres-caja',
+          factorUnidades: 12,
+        }),
+      );
+    });
+
+    it('rechaza CAJA cuando el producto no tiene presentación de caja', async () => {
+      ordenesRepository.createQueryBuilder = mockQueryBuilder(null);
+      ordenesRepository.create = jest.fn().mockReturnValue(orden);
+      ordenesRepository.save = jest.fn().mockResolvedValue(orden);
+
+      await expect(
+        service.create({
+          proveedorId: 'prov-1',
+          detalles: [
+            { productoId: 'prod-1', cantidad: 1, presentacionTipo: 'CAJA' },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -330,9 +409,7 @@ describe('OrdenesCompraService', () => {
         ),
         create: jest.fn((_entity: unknown, data: any) => data),
         save: jest.fn((entity: unknown, data: any) =>
-          Promise.resolve(
-            entity === Lote ? { ...data, id: 'lote-1' } : data,
-          ),
+          Promise.resolve(entity === Lote ? { ...data, id: 'lote-1' } : data),
         ),
         getRepository: jest.fn().mockReturnValue(repo),
       };
@@ -359,7 +436,7 @@ describe('OrdenesCompraService', () => {
 
       buildReceiveManager();
 
-      const result = await service.recibir('oc-1', recibirDto);
+      const result = await service.recibir('oc-1', recibirDto, 'user-1');
 
       expect((service as any).entityManager.transaction).toHaveBeenCalled();
     });
@@ -370,16 +447,20 @@ describe('OrdenesCompraService', () => {
       buildReceiveManager();
 
       await expect(
-        service.recibir('oc-1', {
-          detalles: [
-            {
-              detalleId: 'det-1',
-              cantidadRecibida: 15,
-              numeroLote: 'L001',
-              fechaCaducidad: '2026-12-31',
-            },
-          ],
-        }),
+        service.recibir(
+          'oc-1',
+          {
+            detalles: [
+              {
+                detalleId: 'det-1',
+                cantidadRecibida: 15,
+                numeroLote: 'L001',
+                fechaCaducidad: '2026-12-31',
+              },
+            ],
+          },
+          'user-1',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -418,17 +499,67 @@ describe('OrdenesCompraService', () => {
 
       buildReceiveManager(completableOrden, completableDetalle);
 
-      const result = await service.recibir('oc-1', {
-        detalles: [
-          {
-            detalleId: 'det-1',
-            cantidadRecibida: 5,
-            numeroLote: 'L002',
-            fechaCaducidad: '2026-12-31',
-          },
-        ],
-      });
+      const result = await service.recibir(
+        'oc-1',
+        {
+          detalles: [
+            {
+              detalleId: 'det-1',
+              cantidadRecibida: 5,
+              numeroLote: 'L002',
+              fechaCaducidad: '2026-12-31',
+            },
+          ],
+        },
+        'user-1',
+      );
       expect(result.status).toBe('COMPLETADA');
+    });
+
+    it('convierte cajas recibidas a piezas y mueve el stock base', async () => {
+      const detalleCaja = {
+        ...detalle,
+        cantidad: 60,
+        cantidadRecibida: 0,
+        factorUnidades: 12,
+      } as DetalleOrdenCompra;
+      const ordenCaja = {
+        ...orden,
+        status: 'PENDIENTE',
+        detalles: [detalleCaja],
+      };
+
+      ordenesRepository.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(ordenCaja)
+        .mockResolvedValue(ordenCaja);
+      productoRepository.findOne = jest.fn().mockResolvedValue(producto);
+
+      const { txManager } = buildReceiveManager(ordenCaja, detalleCaja);
+
+      await service.recibir(
+        'oc-1',
+        {
+          detalles: [
+            {
+              detalleId: 'det-1',
+              cantidadRecibida: 5,
+              numeroLote: 'L003',
+              fechaCaducidad: '2026-12-31',
+            },
+          ],
+        },
+        'user-1',
+      );
+
+      expect(detalleCaja.cantidadRecibida).toBe(60);
+      expect(txManager.save).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          cantidad: 60,
+          tipoMovimiento: expect.any(String),
+        }),
+      );
     });
 
     it('throws when order is already completed', async () => {
@@ -437,15 +568,19 @@ describe('OrdenesCompraService', () => {
         .mockResolvedValue({ ...orden, status: 'COMPLETADA' });
 
       await expect(
-        service.recibir('oc-1', {
-          detalles: [
-            {
-              detalleId: 'det-1',
-              cantidadRecibida: 1,
-              numeroLote: 'L001',
-            },
-          ],
-        }),
+        service.recibir(
+          'oc-1',
+          {
+            detalles: [
+              {
+                detalleId: 'det-1',
+                cantidadRecibida: 1,
+                numeroLote: 'L001',
+              },
+            ],
+          },
+          'user-1',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -511,6 +646,37 @@ describe('OrdenesCompraService', () => {
       await expect(
         service.reabastecer({ productoId: 'bad-id' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('preview calcula sugerido en cajas para presentación CAJA', async () => {
+      productoRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(productoConProveedor);
+      presentacionRepository.findOne = jest.fn().mockResolvedValue({
+        id: 'pres-caja',
+        productoId: 'prod-1',
+        tipo: 'CAJA',
+        factorUnidades: 12,
+        statusId: 1,
+      });
+      inventarioRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: 30 }),
+      }));
+
+      const result = await service.reabastecer({
+        productoId: 'prod-1',
+        presentacionTipo: 'CAJA',
+        preview: true,
+      });
+
+      expect(result.suggestedPiezas).toBe(70);
+      expect(result.suggestedQuantity).toBe(6);
+      expect(result.factorCaja).toBe(12);
+      expect(result.tipoPresentacion).toBe('CAJA');
+      expect(result.factorUnidades).toBe(12);
     });
 
     it('throws BadRequestException when stock is sufficient', async () => {
@@ -836,9 +1002,7 @@ describe('OrdenesCompraService', () => {
       ...orden,
       status: 'PENDIENTE',
       observaciones: null,
-      detalles: [
-        { ...detalle, cantidad: 10, cantidadRecibida: 5 },
-      ],
+      detalles: [{ ...detalle, cantidad: 10, cantidadRecibida: 5 }],
     };
 
     it('cierra la orden con recepción parcial', async () => {
